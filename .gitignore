@@ -1,0 +1,15 @@
+.build/
+.swiftpm/
+dist/
+*.xcodeproj
+*.xcworkspace
+.DS_Store
+
+# Local settings and anything that could hold a credential. The app writes its
+# own preferences to ~/Library/Application Support/Cornice, never into the repo,
+# but this guards against a stray copy being committed.
+preferences.json
+preferences-corrupt-*.json
+*.p12
+*.cer
+*.mobileprovision

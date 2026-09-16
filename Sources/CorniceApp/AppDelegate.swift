@@ -1,0 +1,128 @@
+import AppKit
+import Observation
+import UserNotifications
+import CorniceKit
+
+/// Composition root and application lifecycle.
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+
+    private var model: AppModel?
+    private var windowController: NotchWindowController?
+    private var statusItem: NSStatusItem?
+    private let notificationDelegate = NotificationDelegate()
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Documentation mode: render the interface to PNGs and exit without
+        // ever showing a window. Keeps README images reproducible in one
+        // command instead of being hand-captured and slowly going stale.
+        let arguments = CommandLine.arguments
+        if let index = arguments.firstIndex(of: "--capture-docs"),
+           index + 1 < arguments.count {
+            let directory = arguments[index + 1]
+            Task { await DocsCapture.run(outputDirectory: directory) }
+            return
+        }
+
+        Log.app.notice("Cornice starting")
+
+        let services = ServiceContainer.live()
+        let model = AppModel(services: services)
+        let controller = NotchWindowController(model: model)
+
+        self.model = model
+        self.windowController = controller
+
+        UNUserNotificationCenter.current().delegate = notificationDelegate
+
+        installStatusItem(model: model, controller: controller)
+        controller.install()
+        observeLayoutChanges(model: model, controller: controller)
+
+        Task {
+            await model.start()
+            // Launch-at-login can be changed from System Settings, so the
+            // stored preference is reconciled with the system's actual state
+            // rather than trusted.
+            let systemState = LoginItem.isEnabled
+            if systemState != model.preferences.launchAtLogin {
+                model.updatePreferences { $0.launchAtLogin = systemState }
+            }
+        }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        model?.stopRefreshLoops()
+        windowController?.tearDown()
+        Log.app.notice("Cornice terminating")
+    }
+
+    /// The app keeps running with no windows open — that is its normal state.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
+    // MARK: - Status item
+
+    /// A menu-bar item, because an accessory app with no Dock icon otherwise
+    /// has no discoverable way to reach settings or quit.
+    private func installStatusItem(model: AppModel, controller: NotchWindowController) {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        item.button?.image = NSImage(
+            systemSymbolName: "rectangle.topthird.inset.filled",
+            accessibilityDescription: "Cornice"
+        )
+        item.button?.image?.isTemplate = true
+
+        let menu = NSMenu()
+        menu.addItem(
+            withTitle: "Toggle Panel",
+            action: #selector(togglePanel),
+            keyEquivalent: "d"
+        ).keyEquivalentModifierMask = [.command, .option]
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Quit Cornice", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+
+        for menuItem in menu.items where menuItem.action != #selector(NSApplication.terminate(_:)) {
+            menuItem.target = self
+        }
+
+        item.menu = menu
+        statusItem = item
+    }
+
+    @objc private func togglePanel() {
+        windowController?.toggle()
+    }
+
+    @objc private func openSettings() {
+        guard let model else { return }
+        SettingsWindow.shared.show(model: model)
+    }
+
+    // MARK: - Observation
+
+    /// Re-applies the window frame whenever something that affects its size
+    /// changes.
+    ///
+    /// `withObservationTracking` fires once per change, so it is re-armed after
+    /// each one. This is the bridge between `@Observable` state and the AppKit
+    /// window geometry that SwiftUI cannot drive on its own — the pane height
+    /// and the presence of collapsed indicators both change the window's size,
+    /// and neither is something SwiftUI can communicate outward.
+    private func observeLayoutChanges(model: AppModel, controller: NotchWindowController) {
+        withObservationTracking {
+            _ = model.activeModule
+            _ = model.surfaceState
+            _ = model.collapsedContent
+        } onChange: { [weak self, weak model, weak controller] in
+            Task { @MainActor in
+                guard let self, let model, let controller else { return }
+                controller.applyState(animated: true)
+                self.observeLayoutChanges(model: model, controller: controller)
+            }
+        }
+    }
+}
