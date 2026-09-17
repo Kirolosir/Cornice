@@ -26,9 +26,7 @@ enum Theme {
         /// hardware cut-out.
         static let notch = Color(red: 0, green: 0, blue: 0)
 
-        /// Signature accent. Deliberately not the system blue: the system blue
-        /// reads as "this is a standard macOS control", and it is also what
-        /// most notch utilities already use.
+        /// Signature accent, used when artwork tinting is off or unavailable.
         static let accent = Color(red: 0.545, green: 0.486, blue: 1.0)
 
         // Status colours, each with a dimmed variant for large fills where the
@@ -106,7 +104,7 @@ enum Theme {
     enum Metrics {
         static let gridUnit: CGFloat = 4
 
-        static let panelWidth: CGFloat = 620
+        static let panelWidth: CGFloat = 560
         static let panelCornerRadius: CGFloat = 26
         static let panelPadding: CGFloat = 16
         static let cardCornerRadius: CGFloat = 12
@@ -140,8 +138,20 @@ enum Theme {
     /// like it has come unstuck from the hardware; Apple's own notch
     /// animations settle rather than wobble.
     enum Motion {
-        static let expand = SwiftUI.Animation.spring(response: 0.34, dampingFraction: 0.86)
-        static let collapse = SwiftUI.Animation.spring(response: 0.28, dampingFraction: 0.92)
+        /// Opening. A touch of overshoot — `dampingFraction` below 1 — so the
+        /// surface arrives with weight rather than easing to a polite stop.
+        /// This is the single most important curve in the app: it is what the
+        /// whole interaction is judged on.
+        static let expand = SwiftUI.Animation.spring(response: 0.38, dampingFraction: 0.76)
+
+        /// Closing. Faster and more damped than opening. Closing is a dismissal,
+        /// and a bouncy dismissal reads as indecision.
+        static let collapse = SwiftUI.Animation.spring(response: 0.30, dampingFraction: 0.86)
+
+        /// Hover peek. Very fast, because this exists purely to acknowledge the
+        /// pointer — any perceptible delay here is what makes a notch app feel
+        /// unresponsive.
+        static let peek = SwiftUI.Animation.spring(response: 0.22, dampingFraction: 0.82)
         /// Content swaps inside an already-open panel. Fast and linear-ish:
         /// this is a state change the user asked for, not an entrance.
         static let contentSwap = SwiftUI.Animation.easeOut(duration: 0.16)

@@ -3,44 +3,27 @@ import CorniceKit
 
 /// Every service the app needs, in one injectable bundle.
 ///
-/// Dependency injection by construction rather than by framework: the app has
-/// one composition root (`AppDelegate`), roughly a dozen services, and no need
-/// for runtime resolution. A container of `let` properties gives the testability
-/// benefit — swap the whole set for scripted doubles — without a registry, a
-/// resolver, or property-wrapper magic that has to be debugged later.
+/// Dependency injection by construction rather than by framework: one
+/// composition root, a handful of services, no runtime resolution. The payoff
+/// is `PreviewServices`, where swapping this whole struct runs the entire app
+/// against scripted data with no change to any view.
 struct ServiceContainer: Sendable {
-    let processRunner: any ProcessRunning
-    let toolLocator: ToolLocator
-    let git: any GitReading
-    let ports: any PortMonitoring
+    let media: MediaCoordinator
     let telemetry: any TelemetryProbing
-    let github: GitHubClient
-    let docker: any DockerInspecting
-    let commands: any CommandExecuting
-    let credentials: any CredentialStoring
     let preferences: any PreferencesPersisting
     let hardware: HardwareIdentityProvider
+    let visualizer: AudioVisualizerEngine
+    let outputDevices: OutputDeviceMonitor
 
-    /// The real thing.
     static func live() -> ServiceContainer {
         let runner = SubprocessRunner()
-        let locator = ToolLocator()
-        let credentials = KeychainCredentialStore()
         return ServiceContainer(
-            processRunner: runner,
-            toolLocator: locator,
-            git: GitService(runner: runner, locator: locator),
-            ports: PortMonitor(runner: runner, locator: locator),
+            media: MediaCoordinator.live(),
             telemetry: HostTelemetryProbe(),
-            github: GitHubClient(
-                transport: URLSession(configuration: .ephemeral),
-                credentials: credentials
-            ),
-            docker: DockerService(runner: runner, locator: locator),
-            commands: CommandRunner(runner: runner, locator: locator),
-            credentials: credentials,
             preferences: PreferencesStore(),
-            hardware: HardwareIdentityProvider(runner: runner)
+            hardware: HardwareIdentityProvider(runner: runner),
+            visualizer: AudioVisualizerEngine(bandCount: 8),
+            outputDevices: OutputDeviceMonitor()
         )
     }
 }

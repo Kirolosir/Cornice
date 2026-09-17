@@ -1,38 +1,28 @@
 import AppKit
 import SwiftUI
-import Combine
 import CorniceKit
 
-/// Owns the panel: where it sits, how big it is, and when it opens.
+/// Places the surface and drives its state.
 ///
-/// The interesting problem here is that the window has to change size between
-/// its collapsed and expanded forms, and an `NSWindow` frame change is not
-/// something SwiftUI can animate. Resizing in step with the content produces
-/// visible tearing, and animating the frame with `NSAnimationContext`
-/// double-animates against SwiftUI's own transition.
-///
-/// The resolution is to decouple them: the window is *always* sized to whatever
-/// the interface needs at rest, but it grows **before** an expansion animation
-/// and shrinks **after** a collapse animation. The user never sees the window
-/// bounds, only the content SwiftUI draws inside them, so growing early and
-/// shrinking late is invisible — while at rest the window is exactly the size
-/// of what is drawn, which is what keeps hit-testing and hover correct.
+/// The window is created once at its maximum size and never resized. All motion
+/// happens inside it, in SwiftUI, at display rate. The controller's remaining
+/// jobs are: keep the window over the right notch on the right display, keep
+/// the interactive region in step with what is drawn, and translate pointer
+/// activity into state changes.
 @MainActor
 final class NotchWindowController {
 
     private let model: AppModel
     private var panel: NotchPanel?
-    private var hostingView: NSHostingView<RootView>?
     private var contentView: NotchContentView?
 
-    private var hoverTask: Task<Void, Never>?
-    private var collapseTask: Task<Void, Never>?
+    private var openTask: Task<Void, Never>?
+    private var closeTask: Task<Void, Never>?
     private var observers: [any NSObjectProtocol] = []
     private var hotKey: GlobalHotKey?
-    private var stateObservation: AnyCancellable?
 
-    /// The display currently hosting the surface.
-    private var currentProfile: NotchProfile?
+    private var profile: NotchProfile?
+    private var geometry: SurfaceGeometry?
 
     init(model: AppModel) {
         self.model = model
@@ -48,37 +38,38 @@ final class NotchWindowController {
     }
 
     private func buildPanel() {
-        guard let profile = currentProfile else {
+        guard let profile, let geometry else {
             Log.window.error("no display available; the surface cannot be placed")
             return
         }
 
-        let panel = NotchPanel(contentRect: collapsedFrame(for: profile))
-        let root = RootView(model: model)
-        let hosting = NSHostingView(rootView: root)
-        hosting.translatesAutoresizingMaskIntoConstraints = false
+        let frame = windowFrame(for: profile, geometry: geometry)
+        let panel = NotchPanel(contentRect: frame)
 
-        let container = NotchContentView()
+        let container = NotchContentView(frame: CGRect(origin: .zero, size: frame.size))
+        container.autoresizingMask = [.width, .height]
+
+        let hosting = NSHostingView(rootView: RootView(model: model, geometry: geometry))
+        hosting.frame = container.bounds
+        hosting.autoresizingMask = [.width, .height]
+        // The hosting view must not paint a background: everything outside the
+        // surface shape has to be genuinely transparent.
+        hosting.layer?.backgroundColor = .clear
         container.addSubview(hosting)
-        NSLayoutConstraint.activate([
-            hosting.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            hosting.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            hosting.topAnchor.constraint(equalTo: container.topAnchor),
-            hosting.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-        ])
 
-        container.onMouseEntered = { [weak self] in self?.pointerEntered() }
-        container.onMouseExited = { [weak self] in self?.pointerExited() }
+        container.onHoverChanged = { [weak self] hovering in
+            self?.pointerChanged(hovering: hovering)
+        }
+
         panel.contentView = container
-        panel.onCancel = { [weak self] in self?.collapse() }
+        panel.onCancel = { [weak self] in self?.close() }
         panel.orderFrontRegardless()
 
         self.panel = panel
-        self.hostingView = hosting
         self.contentView = container
 
         model.updateGeometry(profile)
-        applyState(animated: false)
+        syncInteractiveRect()
     }
 
     // MARK: - Geometry
@@ -86,100 +77,78 @@ final class NotchWindowController {
     private func resolveGeometry() {
         let screens = ScreenBridge.allMetrics()
         guard let preferred = NotchGeometryResolver.preferredScreen(from: screens) else {
-            currentProfile = nil
+            profile = nil
+            geometry = nil
             return
         }
-        currentProfile = NotchGeometryResolver.resolve(preferred)
-    }
-
-    /// Window frame for the collapsed surface.
-    ///
-    /// Wider than the notch only when there is something to show beside it, so
-    /// an idle surface is exactly the notch and cannot be hovered by accident
-    /// while reaching for a menu.
-    private func collapsedFrame(for profile: NotchProfile) -> NSRect {
-        let wings = model.collapsedContent.wingWidth
-        let width = profile.rect.width + wings * 2
-        let height = profile.rect.height + (wings > 0 ? Theme.Metrics.wingDrop : 0)
-        return NSRect(
-            x: profile.rect.midX - width / 2,
-            y: profile.rect.maxY - height,
-            width: width,
-            height: height
+        let resolved = NotchGeometryResolver.resolve(preferred)
+        profile = resolved
+        geometry = SurfaceGeometry(
+            notchSize: resolved.rect.size,
+            notchCornerRadius: resolved.cornerRadius,
+            contentHeight: Self.contentHeight,
+            windowWidth: min(SurfaceGeometry.expandedWidth + 80, resolved.screenFrame.width)
         )
     }
 
-    /// Window frame for the expanded panel.
+    /// Height of the expanded content area.
     ///
-    /// Clamped to the display so the panel cannot hang off the edge on a small
-    /// screen or when the notch sits near a corner in a multi-display layout.
-    private func expandedFrame(for profile: NotchProfile) -> NSRect {
-        let width = min(Theme.Metrics.panelWidth, profile.screenFrame.width - 32)
-        let height = ExpandedMetrics.height(for: model.activeModule)
-            + profile.rect.height
-            + Theme.Metrics.panelDrop
+    /// Fixed rather than measured from the content: the window has to exist
+    /// before SwiftUI lays out, and every pane is designed to this height so
+    /// switching tabs does not change the surface's size — which would mean a
+    /// second animation competing with the tab change.
+    private static let contentHeight: CGFloat = 188
 
+    /// The window's frame: fixed size, centred on the notch, pinned to the top.
+    private func windowFrame(for profile: NotchProfile, geometry: SurfaceGeometry) -> NSRect {
+        let width = geometry.windowWidth
+        let height = geometry.windowHeight
         var x = profile.rect.midX - width / 2
-        x = max(profile.screenFrame.minX + 16, min(x, profile.screenFrame.maxX - width - 16))
+        // Keep it on screen when the notch sits near a display edge in a
+        // multi-display arrangement.
+        x = max(profile.screenFrame.minX, min(x, profile.screenFrame.maxX - width))
+        return NSRect(x: x, y: profile.rect.maxY - height, width: width, height: height)
+    }
 
-        return NSRect(
-            x: x,
-            y: profile.rect.maxY - height,
-            width: width,
-            height: height
+    /// Keeps the hit-test and hover region in step with what is drawn.
+    ///
+    /// Called on every state change. This is the counterpart to the fixed
+    /// window: SwiftUI knows what it drew, but AppKit does not, so the rect is
+    /// published to the content view explicitly.
+    private func syncInteractiveRect() {
+        guard let geometry, let contentView else { return }
+        contentView.interactiveRect = geometry.appKitRect(
+            for: model.surfaceState,
+            windowHeight: geometry.windowHeight
+        )
+        contentView.hoverRect = geometry.hoverRect(
+            for: model.surfaceState,
+            windowHeight: geometry.windowHeight
         )
     }
 
-    /// Applies the window frame for the current state.
-    func applyState(animated: Bool) {
-        guard let panel, let profile = currentProfile else { return }
-
-        let target = model.surfaceState == .expanded
-            ? expandedFrame(for: profile)
-            : collapsedFrame(for: profile)
-
-        guard panel.frame != target else { return }
-
-        switch model.surfaceState {
-        case .expanded:
-            // Grow first: the extra area is transparent until SwiftUI draws
-            // into it, so this is invisible, and it means the panel is never
-            // clipped mid-animation.
-            panel.setFrame(target, display: true)
-        case .collapsed:
-            // Shrink last, once the content has finished animating away.
-            // Shrinking immediately would clip the outgoing transition.
-            collapseTask?.cancel()
-            guard animated else {
-                panel.setFrame(target, display: true)
-                return
-            }
-            collapseTask = Task { [weak self] in
-                try? await Task.sleep(for: .milliseconds(280))
-                guard !Task.isCancelled, let self, let panel = self.panel else { return }
-                guard self.model.surfaceState == .collapsed else { return }
-                panel.setFrame(self.collapsedFrame(for: profile), display: true)
-            }
-        }
-    }
-
-    /// Re-measures after a display change and moves the panel.
+    /// Re-measures after a display change and moves the window.
     ///
-    /// Screen parameters change on: attaching or detaching a display, changing
-    /// resolution or scaling, rotating a display, and lid open/close on a
-    /// clamshell setup. All of them can move or resize the notch, and two of
-    /// them change its size *in points* without any hardware changing.
+    /// Screen parameters change on attaching or detaching a display, changing
+    /// resolution or scaling, rotation, and lid open/close — several of which
+    /// change the notch's size *in points* with no hardware change at all.
     private func handleScreenChange() {
-        let previous = currentProfile
+        let hadProfile = profile != nil
         resolveGeometry()
-        guard let profile = currentProfile else {
+
+        guard let profile, let geometry else {
             panel?.orderOut(nil)
             model.updateGeometry(nil)
             return
         }
-        if previous == nil { panel?.orderFrontRegardless() }
+        if !hadProfile { panel?.orderFrontRegardless() }
+
+        panel?.setFrame(windowFrame(for: profile, geometry: geometry), display: true)
+        if let panel, let hosting = panel.contentView?.subviews.first as? NSHostingView<RootView> {
+            hosting.rootView = RootView(model: model, geometry: geometry)
+        }
         model.updateGeometry(profile)
-        applyState(animated: false)
+        syncInteractiveRect()
         Log.window.notice("display change: \(profile.debugSummary, privacy: .public)")
     }
 
@@ -192,9 +161,8 @@ final class NotchWindowController {
             MainActor.assumeIsolated { self?.handleScreenChange() }
         })
 
-        // Waking from sleep can reconfigure displays without posting a screen
-        // parameter change, leaving the panel on a display that no longer
-        // exists or at a stale size.
+        // Waking can reconfigure displays without posting a parameter change,
+        // leaving the surface on a display that no longer exists.
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification,
             object: nil, queue: .main
@@ -206,87 +174,87 @@ final class NotchWindowController {
     // MARK: - Interaction
 
     private func installHotKey() {
-        hotKey = GlobalHotKey { [weak self] in
-            guard let self else { return }
-            self.model.toggle()
-            self.applyState(animated: true)
-        }
+        hotKey = GlobalHotKey { [weak self] in self?.toggle() }
         hotKey?.register()
     }
 
-    /// Hover, with a dwell delay.
+    /// Translates pointer presence into surface state.
     ///
-    /// Without the delay the panel opens every time the pointer crosses the top
-    /// of the screen on its way to a menu, which makes the whole app feel like
-    /// it is in the way. The delay is configurable and the behaviour can be
-    /// switched off entirely in favour of click-only.
-    private func pointerEntered() {
-        model.setHovering(true)
-        collapseTask?.cancel()
+    /// The sequence is what makes hover feel instantaneous:
+    ///
+    /// 1. On entry, go to `peek` **immediately**, with no delay whatsoever.
+    ///    Something visibly happens the moment the pointer arrives.
+    /// 2. After a short dwell, commit to `expanded`. Because the surface has
+    ///    already responded, this reads as the second half of one gesture
+    ///    rather than as a delayed reaction.
+    /// 3. On exit, close after a short grace period, so crossing a gap between
+    ///    controls or overshooting the edge by a few pixels does not dismiss it.
+    private func pointerChanged(hovering: Bool) {
+        model.setHovering(hovering)
 
-        guard model.preferences.activationStyle == .hover else { return }
-        guard model.surfaceState == .collapsed else { return }
+        if hovering {
+            closeTask?.cancel()
+            closeTask = nil
+            guard model.preferences.activationStyle == .hover else { return }
+            guard model.surfaceState == .collapsed else { return }
 
-        hoverTask?.cancel()
-        hoverTask = Task { [weak self] in
-            guard let self else { return }
-            let dwell = self.model.preferences.hoverDwell
-            if dwell > 0 {
-                try? await Task.sleep(for: .seconds(dwell))
+            present(.peek)
+
+            openTask?.cancel()
+            openTask = Task { [weak self] in
+                guard let self else { return }
+                let dwell = self.model.preferences.hoverDwell
+                if dwell > 0 { try? await Task.sleep(for: .seconds(dwell)) }
+                guard !Task.isCancelled, self.model.isHovering else { return }
+                guard self.model.surfaceState == .peek else { return }
+                self.present(.expanded)
             }
-            guard !Task.isCancelled, self.model.isHovering else { return }
-            self.expand()
+        } else {
+            openTask?.cancel()
+            openTask = nil
+
+            // Peek follows the pointer exactly: it is feedback, not a state to
+            // linger in.
+            if model.surfaceState == .peek {
+                present(.collapsed)
+                return
+            }
+            guard model.surfaceState == .expanded else { return }
+            guard model.preferences.activationStyle == .hover else { return }
+
+            closeTask?.cancel()
+            closeTask = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(220))
+                guard !Task.isCancelled, let self, !self.model.isHovering else { return }
+                self.present(.collapsed)
+            }
         }
     }
 
-    private func pointerExited() {
-        hoverTask?.cancel()
-        model.setHovering(false)
-
-        guard model.surfaceState == .expanded else {
-            applyState(animated: true)
-            return
-        }
-        // A confirmation sheet is a deliberate decision point; closing it
-        // because the pointer drifted away would be hostile.
-        guard model.pendingConfirmation == nil else { return }
-        guard model.preferences.activationStyle == .hover else { return }
-
-        // A short grace period, so crossing a gap between controls — or
-        // overshooting the panel edge by a few pixels — does not close it.
-        collapseTask?.cancel()
-        collapseTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(260))
-            guard !Task.isCancelled, let self else { return }
-            guard !self.model.isHovering, self.model.pendingConfirmation == nil else { return }
-            self.collapse()
-        }
-    }
-
-    func expand() {
-        model.expand()
-        applyState(animated: true)
-    }
-
-    func collapse() {
-        model.collapse()
-        applyState(animated: true)
+    private func present(_ state: SurfaceState) {
+        model.present(state)
+        // The drawn shape changes with the state, so the interactive region has
+        // to follow it. Done immediately rather than after the animation: the
+        // target rect is where the pointer will be interacting, and waiting
+        // would leave a window where clicks land nowhere.
+        syncInteractiveRect()
     }
 
     func toggle() {
-        model.toggle()
-        applyState(animated: true)
+        openTask?.cancel()
+        closeTask?.cancel()
+        present(model.surfaceState.isOpen ? .collapsed : .expanded)
     }
 
-    /// Re-applies the frame after the active module changes, since panes have
-    /// different heights.
-    func moduleDidChange() {
-        applyState(animated: true)
+    func close() {
+        openTask?.cancel()
+        closeTask?.cancel()
+        present(.collapsed)
     }
 
     func tearDown() {
-        hoverTask?.cancel()
-        collapseTask?.cancel()
+        openTask?.cancel()
+        closeTask?.cancel()
         hotKey?.unregister()
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
         observers.removeAll()

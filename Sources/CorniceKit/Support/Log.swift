@@ -13,15 +13,11 @@ public enum Log {
 
     public static let app = Logger(subsystem: subsystem, category: "app")
     public static let window = Logger(subsystem: subsystem, category: "window")
-    public static let git = Logger(subsystem: subsystem, category: "git")
-    public static let ports = Logger(subsystem: subsystem, category: "ports")
     public static let telemetry = Logger(subsystem: subsystem, category: "telemetry")
-    public static let github = Logger(subsystem: subsystem, category: "github")
-    public static let docker = Logger(subsystem: subsystem, category: "docker")
     public static let process = Logger(subsystem: subsystem, category: "process")
     public static let settings = Logger(subsystem: subsystem, category: "settings")
-    public static let keychain = Logger(subsystem: subsystem, category: "keychain")
-    public static let commands = Logger(subsystem: subsystem, category: "commands")
+    public static let media = Logger(subsystem: subsystem, category: "media")
+    public static let audio = Logger(subsystem: subsystem, category: "audio")
 }
 
 /// Helpers for producing log-safe representations of sensitive values.

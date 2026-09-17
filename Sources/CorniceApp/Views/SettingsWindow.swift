@@ -4,10 +4,9 @@ import CorniceKit
 
 /// Hosts settings in a conventional window.
 ///
-/// Settings live in a real, resizable, focusable window rather than inside the
-/// notch panel. The panel is non-activating and closes when the pointer leaves
-/// it — which is right for glancing at state and completely wrong for typing a
-/// token into a text field.
+/// A real, focusable window rather than a pane inside the surface: the surface
+/// is non-activating and closes when the pointer leaves it, which is right for
+/// glancing at a track and completely wrong for reading permission explanations.
 @MainActor
 final class SettingsWindow {
 
@@ -17,19 +16,18 @@ final class SettingsWindow {
 
     private init() {}
 
-    func show(model: AppModel, tab: SettingsTab = .general) {
+    func show(model: AppModel) {
         if let window {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
 
-        let view = SettingsView(model: model, initialTab: tab)
-        let hosting = NSHostingController(rootView: view)
+        let hosting = NSHostingController(rootView: SettingsView(model: model))
         let window = NSWindow(contentViewController: hosting)
         window.title = "Cornice Settings"
         window.styleMask = [.titled, .closable, .miniaturizable]
-        window.setContentSize(NSSize(width: 520, height: 460))
+        window.setContentSize(NSSize(width: 480, height: 470))
         window.isReleasedWhenClosed = false
         window.center()
         window.delegate = WindowCloseObserver.shared
@@ -40,84 +38,30 @@ final class SettingsWindow {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    /// Tracks closing so the window is rebuilt next time rather than being
-    /// re-shown with stale SwiftUI state.
+    /// Rebuilds the window next time rather than re-showing stale SwiftUI state.
     @MainActor
     private final class WindowCloseObserver: NSObject, NSWindowDelegate {
         static let shared = WindowCloseObserver()
         var onClose: (() -> Void)?
-
-        func windowWillClose(_ notification: Notification) {
-            onClose?()
-        }
-    }
-}
-
-enum SettingsTab: String, CaseIterable, Identifiable {
-    case general = "General"
-    case repositories = "Repositories"
-    case servers = "Servers"
-    case github = "GitHub"
-    case commands = "Commands"
-    case about = "About"
-
-    var id: String { rawValue }
-
-    var symbol: String {
-        switch self {
-        case .general: "gearshape"
-        case .repositories: "folder"
-        case .servers: "server.rack"
-        case .github: "checkmark.seal"
-        case .commands: "terminal"
-        case .about: "info.circle"
-        }
+        func windowWillClose(_ notification: Notification) { onClose?() }
     }
 }
 
 struct SettingsView: View {
     @Bindable var model: AppModel
-    let initialTab: SettingsTab
-
-    @State private var tab: SettingsTab
-
-    init(model: AppModel, initialTab: SettingsTab) {
-        self.model = model
-        self.initialTab = initialTab
-        _tab = State(initialValue: initialTab)
-    }
 
     var body: some View {
-        TabView(selection: $tab) {
+        TabView {
             GeneralSettings(model: model)
-                .tabItem { Label(SettingsTab.general.rawValue, systemImage: SettingsTab.general.symbol) }
-                .tag(SettingsTab.general)
-
-            RepositorySettings(model: model)
-                .tabItem { Label(SettingsTab.repositories.rawValue, systemImage: SettingsTab.repositories.symbol) }
-                .tag(SettingsTab.repositories)
-
-            ServerSettings(model: model)
-                .tabItem { Label(SettingsTab.servers.rawValue, systemImage: SettingsTab.servers.symbol) }
-                .tag(SettingsTab.servers)
-
-            GitHubSettings(model: model)
-                .tabItem { Label(SettingsTab.github.rawValue, systemImage: SettingsTab.github.symbol) }
-                .tag(SettingsTab.github)
-
-            CommandSettings(model: model)
-                .tabItem { Label(SettingsTab.commands.rawValue, systemImage: SettingsTab.commands.symbol) }
-                .tag(SettingsTab.commands)
-
+                .tabItem { Label("General", systemImage: "gearshape") }
+            VisualizerSettings(model: model)
+                .tabItem { Label("Visualiser", systemImage: "waveform") }
             AboutSettings(model: model)
-                .tabItem { Label(SettingsTab.about.rawValue, systemImage: SettingsTab.about.symbol) }
-                .tag(SettingsTab.about)
+                .tabItem { Label("About", systemImage: "info.circle") }
         }
-        .frame(width: 520, height: 460)
+        .frame(width: 480, height: 470)
     }
 }
-
-// MARK: - General
 
 struct GeneralSettings: View {
     @Bindable var model: AppModel
@@ -125,51 +69,67 @@ struct GeneralSettings: View {
 
     var body: some View {
         Form {
-            Section("Modules") {
-                Text("Disabled modules stop refreshing entirely.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                ForEach(ModuleKind.allCases) { module in
-                    Toggle(isOn: binding(for: module)) {
-                        Label(module.title, systemImage: module.symbol)
-                    }
-                }
-            }
-
-            Section("Activation") {
+            Section("Opening") {
                 Picker("Open on", selection: Binding(
                     get: { model.preferences.activationStyle },
                     set: { style in model.updatePreferences { $0.activationStyle = style } }
                 )) {
-                    ForEach(ActivationStyle.allCases) { style in
-                        Text(style.title).tag(style)
-                    }
+                    ForEach(ActivationStyle.allCases) { Text($0.title).tag($0) }
                 }
 
                 if model.preferences.activationStyle == .hover {
-                    LabeledContent("Hover delay") {
+                    LabeledContent("Open after") {
                         HStack {
                             Slider(
                                 value: Binding(
                                     get: { model.preferences.hoverDwell },
                                     set: { value in model.updatePreferences { $0.hoverDwell = value } }
                                 ),
-                                in: 0...1.0
+                                in: 0...0.6
                             )
                             Text(String(format: "%.2fs", model.preferences.hoverDwell))
                                 .font(.caption.monospacedDigit())
                                 .frame(width: 44, alignment: .trailing)
                         }
                     }
-                    Text("A short delay stops the panel opening as the pointer crosses the menu bar.")
+                    Text("The surface responds to your pointer immediately; this is how long it waits before opening fully.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+            }
 
-                Toggle("Hide indicators when nothing needs attention", isOn: Binding(
-                    get: { model.preferences.collapseWhenIdle },
-                    set: { value in model.updatePreferences { $0.collapseWhenIdle = value } }
+            Section("Collapsed surface") {
+                Picker("Show", selection: Binding(
+                    get: { model.preferences.idleDisplay },
+                    set: { value in model.updatePreferences { $0.idleDisplay = value } }
+                )) {
+                    ForEach(IdleDisplay.allCases) { Text($0.title).tag($0) }
+                }
+                Toggle("Tint the panel with album artwork", isOn: Binding(
+                    get: { model.preferences.tintFromArtwork },
+                    set: { value in model.updatePreferences { $0.tintFromArtwork = value } }
                 ))
+            }
+
+            Section("Panels") {
+                ForEach(ModuleKind.allCases) { module in
+                    Toggle(isOn: Binding(
+                        get: { model.preferences.enabledModules.contains(module) },
+                        set: { enabled in
+                            model.updatePreferences { preferences in
+                                if enabled {
+                                    preferences.enabledModules.insert(module)
+                                } else {
+                                    preferences.enabledModules.remove(module)
+                                }
+                            }
+                        }
+                    )) {
+                        Label(module.title, systemImage: module.symbol)
+                    }
+                    // Media is the point of the app.
+                    .disabled(module == .media)
+                }
             }
 
             Section("System") {
@@ -183,205 +143,176 @@ struct GeneralSettings: View {
                     }
                 ))
                 if let loginItemError {
-                    Text(loginItemError)
-                        .font(.caption)
-                        .foregroundStyle(.orange)
+                    Text(loginItemError).font(.caption).foregroundStyle(.orange)
                 }
-
-                Toggle("Notify when a check starts failing", isOn: Binding(
-                    get: { model.preferences.notifyOnFailedChecks },
-                    set: { value in model.updatePreferences { $0.notifyOnFailedChecks = value } }
-                ))
-                Toggle("Notify when a focus session ends", isOn: Binding(
-                    get: { model.preferences.notifyOnFocusComplete },
-                    set: { value in model.updatePreferences { $0.notifyOnFocusComplete = value } }
+                Toggle("Notify when a timer finishes", isOn: Binding(
+                    get: { model.preferences.notifyOnTimerComplete },
+                    set: { value in model.updatePreferences { $0.notifyOnTimerComplete = value } }
                 ))
 
-                Picker("Open repositories in", selection: Binding(
-                    get: { model.preferences.editor },
-                    set: { editor in model.updatePreferences { $0.editor = editor } }
-                )) {
-                    ForEach(SystemActions.installedEditors()) { editor in
-                        Text(editor.title).tag(editor)
+                LabeledContent("Automation") {
+                    HStack {
+                        Text(model.mediaPermissionDenied ? "Not allowed" : "Allowed")
+                            .foregroundStyle(model.mediaPermissionDenied ? .orange : .secondary)
+                        Button("Open Settings") { model.openAutomationSettings() }
                     }
                 }
-            }
-
-            Section("Refresh intervals") {
-                interval("Repository", \.repositoryRefreshInterval, range: 5...600)
-                interval("Servers", \.serverRefreshInterval, range: 3...300)
-                interval("GitHub", \.githubRefreshInterval, range: 60...3600)
-                interval("Telemetry", \.telemetryRefreshInterval, range: 1...60)
-                Text("GitHub is limited to once a minute at most. Responses are cached and revalidated with ETags, so most refreshes cost no API quota.")
+                Text("Cornice reads and controls Music and Spotify through macOS automation. It uses no private frameworks.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
     }
-
-    private func binding(for module: ModuleKind) -> Binding<Bool> {
-        Binding(
-            get: { model.preferences.enabledModules.contains(module) },
-            set: { enabled in
-                model.updatePreferences { preferences in
-                    if enabled {
-                        preferences.enabledModules.insert(module)
-                    } else {
-                        preferences.enabledModules.remove(module)
-                    }
-                }
-            }
-        )
-    }
-
-    private func interval(
-        _ title: String,
-        _ keyPath: WritableKeyPath<Preferences, Double>,
-        range: ClosedRange<Double>
-    ) -> some View {
-        LabeledContent(title) {
-            HStack {
-                Slider(
-                    value: Binding(
-                        get: { model.preferences[keyPath: keyPath] },
-                        set: { value in model.updatePreferences { $0[keyPath: keyPath] = value } }
-                    ),
-                    in: range
-                )
-                Text("\(Int(model.preferences[keyPath: keyPath]))s")
-                    .font(.caption.monospacedDigit())
-                    .frame(width: 44, alignment: .trailing)
-            }
-        }
-    }
 }
 
-// MARK: - Repositories
-
-struct RepositorySettings: View {
+struct VisualizerSettings: View {
     @Bindable var model: AppModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Repositories")
-                .font(.headline)
-            Text("Cornice only reads folders you add here. It never scans your disk for repositories.")
+        Form {
+            Section("Audio-reactive visualiser") {
+                Toggle("Follow the music", isOn: Binding(
+                    get: { model.preferences.audioVisualizerEnabled },
+                    set: { value in model.updatePreferences { $0.audioVisualizerEnabled = value } }
+                ))
+
+                Text("""
+                The visualiser reads the audio your Mac is playing and runs a \
+                spectrum analysis on it, so the bars follow the actual music \
+                rather than animating on a timer.
+
+                macOS will ask for permission to record system audio the first \
+                time you turn this on. Audio is analysed in memory and \
+                discarded — nothing is recorded, written to disk, or sent \
+                anywhere.
+                """)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            List {
-                ForEach(model.preferences.repositoryPaths, id: \.self) { path in
-                    HStack {
-                        Image(systemName: path == model.preferences.activeRepositoryPath
-                              ? "largecircle.fill.circle" : "circle")
-                            .foregroundStyle(path == model.preferences.activeRepositoryPath ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                            .onTapGesture { model.selectRepository(path: path) }
-
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text((path as NSString).lastPathComponent)
-                            Text(Redaction.path(path))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
+                switch model.visualizerStatus {
+                case .running:
+                    Label("Capturing system audio", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .font(.caption)
+                case .stopped:
+                    Label("Off", systemImage: "circle")
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                case .failed(let reason):
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label(reason.message, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                            .font(.caption)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if reason == .permissionDenied {
+                            Button("Open Privacy Settings") { model.openAudioRecordingSettings() }
                         }
-
-                        Spacer()
-
-                        Button {
-                            model.removeRepository(path: path)
-                        } label: {
-                            Image(systemName: "minus.circle")
-                        }
-                        .buttonStyle(.borderless)
-                        .help("Stop tracking this repository")
                     }
                 }
             }
-            .listStyle(.inset)
 
-            HStack {
-                Button("Add Repository…") { model.chooseRepository() }
-                Spacer()
+            Section("Timers") {
+                Text("Presets shown in the Timers panel.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                HStack {
+                    ForEach(model.preferences.timerPresetsMinutes, id: \.self) { minutes in
+                        Text(verbatim: "\(minutes)m")
+                            .font(.caption.monospacedDigit())
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Capsule().fill(Color.secondary.opacity(0.15)))
+                    }
+                    Spacer()
+                }
+            }
+
+            Section("Refresh") {
+                LabeledContent("Player polling") {
+                    HStack {
+                        Slider(
+                            value: Binding(
+                                get: { model.preferences.mediaRefreshInterval },
+                                set: { value in model.updatePreferences { $0.mediaRefreshInterval = value } }
+                            ),
+                            in: 0.25...5
+                        )
+                        Text(String(format: "%.2fs", model.preferences.mediaRefreshInterval))
+                            .font(.caption.monospacedDigit())
+                            .frame(width: 48, alignment: .trailing)
+                    }
+                }
+                Text("The playhead is advanced locally between polls, so a slower interval does not make the scrubber stutter.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
-        .padding(16)
+        .formStyle(.grouped)
     }
 }
 
-// MARK: - Servers
-
-struct ServerSettings: View {
+struct AboutSettings: View {
     @Bindable var model: AppModel
-    @State private var newPort = ""
-    @State private var newLabel = ""
-    @State private var error: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Monitored ports")
-                .font(.headline)
-            Text("All monitored ports are checked with a single lsof call, so adding more costs nothing measurable.")
-                .font(.caption)
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Cornice")
+                .font(.title2.weight(.semibold))
+            Text("A media surface for the MacBook notch.")
                 .foregroundStyle(.secondary)
 
-            List {
-                ForEach(model.preferences.monitoredPorts) { port in
-                    HStack {
-                        Text(verbatim: ":\(port.port)")
-                            .font(.body.monospaced())
-                            .frame(width: 60, alignment: .leading)
-                        Text(port.label ?? "—")
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button {
-                            model.updatePreferences { preferences in
-                                preferences.monitoredPorts.removeAll { $0.port == port.port }
-                            }
-                        } label: {
-                            Image(systemName: "minus.circle")
-                        }
-                        .buttonStyle(.borderless)
-                    }
+            Divider()
+
+            Text("This Mac").font(.headline)
+
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
+                if let hardware = model.hardware {
+                    row("Model", hardware.catalogName ?? hardware.marketingName ?? "Unknown")
+                    row("Identifier", hardware.modelIdentifier)
+                    if let chip = hardware.chip { row("Chip", chip) }
+                }
+                if let profile = model.notchProfile {
+                    row("Display", "\(Int(profile.screenFrame.width)) × \(Int(profile.screenFrame.height)) pt")
+                    row("Notch", "\(Int(profile.rect.width)) × \(Int(profile.rect.height)) pt")
+                    row("Measured by", sourceDescription(profile.source))
                 }
             }
-            .listStyle(.inset)
+            .font(.callout)
 
-            HStack {
-                TextField("Port", text: $newPort)
-                    .frame(width: 80)
-                TextField("Label (optional)", text: $newLabel)
-                Button("Add") { add() }
-                    .disabled(newPort.isEmpty)
-            }
+            Text("""
+            The notch is measured on this display rather than looked up by \
+            model. Its size in points changes with the scaled resolution you \
+            pick in Displays settings, so the same MacBook reports different \
+            numbers in different modes.
+            """)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
 
-            if let error {
-                Text(error).font(.caption).foregroundStyle(.red)
-            }
+            Spacer()
+
+            Text("Keyboard shortcut: ⌥⌘D")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func add() {
-        guard let port = Int(newPort.trimmingCharacters(in: .whitespaces)),
-              (1...65_535).contains(port) else {
-            error = "Enter a port between 1 and 65535."
-            return
+    @ViewBuilder
+    private func row(_ label: String, _ value: String) -> some View {
+        GridRow {
+            Text(label).foregroundStyle(.secondary)
+            Text(value).textSelection(.enabled)
         }
-        guard !model.preferences.monitoredPorts.contains(where: { $0.port == port }) else {
-            error = "That port is already monitored."
-            return
+    }
+
+    private func sourceDescription(_ source: NotchSource) -> String {
+        switch source {
+        case .measured: "Measured from this display"
+        case .catalogFallback: "Derived from the safe-area inset"
+        case .syntheticCenter: "No notch — centred in the menu bar"
         }
-        let label = newLabel.trimmingCharacters(in: .whitespaces)
-        model.updatePreferences { preferences in
-            preferences.monitoredPorts.append(
-                MonitoredPort(port: port, label: label.isEmpty ? nil : label)
-            )
-        }
-        newPort = ""
-        newLabel = ""
-        error = nil
-        model.refreshNow(.servers)
     }
 }

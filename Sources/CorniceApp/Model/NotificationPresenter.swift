@@ -23,21 +23,12 @@ final class NotificationPresenter {
 
     private init() {}
 
-    /// A CI run started failing.
-    func checkFailed(_ run: WorkflowRun) {
+    /// A countdown reached zero.
+    func timerComplete(label: String) {
         post(
-            identifier: "workflow-\(run.id)",
-            title: "\(run.repositorySlug) · \(run.name) failed",
-            body: "\(run.branch) — \(run.commitMessage.isEmpty ? run.shortSHA : run.commitMessage)",
-            url: run.htmlURL
-        )
-    }
-
-    func focusComplete(minutes: Int) {
-        post(
-            identifier: "focus-\(Date().timeIntervalSince1970)",
-            title: "Focus session complete",
-            body: "\(minutes) minutes done.",
+            identifier: "timer-\(label)-\(Int(Date().timeIntervalSince1970))",
+            title: "\(label) finished",
+            body: "Your timer is done.",
             url: nil
         )
     }

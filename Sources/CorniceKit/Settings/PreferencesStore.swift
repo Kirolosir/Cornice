@@ -101,14 +101,18 @@ public actor PreferencesStore: PreferencesPersisting {
     static func migrate(_ preferences: Preferences) -> Preferences {
         var result = preferences
         guard result.schemaVersion < Preferences.currentSchemaVersion else { return result }
-        // No migrations yet; version 1 is the initial schema. Future steps go
-        // here as `if result.schemaVersion < N { ... }` in ascending order.
+        // Version 2 dropped the repository, servers, GitHub, container and
+        // command modules when the app became media-first. Their keys simply
+        // stop being decoded, and `enabledModules` values that no longer exist
+        // are discarded by the tolerant decoder — so nothing needs doing here
+        // beyond stamping the version. Future steps go here as
+        // `if result.schemaVersion < N { ... }` in ascending order.
         result.schemaVersion = Preferences.currentSchemaVersion
         return result
     }
 
     private func quarantineCorruptFile() {
-        let stamp = ISO8601DateFormatter.gitFormatter.string(from: .now)
+        let stamp = ISO8601DateFormatter.cornice.string(from: .now)
             .replacingOccurrences(of: ":", with: "-")
         let target = fileURL.deletingLastPathComponent()
             .appendingPathComponent("preferences-corrupt-\(stamp).json")
@@ -131,4 +135,18 @@ public actor EphemeralPreferencesStore: PreferencesPersisting {
         stored = preferences.sanitized()
         saveCount += 1
     }
+}
+
+
+extension ISO8601DateFormatter {
+    /// Shared formatter for timestamping quarantined files.
+    ///
+    /// `nonisolated(unsafe)` rather than a new instance per call:
+    /// `ISO8601DateFormatter` is expensive to construct, and this one is
+    /// configured once and only ever read afterwards.
+    nonisolated(unsafe) static let cornice: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
 }

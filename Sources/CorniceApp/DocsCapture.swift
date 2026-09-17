@@ -7,16 +7,13 @@ import CorniceKit
 /// Run with `cornice --capture-docs <directory>`.
 ///
 /// Uses `ImageRenderer` against the real view hierarchy fed by
-/// `PreviewServices`, rather than screen capture. That means the images are
-/// deterministic, reproducible on any machine, regenerable in one command when
-/// the design changes, and produced without granting anything Screen Recording
-/// permission. They are the actual views — not mockups — drawn with scripted
-/// data.
+/// `PreviewServices`, rather than screen capture: the images are deterministic,
+/// reproducible on any machine, regenerable in one command when the design
+/// changes, and produced without granting anything Screen Recording permission.
+/// They are the actual views, not mockups.
 @MainActor
 enum DocsCapture {
 
-    /// Rendered at 2× so the images are crisp on the Retina displays most
-    /// people will read the README on.
     private static let scale: CGFloat = 2
 
     static func run(outputDirectory: String) async -> Never {
@@ -26,9 +23,8 @@ enum DocsCapture {
         let model = AppModel(services: PreviewServices.container())
         await model.start()
 
-        // A notch profile matching a 14" MacBook Pro at default scaling, so the
-        // documentation images are representative rather than tied to whichever
-        // machine generated them.
+        // A 14-inch MacBook Pro at default scaling, so the images are
+        // representative rather than tied to whichever machine rendered them.
         let screen = ScreenMetrics(
             frame: CGRect(x: 0, y: 0, width: 1512, height: 982),
             visibleFrame: CGRect(x: 0, y: 0, width: 1512, height: 944),
@@ -39,74 +35,49 @@ enum DocsCapture {
             isBuiltIn: true,
             localizedName: "Built-in Retina Display"
         )
-        model.updateGeometry(NotchGeometryResolver.resolve(screen))
+        let profile = NotchGeometryResolver.resolve(screen)
+        model.updateGeometry(profile)
 
-        // Let every module's first refresh land.
-        for module in ModuleKind.allCases {
-            model.refreshNow(module)
-        }
+        let geometry = SurfaceGeometry(
+            notchSize: profile.rect.size,
+            notchCornerRadius: profile.cornerRadius,
+            contentHeight: 188,
+            windowWidth: SurfaceGeometry.expandedWidth + 80
+        )
+
+        model.refreshNow("media")
+        model.refreshNow("telemetry")
         try? await Task.sleep(for: .seconds(2))
-        // Populate the sparklines with enough points to look like a real session.
         for _ in 0..<40 {
-            model.refreshNow(.telemetry)
+            model.refreshNow("telemetry")
             try? await Task.sleep(for: .milliseconds(12))
         }
-        try? await Task.sleep(for: .milliseconds(400))
+        model.addTimer(minutes: 25)
+        model.addTimer(minutes: 5)
+        try? await Task.sleep(for: .milliseconds(600))
 
-        model.collapse()
-        try? await Task.sleep(for: .milliseconds(200))
-        // Sized to the real collapsed window, not to an arbitrary canvas: the
-        // surface fills whatever it is given, so a larger frame would render a
-        // black slab rather than what the app actually shows.
-        let collapsedContent = model.collapsedContent
-        capture(
-            model: model,
-            name: "collapsed",
-            size: CGSize(
-                width: (model.notchProfile?.rect.width ?? 210) + collapsedContent.wingWidth * 2,
-                height: (model.notchProfile?.rect.height ?? 38)
-                    + (collapsedContent.isEmpty ? 0 : Theme.Metrics.wingDrop)
-            ),
-            to: directory,
-            drawsNotch: false
-        )
-
-        model.expand()
-        for (module, name) in [
-            (ModuleKind.repository, "repository"),
-            (.servers, "servers"),
-            (.github, "github"),
-            (.telemetry, "telemetry"),
-            (.containers, "containers"),
-            (.commands, "commands"),
-            (.focus, "focus"),
+        for (state, module, name) in [
+            (SurfaceState.collapsed, ModuleKind.media, "collapsed"),
+            (.peek, .media, "peek"),
+            (.expanded, .media, "player"),
+            (.expanded, .timers, "timers"),
+            (.expanded, .stats, "stats"),
         ] {
             model.select(module: module)
-            try? await Task.sleep(for: .milliseconds(450))
-            capture(
-                model: model,
-                name: name,
-                size: CGSize(
-                    width: Theme.Metrics.panelWidth,
-                    height: ExpandedMetrics.height(for: module) + 38 + Theme.Metrics.panelDrop
-                ),
-                to: directory
-            )
+            model.present(state)
+            try? await Task.sleep(for: .milliseconds(420))
+            capture(model: model, geometry: geometry, name: name, to: directory)
         }
 
-        // Light mode, to show the panel adapts.
-        model.select(module: .repository)
-        try? await Task.sleep(for: .milliseconds(400))
-        capture(
-            model: model,
-            name: "repository-light",
-            size: CGSize(
-                width: Theme.Metrics.panelWidth,
-                height: ExpandedMetrics.height(for: .repository) + 38 + Theme.Metrics.panelDrop
-            ),
-            to: directory,
-            colorScheme: .light
+        // The wireless-device announcement, which is otherwise only visible for
+        // three seconds when something actually connects.
+        model.present(.collapsed)
+        try? await Task.sleep(for: .milliseconds(200))
+        model.showDeviceActivity(
+            AppModel.DeviceActivity(name: "AirPods Pro", symbol: "airpods.pro", batteryLevel: 0.78)
         )
+        try? await Task.sleep(for: .seconds(1.4))
+        capture(model: model, geometry: geometry, name: "airpods", to: directory)
 
         print("Wrote documentation images to \(directory.path)")
         exit(0)
@@ -114,40 +85,28 @@ enum DocsCapture {
 
     private static func capture(
         model: AppModel,
+        geometry: SurfaceGeometry,
         name: String,
-        size: CGSize,
-        to directory: URL,
-        colorScheme: ColorScheme = .dark,
-        drawsNotch: Bool = true
+        to directory: URL
     ) {
-        // A backdrop that includes a menu-bar strip and the notch cut-out, so
-        // the images show what the surface is actually attached to. Without it
-        // the panel reads as a floating window, which is the opposite of the
-        // point.
-        let backdrop = colorScheme == .dark
-            ? Color(red: 0.13, green: 0.13, blue: 0.15)
-            : Color(red: 0.86, green: 0.86, blue: 0.88)
-        let notchWidth = model.notchProfile?.rect.width ?? 210
-        let notchHeight = model.notchProfile?.rect.height ?? 38
-        let notchRadius = model.notchProfile?.cornerRadius ?? 10
+        let surfaceSize = geometry.size(for: model.surfaceState)
+        // Enough room around the surface for its shadow, and enough above to
+        // show that it is attached to the top edge of the screen.
+        let canvas = CGSize(width: surfaceSize.width + 120, height: surfaceSize.height + 56)
 
         let content = ZStack(alignment: .top) {
-            backdrop
-
-            // The physical notch. Skipped for the collapsed shot, where the
-            // surface is itself covering the notch.
-            if drawsNotch {
-                NotchShape(bottomRadius: notchRadius, flareRadius: 0)
-                    .fill(Color.black)
-                    .frame(width: notchWidth, height: notchHeight)
-                    .frame(maxWidth: .infinity, alignment: .center)
-            }
-
-            RootView(model: model)
-                .frame(width: size.width, height: size.height)
+            // A desktop-ish backdrop so a black surface is visible at all.
+            LinearGradient(
+                colors: [Color(red: 0.16, green: 0.16, blue: 0.19),
+                         Color(red: 0.10, green: 0.10, blue: 0.13)],
+                startPoint: .top, endPoint: .bottom
+            )
+            RootView(model: model, geometry: geometry)
+                .frame(width: geometry.windowWidth, height: geometry.windowHeight)
         }
-        .frame(width: size.width + 64, height: size.height + (drawsNotch ? 24 : 40))
-        .environment(\.colorScheme, colorScheme)
+        .frame(width: canvas.width, height: canvas.height, alignment: .top)
+        .clipped()
+        .environment(\.colorScheme, .dark)
 
         let renderer = ImageRenderer(content: content)
         renderer.scale = scale
@@ -162,8 +121,7 @@ enum DocsCapture {
             return
         }
 
-        let url = directory.appendingPathComponent("\(name).png")
-        try? png.write(to: url)
-        print("  \(name).png  \(Int(size.width))×\(Int(size.height))")
+        try? png.write(to: directory.appendingPathComponent("\(name).png"))
+        print("  \(name).png  \(Int(canvas.width))×\(Int(canvas.height))")
     }
 }

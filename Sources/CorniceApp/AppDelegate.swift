@@ -1,5 +1,4 @@
 import AppKit
-import Observation
 import UserNotifications
 import CorniceKit
 
@@ -24,6 +23,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // Diagnostic mode: print what the media layer can actually see and
+        // exit. Run from inside the bundle so automation permission is
+        // attributed to the app rather than to a terminal.
+        if arguments.contains("--probe-media") {
+            Task { await Self.probeMedia() }
+            return
+        }
+
         Log.app.notice("Cornice starting")
 
         let services = ServiceContainer.live()
@@ -37,7 +44,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         installStatusItem(model: model, controller: controller)
         controller.install()
-        observeLayoutChanges(model: model, controller: controller)
 
         Task {
             await model.start()
@@ -60,6 +66,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The app keeps running with no windows open — that is its normal state.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    /// Prints live player state, for verifying the scripting path.
+    private static func probeMedia() async {
+        let coordinator = MediaCoordinator.live()
+        let running = await coordinator.runningSources()
+        print("running players:", running.map(\.displayName).joined(separator: ", "))
+
+        guard let snapshot = await coordinator.snapshot() else {
+            let denied = await coordinator.allSourcesUnavailable()
+            print(denied
+                  ? "automation refused — grant Cornice in Privacy & Security › Automation"
+                  : "no track loaded")
+            exit(0)
+        }
+
+        print("""
+        source:   \(snapshot.source.displayName)
+        state:    \(snapshot.state.rawValue)
+        title:    \(snapshot.title)
+        artist:   \(snapshot.artist)
+        album:    \(snapshot.album)
+        duration: \(Format.duration(snapshot.duration))  (\(snapshot.duration)s raw)
+        position: \(Format.duration(snapshot.position))
+        progress: \(String(format: "%.1f%%", snapshot.progress() * 100))
+        shuffle:  \(snapshot.isShuffling)  repeat: \(snapshot.repeatMode.rawValue)
+        volume:   \(snapshot.volume.map { String(format: "%.0f%%", $0 * 100) } ?? "n/a")
+        artwork:  \(snapshot.artworkURL?.absoluteString ?? "none")
+        """)
+
+        if let data = await coordinator.artwork(for: snapshot) {
+            print("artwork bytes: \(data.count)")
+        }
+        exit(0)
     }
 
     // MARK: - Status item
@@ -102,27 +142,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SettingsWindow.shared.show(model: model)
     }
 
-    // MARK: - Observation
-
-    /// Re-applies the window frame whenever something that affects its size
-    /// changes.
-    ///
-    /// `withObservationTracking` fires once per change, so it is re-armed after
-    /// each one. This is the bridge between `@Observable` state and the AppKit
-    /// window geometry that SwiftUI cannot drive on its own — the pane height
-    /// and the presence of collapsed indicators both change the window's size,
-    /// and neither is something SwiftUI can communicate outward.
-    private func observeLayoutChanges(model: AppModel, controller: NotchWindowController) {
-        withObservationTracking {
-            _ = model.activeModule
-            _ = model.surfaceState
-            _ = model.collapsedContent
-        } onChange: { [weak self, weak model, weak controller] in
-            Task { @MainActor in
-                guard let self, let model, let controller else { return }
-                controller.applyState(animated: true)
-                self.observeLayoutChanges(model: model, controller: controller)
-            }
-        }
-    }
 }

@@ -66,6 +66,15 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
     <true/>
     <key>NSHumanReadableCopyright</key>
     <string>MIT licensed.</string>
+    <!-- Required before the app may send Apple events. macOS shows this string
+         in the permission prompt, so it has to say what the app actually wants
+         and why. Without it the first Apple event is refused outright. -->
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Cornice reads what Music and Spotify are playing, and sends play, pause, skip, and seek commands when you use the controls in the panel.</string>
+    <!-- Required for the Core Audio process tap that drives the visualiser.
+         Only requested when you turn the visualiser on in Settings. -->
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Cornice reads the audio your Mac is playing so the visualiser follows the music. Audio is analysed in memory for the spectrum display and is never recorded, saved, or sent anywhere.</string>
     <!-- Cornice reads local repositories and talks to api.github.com only.
          It requests no camera, microphone, location, contacts, or full-disk
          access, and declares no URL schemes it can be launched with. -->

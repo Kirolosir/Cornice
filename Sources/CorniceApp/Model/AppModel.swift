@@ -3,199 +3,188 @@ import Observation
 import SwiftUI
 import CorniceKit
 
-/// Whether the surface is showing its collapsed or expanded form.
-enum SurfaceState: Equatable {
-    case collapsed
-    case expanded
-}
-
 /// All observable application state.
 ///
-/// One `@Observable` on the main actor, holding `Loadable` values fed by
-/// per-module refresh tasks. It is deliberately a coordinator, not a worker:
-/// every actual operation is delegated to a service in the container, so this
-/// type contains scheduling and state transitions and nothing else. That is
-/// what keeps "which git command runs" out of the view layer.
+/// A coordinator, not a worker: every operation is delegated to a service, so
+/// this type holds scheduling and state transitions and nothing else.
 @MainActor
 @Observable
 final class AppModel {
 
     // MARK: - Configuration
 
-    private(set) var preferences: Preferences = Preferences()
+    private(set) var preferences = Preferences()
 
     // MARK: - Surface
 
     private(set) var surfaceState: SurfaceState = .collapsed
-    /// Whether the pointer is over the surface. Owned by the window controller,
-    /// which tracks it against the window's own bounds rather than through
-    /// SwiftUI hover state — see `NotchContentView`.
     private(set) var isHovering = false
-    var activeModule: ModuleKind = .repository
+    var activeModule: ModuleKind = .media
 
-    /// Geometry of the display the surface is docked to.
     private(set) var notchProfile: NotchProfile?
     private(set) var hardware: HardwareIdentity?
 
-    // MARK: - Module state
+    // MARK: - Media
 
-    private(set) var repository: Loadable<GitRepositorySnapshot> = .idle
-    private(set) var ports: Loadable<[PortStatus]> = .idle
-    private(set) var github: Loadable<GitHubDigest> = .idle
-    private(set) var containers: Loadable<[ContainerSummary]> = .idle
-    private(set) var dockerAvailability: DockerAvailability = .notInstalled
-    private(set) var telemetry = TelemetryHistory(capacity: 48)
-    private(set) var focus = FocusTimer()
-    private(set) var commandRuns: [CommandRun] = []
-    private(set) var cacheSavings: Double = 0
+    private(set) var media: MediaSnapshot?
+    private(set) var artwork: NSImage?
+    /// Dominant colour of the current artwork, used to tint the surface.
+    private(set) var artworkTint: Color?
+    /// Set when every known player refused automation.
+    private(set) var mediaPermissionDenied = false
+    private(set) var runningPlayers: [MediaSource] = []
 
-    /// Set when a destructive action is awaiting confirmation.
-    var pendingConfirmation: PendingConfirmation?
+    // MARK: - Output device
 
-    struct PendingConfirmation: Identifiable {
+    private(set) var outputDevice: AudioOutputDevice?
+
+    /// A transient announcement, such as AirPods connecting.
+    struct DeviceActivity: Identifiable, Equatable {
         let id = UUID()
-        let title: String
-        let message: String
-        let detail: String?
-        let confirmLabel: String
-        let isDestructive: Bool
-        let action: @MainActor () async -> Void
+        let name: String
+        let symbol: String
+        let batteryLevel: Double?
     }
+
+    private(set) var deviceActivity: DeviceActivity?
+    private var activityDismissTask: Task<Void, Never>?
+
+    // MARK: - Visualiser
+
+    /// Latest analysed audio. Pulled on the UI's own display timer rather than
+    /// pushed from the audio thread — see `AudioVisualizerEngine`.
+    private(set) var levels: AudioLevels
+    private(set) var visualizerStatus: AudioVisualizerEngine.Status = .stopped
+
+    // MARK: - Other modules
+
+    private(set) var telemetry = TelemetryHistory(capacity: 48)
+    private(set) var timers = TimerBoard()
 
     // MARK: - Dependencies
 
-    /// Internal rather than private so the actions extension can reach it.
     let serviceContainer: ServiceContainer
-    private var refreshTasks: [ModuleKind: Task<Void, Never>] = [:]
-    /// Guards against a second manual refresh starting while one is running.
-    private var manualRefreshes: Set<ModuleKind> = []
-    private var copyConfirmationTask: Task<Void, Never>?
+    private var refreshTasks: [String: Task<Void, Never>] = [:]
+    /// Track identity the artwork currently belongs to, so it is fetched once
+    /// per song rather than once per poll.
+    private var artworkTrackIdentity: String?
 
     init(services: ServiceContainer) {
         self.serviceContainer = services
-    }
-
-    // MARK: - Mutators for the actions extension
-
-    // Observable state is `private(set)` so it only ever changes through a
-    // named operation. These are the narrow seams `AppModel+Actions` writes
-    // through, rather than making every property publicly settable.
-
-    func applyPreferences(_ updated: Preferences) {
-        preferences = updated
-        // Picking up a new configured duration mid-session would move a
-        // deadline the user is already counting down against, so it only
-        // applies while the timer is idle.
-        if case .idle = focus.state {
-            focus.setDuration(minutes: updated.focusDurationMinutes)
-        }
-    }
-
-    func applyFocus(_ updated: FocusTimer) {
-        focus = updated
-    }
-
-    func mutateFocus(_ mutate: (inout FocusTimer) -> Void) {
-        var copy = focus
-        mutate(&copy)
-        focus = copy
-    }
-
-    func clearRepositoryState() {
-        repository = .idle
-    }
-
-    func clearGitHubState() {
-        github = .idle
-        cacheSavings = 0
-    }
-
-    func appendCommandRun(_ run: CommandRun) {
-        commandRuns.insert(run, at: 0)
-        // The panel shows a short history; an unbounded list would grow for as
-        // long as the app runs.
-        if commandRuns.count > 12 {
-            commandRuns.removeLast(commandRuns.count - 12)
-        }
-    }
-
-    func replaceCommandRun(id: UUID, with run: CommandRun) {
-        guard let index = commandRuns.firstIndex(where: { $0.id == id }) else {
-            appendCommandRun(run)
-            return
-        }
-        commandRuns[index] = run
-    }
-
-    /// Brief acknowledgement that something was copied.
-    ///
-    /// The panel does not take focus and there is no status area to write to,
-    /// so without this a copy button gives no feedback at all and people click
-    /// it twice to be sure.
-    private(set) var copyConfirmation: String?
-
-    func flashCopyConfirmation(_ description: String) {
-        copyConfirmation = description
-        copyConfirmationTask?.cancel()
-        copyConfirmationTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(1.6))
-            guard !Task.isCancelled else { return }
-            self?.copyConfirmation = nil
-        }
+        self.levels = .silent(bandCount: services.visualizer.bandCount)
     }
 
     // MARK: - Lifecycle
 
-    /// Loads preferences and starts the refresh loops.
     func start() async {
         preferences = await serviceContainer.preferences.load()
-        focus.setDuration(minutes: preferences.focusDurationMinutes)
         hardware = await serviceContainer.hardware.identity()
         Log.app.notice("running on \(self.hardware?.displayName ?? "unknown", privacy: .public)")
+
+        if preferences.audioVisualizerEnabled {
+            startVisualizer()
+        }
+        startOutputDeviceMonitoring()
         restartRefreshLoops()
     }
 
-    /// Cancels every loop. Called on termination and whenever the module set changes.
     func stopRefreshLoops() {
         for task in refreshTasks.values { task.cancel() }
         refreshTasks.removeAll()
     }
 
+    func shutDown() {
+        stopRefreshLoops()
+        activityDismissTask?.cancel()
+        serviceContainer.visualizer.stop()
+        serviceContainer.outputDevices.stop()
+    }
+
+    // MARK: - Output device
+
+    /// Watches the default output and announces wireless devices as they connect.
+    ///
+    /// Event-driven through Core Audio rather than polled, and deliberately not
+    /// via CoreBluetooth: connecting AirPods changes the default output device,
+    /// which is both the moment worth reacting to and a signal that needs no
+    /// Bluetooth permission to observe.
+    private func startOutputDeviceMonitoring() {
+        outputDevice = serviceContainer.outputDevices.current()
+        serviceContainer.outputDevices.start { [weak self] device in
+            Task { @MainActor in
+                self?.outputDeviceChanged(device)
+            }
+        }
+    }
+
+    private func outputDeviceChanged(_ device: AudioOutputDevice?) {
+        let previous = outputDevice
+        outputDevice = device
+
+        guard let device, device.isWireless else { return }
+        // Only on an actual change, so re-reading the same device — which
+        // happens on unrelated audio reconfiguration — does not re-announce it.
+        guard previous?.deviceID != device.deviceID else { return }
+
+        Log.audio.notice("output switched to \(device.name, privacy: .public)")
+        announce(device)
+    }
+
+    private func announce(_ device: AudioOutputDevice) {
+        let activity = DeviceActivity(
+            name: device.name,
+            symbol: device.isAirPods ? "airpods.pro" : device.transport.symbol,
+            batteryLevel: WirelessBattery.level(forDeviceNamed: device.name)
+        )
+        deviceActivity = activity
+
+        // An announcement must never steal a panel the user has open.
+        if surfaceState == .collapsed { present(.activity) }
+
+        activityDismissTask?.cancel()
+        activityDismissTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3.5))
+            guard !Task.isCancelled, let self else { return }
+            self.deviceActivity = nil
+            if self.surfaceState == .activity {
+                self.present(self.isHovering ? .peek : .collapsed)
+            }
+        }
+    }
+
+    /// Shows the announcement on demand, for previews and for testing the look.
+    func showDeviceActivity(_ activity: DeviceActivity) {
+        deviceActivity = activity
+        if surfaceState == .collapsed { present(.activity) }
+    }
+
     // MARK: - Surface transitions
-
-    func expand() {
-        guard surfaceState != .expanded else { return }
-        surfaceState = .expanded
-        // Expanding is a strong signal that the user wants current data, so the
-        // visible module refreshes immediately rather than waiting for its tick.
-        refreshNow(activeModule, userInitiated: true)
-        // Telemetry runs at a higher rate while visible; restart its loop to
-        // pick up the faster cadence.
-        restartLoop(for: .telemetry)
-    }
-
-    func collapse() {
-        guard surfaceState != .collapsed else { return }
-        surfaceState = .collapsed
-        pendingConfirmation = nil
-        restartLoop(for: .telemetry)
-    }
-
-    func toggle() {
-        surfaceState == .expanded ? collapse() : expand()
-    }
 
     func setHovering(_ hovering: Bool) {
         isHovering = hovering
     }
 
+    func present(_ state: SurfaceState) {
+        guard surfaceState != state else { return }
+        surfaceState = state
+        // Both loops change cadence with the surface state, so both are
+        // rebuilt. Any state other than resting means the user is looking at
+        // it, which forces an immediate read — this is what makes the lazy
+        // collapsed cadence invisible: by the time the peek has finished
+        // animating, the data behind it is current.
+        if state != .collapsed { refreshNow("media") }
+        restartLoop("media")
+        restartLoop("telemetry")
+    }
+
+    func toggle() {
+        present(surfaceState.isOpen ? .collapsed : .expanded)
+    }
+
     func select(module: ModuleKind) {
         guard activeModule != module else { return }
         activeModule = module
-        refreshNow(module, userInitiated: true)
     }
-
-    // MARK: - Geometry
 
     func updateGeometry(_ profile: NotchProfile?) {
         guard notchProfile != profile else { return }
@@ -207,29 +196,19 @@ final class AppModel {
 
     // MARK: - Refresh scheduling
 
-    /// Starts a loop per enabled module.
-    ///
-    /// Each module gets an independent task so one failing integration cannot
-    /// stall the others: a hung Docker daemon must not stop the git panel
-    /// updating. Cancelling and rebuilding the whole set on a preference change
-    /// is cheap and avoids having to reason about partially-updated schedules.
     func restartRefreshLoops() {
         stopRefreshLoops()
-        for module in preferences.enabledModules {
-            restartLoop(for: module)
-        }
+        restartLoop("media")
+        restartLoop("telemetry")
     }
 
-    private func restartLoop(for module: ModuleKind) {
-        refreshTasks[module]?.cancel()
-        guard preferences.enabledModules.contains(module) else { return }
-
-        refreshTasks[module] = Task { [weak self] in
-            guard let self else { return }
+    private func restartLoop(_ name: String) {
+        refreshTasks[name]?.cancel()
+        refreshTasks[name] = Task { [weak self] in
             while !Task.isCancelled {
-                await self.refresh(module, userInitiated: false)
-                let interval = await self.interval(for: module)
-                // A cancelled sleep exits the loop rather than throwing onward.
+                guard let self else { return }
+                await self.refresh(name)
+                let interval = await self.interval(for: name)
                 do { try await Task.sleep(for: .seconds(interval)) } catch { return }
             }
         }
@@ -237,140 +216,130 @@ final class AppModel {
 
     /// Refresh cadence, adjusted for whether the panel is actually on screen.
     ///
-    /// The single most effective thing this app does for idle cost: a collapsed
-    /// panel has no visible telemetry, so sampling it several times a second
-    /// would be pure waste. Modules whose collapsed state shows nothing back
-    /// right off; modules that feed the collapsed indicators keep their cadence.
-    private func interval(for module: ModuleKind) -> Double {
-        let isVisible = surfaceState == .expanded
-        switch module {
-        case .telemetry:
-            // Only drawn when expanded. Collapsed, a slow trickle keeps the
-            // sparkline populated for when it opens.
-            return isVisible ? preferences.telemetryRefreshInterval : 15
-        case .repository:
-            return preferences.repositoryRefreshInterval
-        case .servers:
-            return preferences.serverRefreshInterval
-        case .github:
-            return preferences.githubRefreshInterval
-        case .containers:
-            return isVisible ? 10 : 45
-        case .commands, .focus:
-            // Event-driven, not polled. A long sleep keeps the task parked.
-            return 3600
+    /// Telemetry is only drawn when expanded, so it backs right off otherwise.
+    /// Media keeps its cadence regardless, because the collapsed surface shows
+    /// the current track and a stale title there is the most visible possible
+    /// bug.
+    private func interval(for name: String) -> Double {
+        switch name {
+        case "telemetry":
+            // Only drawn when open.
+            return surfaceState.isOpen ? preferences.telemetryRefreshInterval : 15
+        default:
+            // Each media poll is several Apple events to another process, and
+            // profiling puts one Spotify round-trip at roughly 100 ms of CPU —
+            // its scripting handler is not cheap. That cost is unavoidable on
+            // the supported API, so the cadence follows what is on screen
+            // rather than a fixed rate.
+            //
+            // Open: the scrubber and playhead are visible, so use the
+            // configured rate. Collapsed: the surface shows album art and a
+            // title that only change between tracks, so poll lazily — and any
+            // staleness is erased by the immediate refresh on hover, before
+            // the user can see it.
+            if surfaceState.isOpen { return preferences.mediaRefreshInterval }
+            if media?.state.isPlaying != true { return 8 }
+            if preferences.idleDisplay == .nothing { return 8 }
+            return max(preferences.mediaRefreshInterval, 4)
         }
     }
 
-    /// Runs one refresh for a module, off the main actor, folding the result back.
-    private func refresh(_ module: ModuleKind, userInitiated: Bool) async {
-        switch module {
-        case .repository: await refreshRepository()
-        case .servers: await refreshPorts()
-        case .github: await refreshGitHub(userInitiated: userInitiated)
-        case .telemetry: await refreshTelemetry()
-        case .containers: await refreshContainers()
-        case .commands, .focus: return
+    private func refresh(_ name: String) async {
+        switch name {
+        case "media": await refreshMedia()
+        case "telemetry": telemetry.append(await serviceContainer.telemetry.sample())
+        default: break
         }
     }
 
-    /// Fire-and-forget refresh, used by buttons and by `expand()`.
-    func refreshNow(_ module: ModuleKind, userInitiated: Bool = true) {
-        guard preferences.enabledModules.contains(module) else { return }
-        guard !manualRefreshes.contains(module) else { return }
-        manualRefreshes.insert(module)
-        Task { [weak self] in
-            await self?.refresh(module, userInitiated: userInitiated)
-            self?.manualRefreshes.remove(module)
-        }
+    func refreshNow(_ name: String) {
+        Task { [weak self] in await self?.refresh(name) }
     }
 
-    // MARK: - Module refreshes
+    // MARK: - Media
 
-    private func refreshRepository() async {
-        guard let path = preferences.activeRepositoryPath else {
-            repository = .idle
+    private func refreshMedia() async {
+        let coordinator = serviceContainer.media
+        runningPlayers = await coordinator.runningSources()
+        let snapshot = await coordinator.snapshot()
+        mediaPermissionDenied = await coordinator.allSourcesUnavailable()
+
+        media = snapshot
+
+        guard let snapshot, snapshot.hasTrack else {
+            artwork = nil
+            artworkTint = nil
+            artworkTrackIdentity = nil
             return
         }
-        repository = repository.beginRefresh()
-        do {
-            let snapshot = try await serviceContainer.git.snapshot(ofRepositoryAt: path)
-            // The active repository may have changed while the command ran.
-            guard preferences.activeRepositoryPath == path else { return }
-            repository = .loaded(snapshot)
-        } catch let error as ServiceError {
-            guard preferences.activeRepositoryPath == path else { return }
-            repository = repository.resolve(.failure(error))
-        } catch {
-            repository = repository.resolve(.failure(.cancelled))
-        }
-    }
 
-    private func refreshPorts() async {
-        let monitored = preferences.monitoredPorts
-        guard !monitored.isEmpty else {
-            ports = .loaded([])
+        // Only refetch when the *track* changed, not on every poll.
+        guard snapshot.trackIdentity != artworkTrackIdentity else { return }
+        artworkTrackIdentity = snapshot.trackIdentity
+
+        guard let data = await coordinator.artwork(for: snapshot),
+              let image = NSImage(data: data) else {
+            artwork = nil
+            artworkTint = nil
             return
         }
-        ports = ports.beginRefresh()
-        do {
-            ports = .loaded(try await serviceContainer.ports.scan(ports: monitored))
-        } catch let error as ServiceError {
-            ports = ports.resolve(.failure(error))
-        } catch {
-            ports = ports.resolve(.failure(.cancelled))
+        artwork = image
+        artworkTint = preferences.tintFromArtwork ? ArtworkPalette.dominantColor(of: image) : nil
+    }
+
+    /// Pulls the newest audio frame. Called from the UI's display timer.
+    func sampleLevels() {
+        guard preferences.audioVisualizerEnabled else { return }
+        levels = serviceContainer.visualizer.latestLevels()
+    }
+
+    func startVisualizer() {
+        visualizerStatus = serviceContainer.visualizer.start()
+        if case .failed(let reason) = visualizerStatus {
+            Log.audio.notice("visualiser disabled: \(reason.message, privacy: .public)")
         }
     }
 
-    private func refreshGitHub(userInitiated: Bool) async {
-        github = github.beginRefresh()
-        let previousFailures = Set((github.value?.failedRuns ?? []).map(\.id))
-        do {
-            let digest = try await serviceContainer.github.digest(
-                watching: preferences.githubRepositories,
-                userInitiated: userInitiated
-            )
-            github = .loaded(digest)
-            cacheSavings = await serviceContainer.github.cacheStatistics().savedFraction
-            notifyAboutNewFailures(in: digest, previouslyKnown: previousFailures)
-        } catch let error as ServiceError {
-            github = github.resolve(.failure(error))
-        } catch {
-            github = github.resolve(.failure(.cancelled))
-        }
+    func stopVisualizer() {
+        serviceContainer.visualizer.stop()
+        visualizerStatus = .stopped
+        levels = .silent(bandCount: serviceContainer.visualizer.bandCount)
     }
 
-    private func refreshTelemetry() async {
-        telemetry.append(await serviceContainer.telemetry.sample())
+    // MARK: - Mutators for the actions extension
+
+    func applyPreferences(_ updated: Preferences) {
+        preferences = updated
     }
 
-    private func refreshContainers() async {
-        dockerAvailability = await serviceContainer.docker.availability()
-        guard dockerAvailability.canQuery else {
-            containers = .loaded([])
-            return
-        }
-        containers = containers.beginRefresh()
-        do {
-            containers = .loaded(try await serviceContainer.docker.containers())
-        } catch let error as ServiceError {
-            containers = containers.resolve(.failure(error))
-        } catch {
-            containers = containers.resolve(.failure(.cancelled))
-        }
+    func applyTimers(_ updated: TimerBoard) {
+        timers = updated
     }
 
-    // MARK: - Notifications
+    func mutateTimers(_ mutate: (inout TimerBoard) -> Void) {
+        var copy = timers
+        mutate(&copy)
+        timers = copy
+    }
 
-    /// Notifies once per newly-failing run.
+    func applyMedia(_ snapshot: MediaSnapshot?) {
+        media = snapshot
+    }
+
+    private(set) var toast: String?
+    private var toastTask: Task<Void, Never>?
+
+    /// Brief acknowledgement of an action.
     ///
-    /// Diffing against the previously-known set matters: without it, every
-    /// refresh while a run stays red would fire another notification, and the
-    /// user would turn the feature off within the hour.
-    private func notifyAboutNewFailures(in digest: GitHubDigest, previouslyKnown: Set<Int>) {
-        guard preferences.notifyOnFailedChecks else { return }
-        for run in digest.failedRuns where !previouslyKnown.contains(run.id) {
-            NotificationPresenter.shared.checkFailed(run)
+    /// The panel does not take focus and there is no status area to write to,
+    /// so without this a control gives no feedback and people press it twice.
+    func flashToast(_ message: String) {
+        toast = message
+        toastTask?.cancel()
+        toastTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1.4))
+            guard !Task.isCancelled else { return }
+            self?.toast = nil
         }
     }
 }

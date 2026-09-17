@@ -19,61 +19,43 @@ final class PreferencesTests: XCTestCase {
 
     // MARK: - Sanitising
 
-    /// Refresh intervals are clamped so a hand-edited file cannot make the app
-    /// poll `lsof` in a tight loop and pin a core.
-    func testRefreshIntervalsAreClamped() {
+    /// Intervals are clamped so a hand-edited file cannot make the app poll a
+    /// music player a hundred times a second.
+    func testIntervalsAreClamped() {
         var preferences = Preferences()
-        preferences.telemetryRefreshInterval = 0.001
-        preferences.serverRefreshInterval = 0
-        preferences.repositoryRefreshInterval = 99_999
-        preferences.githubRefreshInterval = 1
+        preferences.mediaRefreshInterval = 0.001
+        preferences.telemetryRefreshInterval = 0
+        preferences.hoverDwell = -3
 
         let sanitized = preferences.sanitized()
 
+        XCTAssertEqual(sanitized.mediaRefreshInterval, 0.25,
+                       "each poll is an Apple event to another process")
         XCTAssertEqual(sanitized.telemetryRefreshInterval, 1)
-        XCTAssertEqual(sanitized.serverRefreshInterval, 3)
-        XCTAssertEqual(sanitized.repositoryRefreshInterval, 600)
-        XCTAssertEqual(sanitized.githubRefreshInterval, 60,
-                       "a 60s floor keeps even a pathological config inside GitHub's quota")
+        XCTAssertEqual(sanitized.hoverDwell, 0)
     }
 
-    func testInvalidPortsAreRemovedAndDeduplicated() {
+    func testTimerPresetsAreCleanedUp() {
         var preferences = Preferences()
-        preferences.monitoredPorts = [
-            .init(port: 3000), .init(port: 3000, label: "dup"),
-            .init(port: 0), .init(port: 70_000), .init(port: 8080),
-        ]
+        preferences.timerPresetsMinutes = [25, 25, 0, 9999, 5]
 
-        let ports = preferences.sanitized().monitoredPorts.map(\.port)
-
-        XCTAssertEqual(ports, [3000, 8080], "order is preserved, first occurrence wins")
+        XCTAssertEqual(preferences.sanitized().timerPresetsMinutes, [5, 25])
     }
 
-    func testMalformedRepositorySlugsAreRemoved() {
+    func testEmptyPresetsFallBackToDefaults() {
         var preferences = Preferences()
-        preferences.githubRepositories = ["good/repo", "../../etc/passwd", "nope", "good/repo"]
+        preferences.timerPresetsMinutes = []
 
-        XCTAssertEqual(preferences.sanitized().githubRepositories, ["good/repo"])
+        XCTAssertFalse(preferences.sanitized().timerPresetsMinutes.isEmpty)
     }
 
-    /// An active repository that is no longer in the bookmark list would leave
-    /// the panel pointing at something the user cannot select or clear.
-    func testDanglingActiveRepositoryIsRepaired() {
+    /// Media is the point of the app; switching it off would leave an empty
+    /// surface with no way back.
+    func testMediaModuleCannotBeDisabled() {
         var preferences = Preferences()
-        preferences.repositoryPaths = ["/one", "/two"]
-        preferences.activeRepositoryPath = "/deleted"
+        preferences.enabledModules = []
 
-        XCTAssertEqual(preferences.sanitized().activeRepositoryPath, "/one")
-    }
-
-    func testInvalidCommandsAreDropped() {
-        var preferences = Preferences()
-        preferences.commands = [
-            CommandSpec(name: "Good", mode: .shell, script: "npm test"),
-            CommandSpec(name: "", executable: ""),
-        ]
-
-        XCTAssertEqual(preferences.sanitized().commands.map(\.name), ["Good"])
+        XCTAssertTrue(preferences.sanitized().enabledModules.contains(.media))
     }
 
     // MARK: - Persistence
@@ -81,20 +63,18 @@ final class PreferencesTests: XCTestCase {
     func testRoundTripsThroughDisk() async throws {
         let store = PreferencesStore(fileURL: fileURL)
         var original = Preferences()
-        original.githubLogin = "octocat"
-        original.monitoredPorts = [.init(port: 4321, label: "api")]
-        original.focusDurationMinutes = 45
-        original.enabledModules = [.repository, .containers]
-        original.editor = .zed
+        original.idleDisplay = .artworkAndTitle
+        original.audioVisualizerEnabled = true
+        original.enabledModules = [.media, .stats]
+        original.hoverDwell = 0.2
 
         try await store.save(original)
         let loaded = await PreferencesStore(fileURL: fileURL).load()
 
-        XCTAssertEqual(loaded.githubLogin, "octocat")
-        XCTAssertEqual(loaded.monitoredPorts.first?.label, "api")
-        XCTAssertEqual(loaded.focusDurationMinutes, 45)
-        XCTAssertEqual(loaded.enabledModules, [.repository, .containers])
-        XCTAssertEqual(loaded.editor, .zed)
+        XCTAssertEqual(loaded.idleDisplay, .artworkAndTitle)
+        XCTAssertTrue(loaded.audioVisualizerEnabled)
+        XCTAssertEqual(loaded.enabledModules, [.media, .stats])
+        XCTAssertEqual(loaded.hoverDwell, 0.2, accuracy: 0.001)
     }
 
     /// The settings file may hold a GitHub login and local repository paths.
@@ -106,25 +86,13 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
     }
 
-    /// The token belongs in the Keychain and must never be serialised here.
-    func testSerialisedFileContainsNoCredential() async throws {
-        var preferences = Preferences()
-        preferences.githubLogin = "octocat"
-        try await PreferencesStore(fileURL: fileURL).save(preferences)
-
-        let contents = try String(contentsOf: fileURL, encoding: .utf8).lowercased()
-
-        XCTAssertFalse(contents.contains("token"))
-        XCTAssertFalse(contents.contains("ghp_"))
-    }
-
     /// A truncated file after a bad shutdown must not stop the app launching.
     func testCorruptFileFallsBackToDefaultsAndIsQuarantined() async throws {
         try Data("{ this is not json".utf8).write(to: fileURL)
 
         let loaded = await PreferencesStore(fileURL: fileURL).load()
 
-        XCTAssertEqual(loaded.focusDurationMinutes, 25, "defaults, not a crash")
+        XCTAssertEqual(loaded.idleDisplay, .artworkAndSpectrum, "defaults, not a crash")
         let siblings = try FileManager.default.contentsOfDirectory(atPath: directory.path)
         XCTAssertTrue(
             siblings.contains { $0.hasPrefix("preferences-corrupt-") },
@@ -163,15 +131,24 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(PreferencesStore.migrate(old).schemaVersion, Preferences.currentSchemaVersion)
     }
 
-    /// Additive fields are absorbed by Codable defaults, so an older file
-    /// written before a setting existed still loads.
+    /// Additive schema: a file written before a setting existed must still
+    /// load, or upgrading would silently reset everyone's configuration.
     func testFileMissingNewerKeysStillDecodes() async throws {
-        let minimal = Data(#"{"schemaVersion":1,"repositoryPaths":[],"editor":"zed"}"#.utf8)
-        try minimal.write(to: fileURL)
+        try Data(#"{"schemaVersion":2,"hoverDwell":0.3}"#.utf8).write(to: fileURL)
 
         let loaded = await PreferencesStore(fileURL: fileURL).load()
 
-        XCTAssertEqual(loaded.editor, .zed)
-        XCTAssertEqual(loaded.focusDurationMinutes, 25, "absent keys take their defaults")
+        XCTAssertEqual(loaded.hoverDwell, 0.3, accuracy: 0.001)
+        XCTAssertEqual(loaded.mediaRefreshInterval, 1.0, "absent keys take their defaults")
+    }
+
+    /// One wrong-typed field must not lose every other setting.
+    func testWrongTypedFieldDoesNotPoisonTheRest() async throws {
+        try Data(#"{"hoverDwell":"nope","tintFromArtwork":false}"#.utf8).write(to: fileURL)
+
+        let loaded = await PreferencesStore(fileURL: fileURL).load()
+
+        XCTAssertEqual(loaded.hoverDwell, 0.05, "bad field falls back to its default")
+        XCTAssertFalse(loaded.tintFromArtwork, "good fields survive")
     }
 }
