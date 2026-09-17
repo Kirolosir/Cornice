@@ -536,8 +536,13 @@ behaviour around the notch is exactly what they are for:
 The differences that matter: no private frameworks, a fixed-window motion
 architecture, and a visualiser driven by a Core Audio process tap.
 
-`Docs/DESIGN-PROMPT.md` is a self-contained brief for regenerating this
-surface's visual and motion design from scratch.
+Two self-contained briefs live in `Docs/`:
+
+- [`BUILD-PROMPT.md`](Docs/BUILD-PROMPT.md) — a full specification for rebuilding
+  this application from nothing, including every verified platform constraint and
+  every trap that cost a debugging session.
+- [`DESIGN-PROMPT.md`](Docs/DESIGN-PROMPT.md) — a brief for regenerating the
+  visual and motion design.
 
 ## Licence
 
