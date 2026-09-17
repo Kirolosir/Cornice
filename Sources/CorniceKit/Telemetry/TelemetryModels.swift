@@ -103,4 +103,17 @@ public struct TelemetryHistory: Equatable, Sendable {
         guard let peak = values.max(), peak > 0 else { return values.map { _ in 0 } }
         return values.map { $0 / peak }
     }
+
+    /// Both network directions on **one** scale.
+    ///
+    /// Normalising each direction against its own peak is what makes a 60 KB/s
+    /// upload draw as tall as a 6 MB/s download, which is worse than not
+    /// charting it at all. They share a chart, so they have to share a ceiling.
+    public func normalisedNetworkPair() -> (down: [Double], up: [Double]) {
+        let down = samples.map(\.networkInBytesPerSecond)
+        let up = samples.map(\.networkOutBytesPerSecond)
+        let peak = max(down.max() ?? 0, up.max() ?? 0)
+        guard peak > 0 else { return (down.map { _ in 0 }, up.map { _ in 0 }) }
+        return (down.map { $0 / peak }, up.map { $0 / peak })
+    }
 }

@@ -17,14 +17,20 @@ enum PreviewServices {
             preferences: EphemeralPreferencesStore(previewPreferences()),
             hardware: HardwareIdentityProvider(runner: SubprocessRunner()),
             visualizer: AudioVisualizerEngine(bandCount: 8),
-            outputDevices: OutputDeviceMonitor()
+            outputDevices: OutputDeviceMonitor(),
+            reachability: NetworkReachability(),
+            volume: SystemVolumeMonitor(),
+            vpn: VPNMonitor(),
+            downloads: DownloadsMonitor()
         )
     }
 
     static func previewPreferences() -> Preferences {
         var preferences = Preferences()
         preferences.enabledModules = Set(ModuleKind.allCases)
-        preferences.idleDisplay = .artworkAndSpectrum
+        // The documented resting state is the shipped one: a track title, not a
+        // spectrum. Nothing animates while at rest.
+        preferences.idleDisplay = .artworkAndTitle
         preferences.tintFromArtwork = true
         // Left off: the documentation build must not trigger a system audio
         // permission prompt on whatever machine renders it.

@@ -109,6 +109,41 @@ struct GeneralSettings: View {
                     get: { model.preferences.tintFromArtwork },
                     set: { value in model.updatePreferences { $0.tintFromArtwork = value } }
                 ))
+                if model.preferences.tintFromArtwork {
+                    // The design's own value is 100%, and it is restrained on
+                    // purpose. This dial exists because "a bit more noticeable"
+                    // is a legitimate preference, not because the default is wrong.
+                    LabeledContent("Tint strength") {
+                        HStack(spacing: 8) {
+                            Slider(
+                                value: Binding(
+                                    get: { model.preferences.tintStrength },
+                                    set: { value in model.updatePreferences { $0.tintStrength = value } }
+                                ),
+                                in: 0...1.4
+                            )
+                            Text(verbatim: "\(Int((model.preferences.tintStrength * 100).rounded()))%")
+                                .font(.system(size: 11).monospacedDigit())
+                                .foregroundStyle(.secondary)
+                                .frame(width: 40, alignment: .trailing)
+                        }
+                    }
+                }
+            }
+
+            Section("System HUDs") {
+                Text("Charge, volume, network and VPN notices appear on their own. They use readings the app already takes, so there is nothing to turn on.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Toggle("Show downloads in progress", isOn: Binding(
+                    get: { model.preferences.downloadHUDEnabled },
+                    set: { value in model.updatePreferences { $0.downloadHUDEnabled = value } }
+                ))
+                Text("Watches your Downloads folder, which macOS will ask you to allow the first time.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section("Panels") {
@@ -189,6 +224,25 @@ struct VisualizerSettings: View {
                 """)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+                // macOS hands a process tap silence rather than an error when
+                // the permission is missing, so "it started" is not the same as
+                // "it can hear". This is the only way the user finds out.
+                if model.audioCaptureLooksBlocked {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("The visualiser is running but hearing silence while music plays. macOS gives an app silence instead of an error when System Audio Recording has not been allowed.")
+                                .font(.caption)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Button("Open Audio Recording settings") {
+                                model.openAudioRecordingSettings()
+                            }
+                            .font(.caption)
+                        }
+                    }
+                }
 
                 switch model.visualizerStatus {
                 case .running:

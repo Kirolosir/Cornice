@@ -3,68 +3,84 @@ import CorniceKit
 
 /// How open the surface is.
 ///
-/// Three states rather than two, copying the behaviour of Apple's own Dynamic
-/// Island. `peek` exists for one reason: perceived latency. If hovering does
-/// nothing until a dwell timer fires, the surface feels broken no matter how
-/// short the timer is. Responding *instantly* with a small growth, then
-/// committing to the full panel a moment later, makes the same total duration
-/// feel immediate.
+/// `peek` exists for perceived latency: responding instantly with a small growth
+/// and committing to the full panel a moment later feels faster than a dwell
+/// timer, even at the same total duration.
 enum SurfaceState: Equatable, Sendable {
     case collapsed
     case peek
     /// A transient announcement — a wireless device connecting, for instance.
-    /// Sized like peek, but driven by an event rather than by the pointer.
+    /// Sized like peek but a little taller, and driven by an event rather than
+    /// by the pointer.
     case activity
     case expanded
+    /// A system notification, at whatever size that notification needs.
+    case hud(HUDKind)
 
     var isOpen: Bool { self == .expanded }
 
     /// Whether the state was entered by the app rather than by the pointer.
     /// Hover must not silently cancel these.
-    var isTransient: Bool { self == .activity }
+    var isTransient: Bool {
+        switch self {
+        case .activity, .hud: true
+        case .collapsed, .peek, .expanded: false
+        }
+    }
+
+    var hud: HUDKind? {
+        if case .hud(let kind) = self { return kind }
+        return nil
+    }
 }
 
-/// Computes the surface's rectangle for each state.
+/// The surface's rectangle, radii, and content boxes for every state.
 ///
-/// Deliberately the single source of truth for both drawing and hit testing.
-/// When those two were computed separately, the interactive region drifted out
-/// of step with what was on screen during animation — the classic "the button
-/// is not where it looks like it is" bug.
+/// The single source of truth for drawing, hit testing and layout. Computing
+/// those separately let the interactive region drift out of step with the
+/// visible one mid-animation.
+///
+/// Sizes are expressed as offsets from the *measured* notch rather than as
+/// absolutes, because a notch's size in points changes with display scaling.
 struct SurfaceGeometry: Equatable {
 
     /// The measured notch, in screen points.
     let notchSize: CGSize
     /// Corner radius of the hardware cut-out.
     let notchCornerRadius: CGFloat
-    /// Height of the expanded content area, below the notch strip.
-    let contentHeight: CGFloat
     /// Full window width, which is fixed.
     let windowWidth: CGFloat
 
-    /// How far the peek state grows on each side.
-    ///
-    /// Sized so a typical track title and artist fit without being cut to
-    /// "Do I Wa…", which is worse than showing nothing.
-    static let peekWing: CGFloat = 108
-    /// How much taller the peek state is than the notch.
-    static let peekDrop: CGFloat = 10
-    /// Overall width of the expanded panel, including the flared shoulders.
-    ///
-    /// The flare is a *corner* treatment, but geometrically it insets the
-    /// shape's sides for their whole height, so the usable body is
-    /// `expandedWidth - 2 × flareRadius`. This figure is therefore the outer
-    /// width; `contentWidth(for:)` is what the layout may actually use.
-    static let expandedWidth: CGFloat = 604
+    // MARK: - The measured table
+    //
+    // Resting  209 × 38  · bottom 10 · flare 0
+    // Peek     425 × 48  · bottom 16 · flare 14
+    // Activity 425 × 54  · bottom 20 · flare 16
+    // Expanded 604 × 226 · bottom 28 · flare 24
 
-    init(
-        notchSize: CGSize,
-        notchCornerRadius: CGFloat,
-        contentHeight: CGFloat,
-        windowWidth: CGFloat
-    ) {
+    /// How far peek and activity grow on each side: 425 − 209, halved.
+    static let wing: CGFloat = 108
+    /// How much taller peek is than the notch: 48 − 38.
+    static let peekDrop: CGFloat = 10
+    /// How much taller an activity pill is than the notch: 54 − 38.
+    static let activityDrop: CGFloat = 16
+    /// Overall width of the expanded panel, including the flared shoulders.
+    static let expandedWidth: CGFloat = 604
+    /// Height of the expanded panel below the notch band: 226 − 38.
+    static let expandedDrop: CGFloat = 188
+
+    /// The band across the top of any surface taller than the notch. Its middle
+    /// is the hole, so content lives in the two margins or below the band.
+    var bandHeight: CGFloat { notchSize.height }
+
+    /// First clear row below the band, for tall surfaces. 58 in the handoff.
+    static let contentTop: CGFloat = 58
+    /// Horizontal padding from the *body*'s edge, inside the flare. 22 in the handoff.
+    static let contentPadding: CGFloat = 22
+
+    init(notchSize: CGSize, notchCornerRadius: CGFloat, windowWidth: CGFloat) {
         self.notchSize = notchSize
         self.notchCornerRadius = notchCornerRadius
-        self.contentHeight = contentHeight
         self.windowWidth = windowWidth
     }
 
@@ -74,19 +90,18 @@ struct SurfaceGeometry: Equatable {
         case .collapsed:
             CGSize(width: notchSize.width, height: notchSize.height)
         case .peek:
-            CGSize(
-                width: notchSize.width + Self.peekWing * 2,
-                height: notchSize.height + Self.peekDrop
-            )
+            CGSize(width: notchSize.width + Self.wing * 2, height: notchSize.height + Self.peekDrop)
         case .activity:
-            CGSize(
-                width: notchSize.width + Self.peekWing * 2,
-                height: notchSize.height + Self.peekDrop + 6
-            )
+            CGSize(width: notchSize.width + Self.wing * 2, height: notchSize.height + Self.activityDrop)
         case .expanded:
             CGSize(
-                width: min(Self.expandedWidth, windowWidth - 24),
-                height: notchSize.height + contentHeight
+                width: min(Self.expandedWidth, windowWidth),
+                height: notchSize.height + Self.expandedDrop
+            )
+        case .hud(let kind):
+            CGSize(
+                width: min(notchSize.width + kind.wing * 2, windowWidth),
+                height: notchSize.height + kind.drop
             )
         }
     }
@@ -94,56 +109,49 @@ struct SurfaceGeometry: Equatable {
     /// Bottom-corner radius for a state.
     ///
     /// Grows with the surface so the silhouette stays proportionate; a notch
-    /// radius on a 560-point panel would look like a rectangle, and a panel
+    /// radius on a 604-point panel would look like a rectangle, and a panel
     /// radius on the collapsed notch would not match the hardware.
     func bottomRadius(for state: SurfaceState) -> CGFloat {
         switch state {
         case .collapsed: notchCornerRadius
         case .peek: notchCornerRadius + 6
         case .activity: notchCornerRadius + 10
-        case .expanded: 28
+        case .expanded: notchCornerRadius + 18
+        case .hud(let kind): kind.bottomRadius
         }
     }
 
-    /// Concave flare where the surface is wider than the notch.
+    /// The concave cove where the surface is wider than the notch.
     ///
-    /// Zero when collapsed — at notch width there is nothing to flare out
-    /// from, and a flare would put a visible notch in the hardware notch.
+    /// Zero when collapsed — at notch width there is nothing to grow out of,
+    /// and a cove would put a visible notch in the hardware notch.
     func flareRadius(for state: SurfaceState) -> CGFloat {
         switch state {
         case .collapsed: 0
         case .peek: 14
         case .activity: 16
         case .expanded: 24
+        case .hud(let kind): kind.flareRadius
         }
     }
 
-    /// Horizontal inset the content must respect in a given state.
+    // MARK: - Content boxes
+
+    /// The full width minus a cove on each side.
     ///
-    /// The flare pulls the shape's sides inward, so content laid out to the
-    /// full surface width is clipped by exactly that much on each side. Getting
-    /// this wrong is invisible until the flare is large — which is how the tab
-    /// strip and the timestamps ended up cut off when the shoulders were made
-    /// more pronounced.
-    func contentInset(for state: SurfaceState) -> CGFloat {
-        flareRadius(for: state)
+    /// The cove is a corner treatment, but the vertical sides sit `flare` inboard
+    /// for their whole height, so this is the rectangle content must fit.
+    func bodyWidth(for state: SurfaceState) -> CGFloat {
+        max(0, size(for: state).width - flareRadius(for: state) * 2)
     }
 
-    /// Width available to content, inside the flare.
-    func contentWidth(for state: SurfaceState) -> CGFloat {
-        max(0, size(for: state).width - contentInset(for: state) * 2)
+    /// Usable margin on each side of the hole. Nothing drawn inside the notch's
+    /// rectangle exists on real hardware, so this is all the room there is.
+    func marginWidth(for state: SurfaceState, padding: CGFloat = SurfaceGeometry.contentPadding) -> CGFloat {
+        max(0, (bodyWidth(for: state) - notchSize.width) / 2 - padding)
     }
 
-    /// Width of the region either side of the notch in a wing-shaped state.
-    ///
-    /// Derived rather than assumed. Laying these out as two fixed `peekWing`
-    /// columns plus the notch made the content wider than the surface, so both
-    /// sides were silently clipped — which is why the device announcement
-    /// rendered as an empty pill.
-    func wingWidth(for state: SurfaceState, padding: CGFloat) -> CGFloat {
-        let available = contentWidth(for: state) - padding * 2 - notchSize.width
-        return max(0, available / 2)
-    }
+    // MARK: - Placement
 
     /// The surface's rect inside the window, in SwiftUI's top-left origin space.
     ///
@@ -151,53 +159,89 @@ struct SurfaceGeometry: Equatable {
     /// surface is physically attached to the notch.
     func rect(for state: SurfaceState) -> CGRect {
         let size = size(for: state)
-        return CGRect(
-            x: (windowWidth - size.width) / 2,
-            y: 0,
-            width: size.width,
-            height: size.height
-        )
+        return CGRect(x: (windowWidth - size.width) / 2, y: 0, width: size.width, height: size.height)
     }
+
+    /// Left edge of the hole, in window coordinates.
+    var notchLeft: CGFloat { (windowWidth - notchSize.width) / 2 }
 
     /// The same rect in AppKit's bottom-left origin space, for hit testing.
     func appKitRect(for state: SurfaceState, windowHeight: CGFloat) -> CGRect {
         let rect = rect(for: state)
+        return CGRect(x: rect.minX, y: windowHeight - rect.maxY, width: rect.width, height: rect.height)
+    }
+
+    /// Margin added around the surface for *hover* only.
+    ///
+    /// Aiming at a hole means aiming at nothing, so approaching from any
+    /// direction opens it — including from below, under the cut-out.
+    static let hoverPadding = CGSize(width: 26, height: 14)
+
+    /// How far the hover region extends *past* the top edge of the screen.
+    ///
+    /// The pointer can sit exactly on that edge, and `CGRect.contains` excludes a
+    /// rectangle's maximum edge — so with the panel open that one row of pixels
+    /// read as "not hovering", closing it, which made the padded resting region
+    /// read as hovering again. The surface flickered for as long as the pointer
+    /// stayed at the top of the notch.
+    static let topBleed: CGFloat = 6
+
+    /// The region that counts as hovering: padded while resting, exact once
+    /// open — a padded region around an open panel keeps it open while the
+    /// pointer is clearly elsewhere.
+    func hoverRect(for state: SurfaceState, windowHeight: CGFloat) -> CGRect {
+        let rect = appKitRect(for: state, windowHeight: windowHeight)
+        let padded: CGRect = switch state {
+        case .collapsed, .peek, .activity:
+            rect.insetBy(dx: -Self.hoverPadding.width, dy: -Self.hoverPadding.height)
+        case .expanded, .hud:
+            rect
+        }
+        // Grown upward in AppKit's coordinates, which is past the screen edge.
         return CGRect(
-            x: rect.minX,
-            y: windowHeight - rect.maxY,
-            width: rect.width,
-            height: rect.height
+            x: padded.minX,
+            y: padded.minY,
+            width: padded.width,
+            height: padded.height + Self.topBleed
         )
     }
 
-    /// Margin added around the collapsed surface for *hover* purposes only.
-    ///
-    /// The drawn shape at rest is exactly the notch, but the notch is a hole in
-    /// the display: aiming at it means aiming at nothing, and requiring a hit
-    /// inside its exact bounds makes the surface feel like it only opens if you
-    /// clip its edge. The hover region is therefore larger than the drawn one —
-    /// approaching the notch from any direction opens it, including from
-    /// directly below where the pointer is under the cut-out rather than on it.
-    static let hoverPadding = CGSize(width: 26, height: 14)
-
-    /// The region that counts as "on the surface" for hover.
-    ///
-    /// Deliberately distinct from the drawn rect. While resting it is padded;
-    /// once open it matches the panel exactly, because a padded region around
-    /// an open panel would keep it open while the pointer is clearly elsewhere.
-    func hoverRect(for state: SurfaceState, windowHeight: CGFloat) -> CGRect {
-        let rect = appKitRect(for: state, windowHeight: windowHeight)
-        switch state {
-        case .collapsed, .peek, .activity:
-            return rect.insetBy(dx: -Self.hoverPadding.width, dy: -Self.hoverPadding.height)
-        case .expanded:
-            return rect
-        }
+    /// Height for the tallest possible state plus its shadow. Computed across
+    /// every state, because a HUD may be taller than the panel.
+    var windowHeight: CGFloat {
+        let tallest = HUDKind.allCases.map(\.drop).max() ?? 0
+        return notchSize.height + max(Self.expandedDrop, tallest) + 60
     }
 
-    /// Total window height needed to contain the largest state plus room for
-    /// its shadow.
-    var windowHeight: CGFloat {
-        size(for: .expanded).height + 60
+    /// The widest the surface can become, which is what the window has to hold.
+    static var widestSurface: CGFloat {
+        max(expandedWidth, (HUDKind.allCases.map(\.wing).max() ?? 0) * 2 + 209)
+    }
+}
+
+/// Where the album artwork sits, in window coordinates, for each state.
+///
+/// The artwork exists in every state, so it is drawn once and *moved* rather
+/// than drawn three times and cross-faded: SwiftUI interpolates its frame
+/// because it is the same view throughout. Offsets are relative to the surface's
+/// own left edge, so they survive a differently-sized notch.
+struct ArtworkPlacement: Equatable {
+    var x: CGFloat
+    var y: CGFloat
+    var size: CGFloat
+    var cornerRadius: CGFloat
+
+    static func forState(_ state: SurfaceState, geometry: SurfaceGeometry) -> ArtworkPlacement {
+        let left = geometry.rect(for: state).minX
+        switch state {
+        case .collapsed:
+            // Outside the surface entirely: at rest the surface *is* the hole,
+            // so the thumbnail sits in the menu bar to the left of it.
+            return ArtworkPlacement(x: left - 30, y: 9, size: 20, cornerRadius: 4)
+        case .peek, .activity, .hud:
+            return ArtworkPlacement(x: left + 21.5, y: 7, size: 34, cornerRadius: 8)
+        case .expanded:
+            return ArtworkPlacement(x: left + 45.5, y: 58, size: 58, cornerRadius: 13)
+        }
     }
 }

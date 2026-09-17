@@ -1,196 +1,214 @@
 import SwiftUI
 import CorniceKit
 
-/// Lightweight machine telemetry.
+/// The System module: three cards, three series, one chart each.
 ///
-/// Deliberately small: this is context you glance at, not a replacement for
-/// Activity Monitor. Anything needing a per-process table is out of scope.
+/// Deliberately charts rather than rows of numbers. A number alone answers "what
+/// is it now", which is the less useful question — the reason to glance at this
+/// is to see whether something has *changed*, and that only exists in the shape
+/// of the last minute. Rows of text here would be a failure state.
 struct StatsPane: View {
     @Bindable var model: AppModel
 
     private var latest: TelemetrySample { model.telemetry.latest ?? .empty }
 
     var body: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                MetricCard(
-                    title: "CPU",
-                    symbol: "cpu",
-                    value: percentage(latest.cpuUsage),
-                    tint: Theme.Palette.cpu,
-                    series: model.telemetry.series(\.cpuUsage)
-                )
-                MetricCard(
-                    title: "Memory",
-                    symbol: "memorychip",
-                    value: percentage(latest.memoryUsage),
-                    caption: "\(Format.bytes(latest.memoryUsedBytes)) of \(Format.bytes(latest.memoryTotalBytes))",
-                    tint: Theme.Palette.memory,
-                    series: model.telemetry.series(\.memoryUsage)
-                )
-            }
-
-            NetworkCard(
-                inRate: latest.networkInBytesPerSecond,
-                outRate: latest.networkOutBytesPerSecond,
-                inSeries: model.telemetry.normalisedNetworkSeries(\.networkInBytesPerSecond),
-                outSeries: model.telemetry.normalisedNetworkSeries(\.networkOutBytesPerSecond)
+        HStack(alignment: .top, spacing: Theme.Metrics.cardGap) {
+            MetricCard(
+                name: "CPU",
+                sub: "\(ProcessInfo.processInfo.activeProcessorCount) cores",
+                value: String(Int((latest.cpuUsage * 100).rounded())),
+                unit: "%",
+                series: [Series(values: model.telemetry.series(\.cpuUsage), color: Theme.Palette.cpu)]
             )
 
-            if let profile = model.notchProfile, let hardware = model.hardware {
-                HStack(spacing: 6) {
-                    Text(hardware.displayName)
-                    Text("·")
-                    Text(verbatim: "notch \(Int(profile.rect.width))×\(Int(profile.rect.height)) pt")
-                    Spacer()
-                    Text(profile.source == .measured ? "measured" : profile.source.rawValue)
-                }
-                .font(Theme.Typeface.monoSmall)
-                .foregroundStyle(Color(white: 0.38))
-            }
+            MetricCard(
+                name: "Memory",
+                sub: Format.bytes(latest.memoryTotalBytes),
+                value: gigabytes(latest.memoryUsedBytes),
+                unit: "GB",
+                series: [Series(values: model.telemetry.series(\.memoryUsage), color: Theme.Palette.memory)]
+            )
 
-            Spacer(minLength: 0)
+            let network = model.telemetry.normalisedNetworkPair()
+            MetricCard(
+                name: "Network",
+                // The probe sums every non-loopback interface rather than
+                // picking one, so the label says so instead of claiming Wi-Fi.
+                sub: "combined",
+                value: megabytesPerSecond(latest.networkInBytesPerSecond),
+                unit: "MB/s",
+                series: [
+                    Series(values: network.down, color: Theme.Palette.networkIn),
+                    Series(values: network.up, color: Theme.Palette.networkOut),
+                ],
+                legend: [
+                    Legend(text: "↓ \(megabytesPerSecond(latest.networkInBytesPerSecond))", color: Theme.Palette.networkIn),
+                    Legend(text: "↑ \(megabytesPerSecond(latest.networkOutBytesPerSecond))", color: Theme.Palette.networkOut),
+                ]
+            )
         }
+        .frame(maxWidth: .infinity, alignment: .top)
     }
 
-    private func percentage(_ value: Double) -> String {
-        "\(Int((value * 100).rounded()))%"
+    private func gigabytes(_ bytes: UInt64) -> String {
+        String(format: "%.1f", Double(bytes) / 1_073_741_824)
+    }
+
+    private func megabytesPerSecond(_ bytesPerSecond: Double) -> String {
+        String(format: "%.1f", bytesPerSecond / 1_048_576)
     }
 }
 
+/// One charted series.
+struct Series: Equatable {
+    var values: [Double]
+    var color: Color
+}
+
+/// One entry in a card's legend.
+struct Legend: Equatable {
+    var text: String
+    var color: Color
+}
+
+/// A card: header, current value, and the window that value came from.
 struct MetricCard: View {
-    let title: String
-    let symbol: String
+    let name: String
+    let sub: String
     let value: String
-    var caption: String?
-    let tint: Color
-    let series: [Double]
+    let unit: String
+    let series: [Series]
+    var legend: [Legend] = []
+
+    @Environment(\.colorScheme) private var scheme
+    private var ink: Theme.Ink { .of(scheme) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 4) {
-                Image(systemName: symbol)
-                    .font(.system(size: 9.5))
-                    .foregroundStyle(tint)
-                Text(title)
-                    .font(Theme.Typeface.caption)
-                    .foregroundStyle(Color(white: 0.6))
-                Spacer()
-            }
-
-            Text(value)
-                .font(.system(size: 18, weight: .semibold, design: .rounded).monospacedDigit())
-                .foregroundStyle(.white)
-                .contentTransition(.numericText())
-                .animation(Theme.Motion.telemetry, value: value)
-
-            Sparkline(values: series, tint: tint)
-                .frame(height: 26)
-
-            if let caption {
-                Text(caption)
-                    .font(Theme.Typeface.monoSmall)
-                    .foregroundStyle(Color(white: 0.4))
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(name.uppercased())
+                    .font(Theme.Typeface.cardHeader)
+                    .tracking(1)
+                    .foregroundStyle(ink.tertiary)
+                Spacer(minLength: 0)
+                Text(sub)
+                    .font(Theme.Typeface.cardSub)
+                    .foregroundStyle(ink.at(0.40))
                     .lineLimit(1)
             }
+
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(value)
+                    .font(Theme.Typeface.cardValue)
+                    .tracking(-0.42)
+                    .foregroundStyle(ink.primary)
+                    .contentTransition(.numericText())
+                    .animation(Theme.Motion.telemetry, value: value)
+                Text(unit)
+                    .font(Theme.Typeface.status)
+                    .foregroundStyle(ink.at(0.45))
+            }
+            .monospacedDigit()
+            .padding(.top, 6)
+
+            Spacer(minLength: 6)
+
+            Sparkline(series: series)
+                .frame(height: 52)
+
+            if !legend.isEmpty {
+                HStack(spacing: 10) {
+                    ForEach(legend.indices, id: \.self) { index in
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(legend[index].color)
+                                .frame(width: 6, height: 6)
+                            Text(legend[index].text)
+                                .font(Theme.Typeface.monoSmall)
+                                .foregroundStyle(ink.at(0.55))
+                        }
+                    }
+                }
+                .padding(.top, 8)
+            }
         }
-        .padding(9)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: Theme.Metrics.cardHeight)
         .background(
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(Color.white.opacity(0.05))
+            RoundedRectangle(cornerRadius: Theme.Metrics.cardCornerRadius, style: .continuous)
+                .fill(Theme.Palette.card(scheme))
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(Theme.Palette.cardHighlight(scheme))
+                        .frame(height: 0.5)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Metrics.cardCornerRadius, style: .continuous))
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(title) \(value)")
+        .accessibilityLabel("\(name) \(value) \(unit)")
     }
 }
 
-struct NetworkCard: View {
-    let inRate: Double
-    let outRate: Double
-    let inSeries: [Double]
-    let outSeries: [Double]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                Image(systemName: "network")
-                    .font(.system(size: 9.5))
-                    .foregroundStyle(Color(white: 0.6))
-                Text("Network")
-                    .font(Theme.Typeface.caption)
-                    .foregroundStyle(Color(white: 0.6))
-                Spacer()
-                rate("arrow.down", Format.rate(bytesPerSecond: inRate), Theme.Palette.networkIn)
-                rate("arrow.up", Format.rate(bytesPerSecond: outRate), Theme.Palette.networkOut)
-            }
-
-            ZStack {
-                Sparkline(values: inSeries, tint: Theme.Palette.networkIn)
-                Sparkline(values: outSeries, tint: Theme.Palette.networkOut)
-            }
-            .frame(height: 28)
-        }
-        .padding(9)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(Color.white.opacity(0.05))
-        )
-    }
-
-    private func rate(_ symbol: String, _ text: String, _ tint: Color) -> some View {
-        HStack(spacing: 2) {
-            Image(systemName: symbol).font(.system(size: 8, weight: .bold))
-            Text(text).font(Theme.Typeface.monoSmall)
-        }
-        .foregroundStyle(tint)
-    }
-}
-
-/// A filled line chart of recent samples.
+/// A filled line chart of the last 48 samples.
+///
+/// Drawn with `Canvas` rather than a stack of shapes: this repaints whenever a
+/// sample lands, and a view per point would have SwiftUI diffing a tree for what
+/// is ultimately two paths. The window *slides* — a new sample shifts the series
+/// left rather than rescaling the x-axis — so the chart reads as time passing
+/// rather than as a graph being redrawn.
 struct Sparkline: View {
-    let values: [Double]
-    let tint: Color
+    let series: [Series]
     var capacity: Int = 48
 
     var body: some View {
         Canvas { context, size in
-            guard values.count >= 2 else { return }
-
-            let step = size.width / CGFloat(max(capacity - 1, 1))
-            let offset = size.width - step * CGFloat(values.count - 1)
-
-            func point(_ index: Int) -> CGPoint {
-                let value = values[index].clamped(to: 0...1)
-                return CGPoint(
-                    x: offset + step * CGFloat(index),
-                    // Inset by a point so a value pinned at 0 or 1 still shows
-                    // a stroke rather than being clipped.
-                    y: size.height - 1 - (size.height - 2) * value
-                )
+            for entry in series {
+                draw(entry, in: &context, size: size)
             }
-
-            var line = Path()
-            line.move(to: point(0))
-            for index in 1..<values.count { line.addLine(to: point(index)) }
-
-            var fill = line
-            fill.addLine(to: CGPoint(x: point(values.count - 1).x, y: size.height))
-            fill.addLine(to: CGPoint(x: point(0).x, y: size.height))
-            fill.closeSubpath()
-
-            context.fill(
-                fill,
-                with: .linearGradient(
-                    Gradient(colors: [tint.opacity(0.34), tint.opacity(0.02)]),
-                    startPoint: .zero,
-                    endPoint: CGPoint(x: 0, y: size.height)
-                )
-            )
-            context.stroke(line, with: .color(tint), lineWidth: 1.5)
         }
         .drawingGroup()
         .accessibilityHidden(true)
+    }
+
+    private func draw(_ entry: Series, in context: inout GraphicsContext, size: CGSize) {
+        let values = entry.values
+        guard values.count >= 2 else { return }
+
+        let step = size.width / CGFloat(max(capacity - 1, 1))
+        // Right-aligned, so the newest sample is always against the right edge
+        // and a partly-filled window fills from the right as it accumulates.
+        let offset = size.width - step * CGFloat(values.count - 1)
+
+        func point(_ index: Int) -> CGPoint {
+            let value = values[index].clamped(to: 0...1)
+            return CGPoint(
+                x: offset + step * CGFloat(index),
+                // Inset by a point so a value pinned at 0 or 1 still shows a
+                // stroke rather than being clipped against the edge.
+                y: size.height - 1 - (size.height - 2) * value
+            )
+        }
+
+        var line = Path()
+        line.move(to: point(0))
+        for index in 1..<values.count { line.addLine(to: point(index)) }
+
+        var fill = line
+        fill.addLine(to: CGPoint(x: point(values.count - 1).x, y: size.height))
+        fill.addLine(to: CGPoint(x: point(0).x, y: size.height))
+        fill.closeSubpath()
+
+        context.fill(
+            fill,
+            with: .linearGradient(
+                Gradient(colors: [entry.color.opacity(0.35), entry.color.opacity(0.02)]),
+                startPoint: .zero,
+                endPoint: CGPoint(x: 0, y: size.height)
+            )
+        )
+        context.stroke(line, with: .color(entry.color), lineWidth: 1.5)
     }
 }

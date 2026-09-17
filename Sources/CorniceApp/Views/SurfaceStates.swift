@@ -1,195 +1,218 @@
 import SwiftUI
 import CorniceKit
 
-/// The resting state: artwork on one side of the notch, live spectrum on the other.
+// MARK: - Resting
+
+/// What the resting surface shows — all of it *outside* the surface.
 ///
-/// Everything here has to survive being in a developer's peripheral vision for
-/// eight hours, so it is deliberately minimal — and shows nothing at all when
-/// nothing is playing.
-struct CollapsedContentView: View {
+/// At rest the surface is exactly the notch: pure black, no tint, seamless. The
+/// notch is a hole in the display, so anything drawn inside its rectangle does
+/// not exist on real hardware. Both pieces of content therefore sit in the
+/// menu-bar margins either side of the hole, which is the only place they can
+/// be seen at all.
+///
+/// With nothing playing there is nothing here — no pill, no placeholder.
+struct RestingMarginView: View {
     @Bindable var model: AppModel
     let geometry: SurfaceGeometry
 
     private var snapshot: MediaSnapshot? { model.media }
-    private var padding: CGFloat { geometry.contentInset(for: .collapsed) + 8 }
+
+    /// An 88 pt column starting 8 pt right of the notch's right edge.
+    private var columnLeft: CGFloat {
+        geometry.notchLeft + geometry.notchSize.width + 8
+    }
 
     var body: some View {
-        // The notch is a hole in the display; nothing can be drawn inside it,
-        // so content sits in the margins the surface adds either side.
-        HStack(spacing: 0) {
-            leading
-                .frame(width: geometry.wingWidth(for: .collapsed, padding: padding), alignment: .leading)
-            // The notch itself — a hole in the display, so it is reserved empty.
-            Color.clear.frame(width: geometry.notchSize.width)
-            trailing
-                .frame(width: geometry.wingWidth(for: .collapsed, padding: padding), alignment: .trailing)
+        ZStack(alignment: .topLeading) {
+            Color.clear
+            if let snapshot, snapshot.hasTrack, model.preferences.idleDisplay != .nothing {
+                trailing(snapshot)
+                    .frame(width: 88, height: geometry.notchSize.height, alignment: .leading)
+                    .offset(x: columnLeft)
+            }
         }
-        .padding(.horizontal, padding)
-        .frame(maxHeight: .infinity, alignment: .center)
-        .allowsHitTesting(false)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    @ViewBuilder
-    private var leading: some View {
-        if let snapshot, snapshot.hasTrack, model.preferences.idleDisplay != .nothing {
-            ArtworkThumbnail(image: model.artwork, size: 20, cornerRadius: 5)
-                .transition(.scale(scale: 0.6).combined(with: .opacity))
-        }
-    }
-
-    /// The spectrum is only shown when it is actually being driven by audio.
-    /// Bars that sit at a resting height because capture is off look like a
-    /// broken component, and faking motion would misrepresent what the app
-    /// knows.
     private var showsSpectrum: Bool {
         model.preferences.idleDisplay == .artworkAndSpectrum
-            && model.preferences.audioVisualizerEnabled
     }
 
     @ViewBuilder
-    private var trailing: some View {
-        if let snapshot, snapshot.hasTrack, model.preferences.idleDisplay != .nothing {
-            if showsSpectrum {
-                SpectrumBars(
-                    levels: model.levels,
-                    tint: model.artworkTint ?? Theme.Palette.accent,
-                    barCount: 4,
-                    isLive: snapshot.state.isPlaying
-                )
-                .frame(width: 26, height: 14)
-            } else {
-                Text(snapshot.title)
-                    .font(Theme.Typeface.caption)
-                    .foregroundStyle(Color(white: 0.82))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
+    private func trailing(_ snapshot: MediaSnapshot) -> some View {
+        if showsSpectrum {
+            EqualizerIndicator(
+                model: model,
+                isLive: model.surfaceState == .collapsed && snapshot.state.isPlaying,
+                tint: Theme.Ink.dark.secondary
+            )
+        } else {
+            Text(snapshot.title)
+                .font(Theme.Typeface.stamp)
+                .foregroundStyle(Color(white: 1, opacity: 0.72))
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
     }
 }
 
-/// The hover state: enough to recognise the track without committing to the panel.
+// MARK: - Peek
+
+/// The hover state: enough to recognise the track without committing to the
+/// full panel.
 ///
 /// This exists purely so hovering produces an *immediate* response. A dwell
 /// timer with nothing happening during it feels broken no matter how short it
 /// is; growing instantly and then opening reads as fast even though the total
 /// time is the same.
+///
+/// The artwork is not drawn here — it belongs to the travelling layer in
+/// `RootView`, which is what lets it arrive from the resting position rather
+/// than appearing.
 struct PeekContentView: View {
     @Bindable var model: AppModel
     let geometry: SurfaceGeometry
-    let tick: Int
 
     private var snapshot: MediaSnapshot? { model.media }
-    private var padding: CGFloat { geometry.contentInset(for: .peek) + 8 }
 
     var body: some View {
-        HStack(spacing: 0) {
-            HStack(spacing: 8) {
-                ArtworkThumbnail(
-                    image: model.artwork,
-                    size: 26,
-                    cornerRadius: 6,
-                    beatIntensity: model.levels.beatIntensity
+        HStack(alignment: .center, spacing: 7) {
+            Spacer(minLength: 0)
+
+            if let snapshot, snapshot.hasTrack {
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(snapshot.title)
+                        .font(Theme.Typeface.statusStrong)
+                        .foregroundStyle(Theme.Ink.dark.primary)
+                    Text(snapshot.artist)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Theme.Ink.dark.tertiary)
+                }
+                .lineLimit(1)
+                .truncationMode(.tail)
+                // 94 pt of usable margin at this width, and the artwork and the
+                // indicator take their share of it.
+                .frame(maxWidth: 64, alignment: .trailing)
+
+                EqualizerIndicator(
+                    model: model,
+                    isLive: model.surfaceState == .peek && snapshot.state.isPlaying,
+                    tint: Theme.Ink.dark.secondary
                 )
-                if let snapshot, snapshot.hasTrack {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(snapshot.title)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                        Text(snapshot.artist)
-                            .font(.system(size: 9.5, weight: .medium))
-                            .foregroundStyle(Color(white: 0.62))
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                } else {
-                    Text("Nothing playing")
-                        .font(.system(size: 10.5, weight: .medium))
-                        .foregroundStyle(Color(white: 0.55))
-                }
-                Spacer(minLength: 0)
+            } else {
+                Text("Nothing playing")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(Theme.Ink.dark.tertiary)
             }
-            .frame(width: geometry.wingWidth(for: .peek, padding: padding), alignment: .leading)
-
-            Color.clear.frame(width: geometry.notchSize.width)
-
-            Group {
-                if model.preferences.audioVisualizerEnabled {
-                    SpectrumBars(
-                        levels: model.levels,
-                        tint: model.artworkTint ?? Theme.Palette.accent,
-                        barCount: 5,
-                        isLive: snapshot?.state.isPlaying == true
-                    )
-                    .frame(width: 34, height: 16)
-                } else if snapshot?.state.isPlaying == true {
-                    // Without audio capture there is nothing honest to
-                    // visualise, so this just states that something is playing.
-                    Image(systemName: "waveform")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(model.artworkTint ?? Theme.Palette.accent)
-                }
-            }
-            .frame(width: geometry.wingWidth(for: .peek, padding: padding), alignment: .trailing)
         }
-        .padding(.horizontal, padding)
-        .padding(.bottom, SurfaceGeometry.peekDrop)
-        .frame(maxHeight: .infinity, alignment: .center)
+        .padding(.trailing, geometry.flareRadius(for: .peek) + 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
         .allowsHitTesting(false)
     }
 }
 
-/// The open panel.
+// MARK: - Expanded
+
+/// The open panel: a 38 pt band that can only use its two margins, and a module
+/// below it that has the whole width.
 struct ExpandedContentView: View {
     @Bindable var model: AppModel
     let geometry: SurfaceGeometry
-    let tick: Int
+    let clock: FrameClock
+
+    @Environment(\.colorScheme) private var scheme
+    private var ink: Theme.Ink { .of(scheme) }
+
+    /// Horizontal inset from the *surface*: past the cove, then the content
+    /// padding.
+    private var sideInset: CGFloat {
+        geometry.flareRadius(for: .expanded) + Theme.Metrics.contentPadding
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Reserve the notch strip: the panel hangs below the cut-out.
-            Color.clear.frame(height: geometry.notchSize.height)
-
-            VStack(spacing: 10) {
-                TabStrip(model: model)
-
-                Group {
-                    switch model.activeModule {
-                    case .media:
-                        MediaPane(model: model, tick: tick)
-                    case .timers:
-                        TimersPane(model: model, tick: tick)
-                    case .stats:
-                        StatsPane(model: model)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            }
-            // The flare narrows the shape's sides, so content is inset by it
-            // before its own padding is applied.
-            .padding(.horizontal, geometry.contentInset(for: .expanded) + 14)
-            .padding(.bottom, 16)
+        ZStack(alignment: .topLeading) {
+            band
+            module
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .overlay(alignment: .bottom) {
             if let toast = model.toast {
                 Text(toast)
-                    .font(Theme.Typeface.caption)
-                    .foregroundStyle(.white)
+                    .font(Theme.Typeface.stamp)
+                    .foregroundStyle(ink.primary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(.ultraThinMaterial, in: Capsule())
-                    .padding(.bottom, 12)
-                    .transition(.opacity.combined(with: .offset(y: 6)))
+                    .padding(.bottom, 10)
+                    .transition(.opacity)
             }
         }
         .animation(Theme.Motion.contentSwap, value: model.toast)
     }
+
+    /// The band across the notch. Nothing may be drawn in the middle of it, so
+    /// the source name takes the left margin and the module switcher the right.
+    ///
+    /// The segmented control that used to live below the notch was moved up
+    /// here precisely because the band is otherwise dead space — and it was
+    /// moved to the *right margin* because anything centred would fall inside
+    /// the hole.
+    private var band: some View {
+        HStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Text(sourceName)
+                    .font(Theme.Typeface.status)
+                    .foregroundStyle(ink.tertiary)
+                    .lineLimit(1)
+
+                // The live indicator. In the band rather than beside the artwork
+                // because the band is visible for as long as the panel is —
+                // peek, where it used to live, is skipped entirely when the
+                // hover dwell is zero, which is the default.
+                if model.activeModule == .media, model.showsIndicator {
+                    EqualizerIndicator(
+                        model: model,
+                        isLive: model.surfaceState == .expanded,
+                        tint: model.artworkTint ?? ink.secondary
+                    )
+                }
+            }
+            .padding(.leading, sideInset)
+
+            Spacer(minLength: 0)
+
+            ModuleSwitcher(model: model)
+                .padding(.trailing, geometry.flareRadius(for: .expanded) + 18)
+        }
+        .frame(height: geometry.bandHeight)
+    }
+
+    private var sourceName: String {
+        switch model.activeModule {
+        case .stats: "System"
+        case .timers: "Timers"
+        case .media: model.media?.source.displayName ?? ""
+        }
+    }
+
+    private var module: some View {
+        Group {
+            switch model.activeModule {
+            case .media: MediaPane(model: model, geometry: geometry, clock: clock)
+            case .timers: TimersPane(model: model, clock: clock)
+            case .stats: StatsPane(model: model)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .padding(.horizontal, sideInset)
+        .padding(.top, Theme.Metrics.contentTop)
+        .padding(.bottom, 18)
+    }
 }
 
-/// Module tabs.
-struct TabStrip: View {
+/// Three round buttons, 26 pt across and 2 pt apart, in the band's right margin.
+struct ModuleSwitcher: View {
     @Bindable var model: AppModel
 
     private var modules: [ModuleKind] {
@@ -197,128 +220,143 @@ struct TabStrip: View {
     }
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 2) {
             ForEach(modules) { module in
-                TabButton(
-                    module: module,
-                    isActive: model.activeModule == module,
-                    tint: model.artworkTint ?? Theme.Palette.accent
-                ) {
+                ModuleButton(module: module, isActive: model.activeModule == module) {
                     model.select(module: module)
                 }
             }
-
-            Spacer(minLength: 8)
-
-            if let battery = model.telemetry.latest?.battery {
-                BatteryIndicator(battery: battery)
-            }
-
-            Button {
-                SettingsWindow.shared.show(model: model)
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 11, weight: .medium))
-            }
-            .buttonStyle(SurfaceIconButtonStyle())
-            .help("Settings")
-
-            Button {
-                model.present(.collapsed)
-            } label: {
-                Image(systemName: "chevron.up")
-                    .font(.system(size: 10, weight: .semibold))
-            }
-            .buttonStyle(SurfaceIconButtonStyle())
-            .help("Collapse (Esc)")
-            .accessibilityLabel("Collapse panel")
         }
-        .frame(height: 28)
     }
 }
 
-struct TabButton: View {
+struct ModuleButton: View {
     let module: ModuleKind
     let isActive: Bool
-    let tint: Color
     let action: () -> Void
 
-    @State private var isHovering = false
+    @Environment(\.colorScheme) private var scheme
+    private var ink: Theme.Ink { .of(scheme) }
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 5) {
-                Image(systemName: module.symbol)
-                    .font(.system(size: 11, weight: .medium))
-                if isActive {
-                    Text(module.title)
-                        .font(Theme.Typeface.caption)
-                        .fixedSize()
-                }
-            }
-            .padding(.horizontal, isActive ? 9 : 7)
-            .padding(.vertical, 5)
-            .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(Color.white.opacity(isActive ? 0.12 : (isHovering ? 0.07 : 0)))
-            )
+            Image(systemName: module.symbol)
+                .font(.system(size: 12, weight: .medium))
+                .frame(
+                    width: Theme.Metrics.switcherButton,
+                    height: Theme.Metrics.switcherButton
+                )
+                .background(Circle().fill(isActive ? ink.chip : .clear))
+                .foregroundStyle(isActive ? ink.primary : ink.tertiary)
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(isActive ? Color.white : Color(white: 0.6))
-        .onHover { isHovering = $0 }
+        .buttonStyle(PressScaleStyle(pressedScale: 0.88))
         .animation(Theme.Motion.contentSwap, value: isActive)
+        .help(module.title)
         .accessibilityLabel(module.title)
         .accessibilityAddTraits(isActive ? [.isButton, .isSelected] : .isButton)
     }
 }
 
-/// A circular icon button sized for the dark surface.
-struct SurfaceIconButtonStyle: ButtonStyle {
-    var diameter: CGFloat = 26
+// MARK: - Button behaviour
+
+/// The press behaviour every control on the surface shares.
+///
+/// On pointer-down the glyph dips to 0.86–0.88; on release it springs back with
+/// a small overshoot rather than easing to a stop. The overshoot is the whole
+/// point — it is what makes a control on a surface with no window chrome feel
+/// like it was pressed rather than merely clicked.
+struct PressScaleStyle: ButtonStyle {
+    var pressedScale: CGFloat = 0.88
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .contentShape(Rectangle())
+            .scaleEffect(configuration.isPressed ? pressedScale : 1)
+            .animation(
+                configuration.isPressed ? .easeOut(duration: 0.06) : Theme.Motion.release,
+                value: configuration.isPressed
+            )
+    }
+}
+
+/// Skip forward and back, which travel in their own direction under the press.
+///
+/// The 3.5 pt nudge is the difference between a button that responds and a
+/// button that *goes* somewhere; it is the same cue iOS uses, and without it
+/// the two skip glyphs read as decoration either side of the play button.
+struct SkipButtonStyle: ButtonStyle {
+    /// −1 for backward, +1 for forward.
+    var direction: CGFloat
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .contentShape(Rectangle())
+            .scaleEffect(configuration.isPressed ? 0.88 : 1)
+            .offset(x: configuration.isPressed ? direction * 3.5 : 0)
+            .opacity(configuration.isPressed ? 0.72 : 1)
+            .animation(
+                configuration.isPressed ? .easeOut(duration: 0.06) : Theme.Motion.release,
+                value: configuration.isPressed
+            )
+    }
+}
+
+/// A filled round button, as used by the timer controls.
+struct FilledCircleButtonStyle: ButtonStyle {
+    var fill: Color
+    var hoverFill: Color
+    var diameter: CGFloat = 30
+
     @State private var isHovering = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .foregroundStyle(Color(white: 0.85))
+            .foregroundStyle(.white)
             .frame(width: diameter, height: diameter)
-            .background(
-                Circle().fill(Color.white.opacity(configuration.isPressed ? 0.18 : (isHovering ? 0.10 : 0.05)))
+            .background(Circle().fill(isHovering ? hoverFill : fill))
+            .scaleEffect(configuration.isPressed ? 0.88 : 1)
+            .animation(
+                configuration.isPressed ? .easeOut(duration: 0.06) : Theme.Motion.release,
+                value: configuration.isPressed
             )
-            .scaleEffect(configuration.isPressed ? 0.92 : 1)
-            .animation(Theme.Motion.press, value: configuration.isPressed)
             .onHover { isHovering = $0 }
     }
 }
 
-struct BatteryIndicator: View {
-    let battery: BatteryState
+/// A soft-filled rectangular button: the timer presets, and the actions in a HUD.
+struct SoftButtonStyle: ButtonStyle {
+    var height: CGFloat = 28
+    var cornerRadius: CGFloat = 8
+    var fill: Color?
+    var pressedScale: CGFloat = 0.94
 
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: symbol)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(tint)
-            Text(verbatim: "\(Int((battery.level * 100).rounded()))%")
-                .font(Theme.Typeface.monoSmall)
-                .foregroundStyle(Color(white: 0.62))
-        }
-        .accessibilityLabel("Battery \(Int(battery.level * 100)) percent")
-    }
+    @Environment(\.colorScheme) private var scheme
+    @State private var isHovering = false
 
-    private var symbol: String {
-        if battery.isCharging { return "battery.100.bolt" }
-        switch battery.level {
-        case ..<0.15: return "battery.0"
-        case ..<0.45: return "battery.25"
-        case ..<0.80: return "battery.75"
-        default: return "battery.100"
-        }
-    }
-
-    /// Red only when genuinely low *and* not charging — a 10% battery on the
-    /// charger is not a problem, and colouring it red trains people to ignore it.
-    private var tint: Color {
-        if battery.isCharging { return Theme.Palette.success }
-        return battery.level < 0.15 ? Theme.Palette.failure : Color(white: 0.6)
+    func makeBody(configuration: Configuration) -> some View {
+        let base = scheme == .dark ? Color.white : Color.black
+        let background = fill ?? base.opacity(configuration.isPressed ? 0.20 : (isHovering ? 0.14 : 0.08))
+        return configuration.label
+            .foregroundStyle(fill == nil ? Theme.Ink.of(scheme).primary.opacity(0.82) : .white)
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(background)
+                    .overlay(alignment: .top) {
+                        // The half-point highlight that keeps a low-contrast fill
+                        // from reading as a hole rather than a raised surface.
+                        Rectangle()
+                            .fill(Theme.Palette.cardHighlight(scheme).opacity(0.6))
+                            .frame(height: 0.5)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            )
+            .scaleEffect(configuration.isPressed ? pressedScale : 1)
+            .animation(
+                configuration.isPressed ? .easeOut(duration: 0.06) : Theme.Motion.release,
+                value: configuration.isPressed
+            )
+            .onHover { isHovering = $0 }
     }
 }

@@ -92,7 +92,9 @@ final class PreferencesTests: XCTestCase {
 
         let loaded = await PreferencesStore(fileURL: fileURL).load()
 
-        XCTAssertEqual(loaded.idleDisplay, .artworkAndSpectrum, "defaults, not a crash")
+        // Compared against the defaults themselves rather than against a
+        // literal, so changing a default is not also a test failure.
+        XCTAssertEqual(loaded.idleDisplay, Preferences().idleDisplay, "defaults, not a crash")
         let siblings = try FileManager.default.contentsOfDirectory(atPath: directory.path)
         XCTAssertTrue(
             siblings.contains { $0.hasPrefix("preferences-corrupt-") },

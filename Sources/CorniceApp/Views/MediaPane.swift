@@ -1,13 +1,33 @@
 import SwiftUI
 import CorniceKit
 
-/// The player.
+/// The Now Playing module.
+///
+/// The layout is the Island's: artwork, then title and artist, then a full-width
+/// scrubber with the times beneath it, then chrome-free transport. Putting the
+/// scrubber under everything rather than beside the artwork is what gives it
+/// enough width to be precise enough to actually drag.
+///
+/// The artwork itself is *not* drawn here. It belongs to the travelling layer in
+/// `RootView`, so that it arrives from the peek position rather than appearing;
+/// this pane reserves the space it lands in.
 struct MediaPane: View {
     @Bindable var model: AppModel
-    let tick: Int
+    let geometry: SurfaceGeometry
+    let clock: FrameClock
+
+    @Environment(\.colorScheme) private var scheme
+    private var ink: Theme.Ink { .of(scheme) }
 
     private var snapshot: MediaSnapshot? { model.media }
-    private var tint: Color { model.artworkTint ?? Theme.Palette.accent }
+    private var isExpanded: Bool { model.surfaceState == .expanded }
+
+    /// What an engaged toggle is coloured with.
+    ///
+    /// The artwork's own accent rather than plain white: on a surface that is
+    /// already picking up colour from the cover, "on" reading as *slightly
+    /// brighter grey* is not a state anyone notices.
+    private var accent: Color { model.artworkTint ?? Theme.Palette.accent }
 
     var body: some View {
         if model.mediaPermissionDenied {
@@ -21,198 +41,300 @@ struct MediaPane: View {
 
     // MARK: - Player
 
-    /// Layout follows Apple's own media surfaces: identity on top, a full-width
-    /// scrubber beneath it, and the transport as a distinct row. Putting the
-    /// scrubber under everything rather than beside the artwork gives it the
-    /// full panel width, which makes it precise enough to actually drag.
     private func player(_ snapshot: MediaSnapshot) -> some View {
-        VStack(spacing: 10) {
-            HStack(alignment: .center, spacing: 11) {
-                ArtworkThumbnail(
-                    image: model.artwork,
-                    size: 46,
-                    cornerRadius: 10,
-                    beatIntensity: model.levels.beatIntensity
-                )
-                .shadow(color: .black.opacity(0.45), radius: 8, y: 3)
+        VStack(alignment: .leading, spacing: Theme.Metrics.rowGap) {
+            identity(snapshot)
 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(snapshot.title)
-                        .font(.system(size: 13.5, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Text(snapshot.artist)
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(Color(white: 0.66))
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 6)
-
-                if model.preferences.audioVisualizerEnabled {
-                    SpectrumBars(
-                        levels: model.levels,
-                        tint: tint,
-                        barCount: 5,
-                        isLive: snapshot.state.isPlaying
-                    )
-                    .frame(width: 26, height: 16)
-                } else {
-                    Text(snapshot.source.displayName)
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(Color(white: 0.55))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(Capsule().fill(Color.white.opacity(0.08)))
-                }
+            // The scrubber and the transport arrive late in the morph, on top of
+            // a shape that is already the right size. The outline never waits
+            // for its contents.
+            VStack(alignment: .leading, spacing: Theme.Metrics.rowGap) {
+                ScrubberRow(model: model, clock: clock, ink: ink)
+                transport(snapshot)
             }
-
-            HStack(spacing: 9) {
-                Text(Format.duration(snapshot.extrapolatedPosition()))
-                    .frame(width: 34, alignment: .leading)
-                Scrubber(progress: snapshot.progress(), tint: tint) { target in
-                    model.seek(toProgress: target)
-                }
-                Text(verbatim: "-\(Format.duration(snapshot.remaining()))")
-                    .frame(width: 38, alignment: .trailing)
-            }
-            .font(.system(size: 10.5, weight: .medium).monospacedDigit())
-            .foregroundStyle(Color(white: 0.52))
-
-            transport(snapshot)
+            .opacity(isExpanded ? 1 : 0)
+            .animation(Theme.Motion.contentLate, value: isExpanded)
         }
     }
 
+    private func identity(_ snapshot: MediaSnapshot) -> some View {
+        HStack(alignment: .center, spacing: 15) {
+            // The space the travelling artwork lands in.
+            Color.clear.frame(width: 58, height: 58)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(snapshot.title)
+                    .font(Theme.Typeface.panelTitle)
+                    .tracking(-0.18)
+                    .foregroundStyle(ink.primary)
+                Text(snapshot.artist)
+                    .font(Theme.Typeface.body)
+                    .tracking(-0.065)
+                    .foregroundStyle(ink.secondary)
+            }
+            .lineLimit(1)
+            .truncationMode(.tail)
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// Glyph only, no button fills. On the Island the transport has no chrome at
+    /// all — the surface is the chrome — and adding circles behind these turns a
+    /// media surface into a media *player*, which is a different, heavier thing.
     private func transport(_ snapshot: MediaSnapshot) -> some View {
         HStack(spacing: 0) {
             Button { model.toggleShuffle() } label: {
-                Image(systemName: "shuffle")
-                    .font(.system(size: 12, weight: .semibold))
+                TransportGlyph(
+                    name: "shuffle",
+                    size: 15,
+                    diameter: 28,
+                    isOn: snapshot.isShuffling,
+                    ink: ink,
+                    onColor: accent
+                )
             }
-            .buttonStyle(SurfaceIconButtonStyle(diameter: 28))
-            .foregroundStyle(snapshot.isShuffling ? tint : Color(white: 0.6))
+            .buttonStyle(PressScaleStyle(pressedScale: 0.84))
             .help("Shuffle")
 
             Spacer(minLength: 0)
 
-            Button { model.previousTrack() } label: {
-                Image(systemName: "backward.fill").font(.system(size: 14, weight: .semibold))
+            HStack(spacing: 22) {
+                Button { model.previousTrack() } label: {
+                    TransportGlyph(name: "backward.fill", size: 21, diameter: 32, isOn: true, ink: ink)
+                }
+                .buttonStyle(SkipButtonStyle(direction: -1))
+                .help("Previous")
+
+                Button { model.playPause() } label: {
+                    // A symbol *replace*, not a cross-fade: the outgoing glyph is
+                    // removed and the incoming one pops in from 0.68. Fading two
+                    // glyphs through each other produces a moment where the
+                    // control shows neither state, which is exactly the moment
+                    // the user is looking at it.
+                    PlayPauseGlyph(isPlaying: snapshot.state.isPlaying, ink: ink)
+                }
+                .buttonStyle(PressScaleStyle())
+                .help(snapshot.state.isPlaying ? "Pause" : "Play")
+                .keyboardShortcut(.space, modifiers: [])
+
+                Button { model.nextTrack() } label: {
+                    TransportGlyph(name: "forward.fill", size: 21, diameter: 32, isOn: true, ink: ink)
+                }
+                .buttonStyle(SkipButtonStyle(direction: 1))
+                .help("Next")
             }
-            .buttonStyle(SurfaceIconButtonStyle(diameter: 32))
-            .help("Previous")
 
             Spacer(minLength: 0)
 
-            // The primary control, with the weight Apple gives it: a filled
-            // white circle and a dark glyph.
-            Button { model.playPause() } label: {
-                Image(systemName: snapshot.state.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.black)
-                    .frame(width: 34, height: 34)
-                    .background(Circle().fill(.white))
+            HStack(spacing: 8) {
+                Button { model.cycleRepeat() } label: {
+                    TransportGlyph(
+                        name: snapshot.repeatMode == .one ? "repeat.1" : "repeat",
+                        size: 15,
+                        diameter: 28,
+                        isOn: snapshot.repeatMode != .off,
+                        ink: ink,
+                        onColor: accent
+                    )
+                }
+                .buttonStyle(PressScaleStyle(pressedScale: 0.84))
+                .help("Repeat")
+
+                // Where the sound is actually going. Worth a permanent slot: with
+                // wireless audio it is genuinely ambiguous, and it is the question
+                // people open the menu bar to answer.
+                Button { model.openSoundSettings() } label: {
+                    TransportGlyph(
+                        name: "airplayaudio",
+                        size: 15,
+                        diameter: 28,
+                        isOn: false,
+                        ink: ink
+                    )
+                }
+                .buttonStyle(PressScaleStyle(pressedScale: 0.84))
+                .help(model.outputDevice.map { "Output: \($0.name)" } ?? "Output device")
             }
-            .buttonStyle(PressScaleStyle())
-            .help(snapshot.state.isPlaying ? "Pause" : "Play")
-            .keyboardShortcut(.space, modifiers: [])
-
-            Spacer(minLength: 0)
-
-            Button { model.nextTrack() } label: {
-                Image(systemName: "forward.fill").font(.system(size: 14, weight: .semibold))
-            }
-            .buttonStyle(SurfaceIconButtonStyle(diameter: 32))
-            .help("Next")
-
-            Spacer(minLength: 0)
-
-            // Where the sound is actually going. Worth a permanent slot: with
-            // wireless audio it is genuinely ambiguous, and it is the question
-            // people check the menu bar for.
-            Button { model.openSoundSettings() } label: {
-                Image(systemName: model.outputDevice?.transport.symbol ?? "speaker.wave.2")
-                    .font(.system(size: 12.5, weight: .semibold))
-            }
-            .buttonStyle(SurfaceIconButtonStyle(diameter: 28))
-            .foregroundStyle(
-                model.outputDevice?.isWireless == true ? tint : Color(white: 0.6)
-            )
-            .help(model.outputDevice.map { "Output: \($0.name)" } ?? "Output device")
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 2)
     }
 
     // MARK: - Empty and error states
 
     private var idle: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
             Image(systemName: "music.note")
                 .font(.system(size: 22, weight: .light))
-                .foregroundStyle(Color(white: 0.4))
+                .foregroundStyle(ink.tertiary)
             Text(model.runningPlayers.isEmpty ? "No player running" : "Nothing playing")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color(white: 0.6))
+                .font(Theme.Typeface.body)
+                .foregroundStyle(ink.secondary)
             if model.runningPlayers.isEmpty {
                 Text("Open Music or Spotify and press play.")
-                    .font(Theme.Typeface.caption)
-                    .foregroundStyle(Color(white: 0.42))
+                    .font(Theme.Typeface.hudBody)
+                    .foregroundStyle(ink.tertiary)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var permissionPrompt: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "hand.raised")
-                .font(.system(size: 20, weight: .light))
-                .foregroundStyle(Theme.Palette.running)
+        VStack(spacing: 10) {
             Text("Cornice needs permission to control your music")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white)
+                .font(Theme.Typeface.hudTitle)
+                .foregroundStyle(ink.primary)
             Text("Enable Cornice for Music and Spotify under Privacy & Security › Automation.")
-                .font(Theme.Typeface.caption)
-                .foregroundStyle(Color(white: 0.6))
+                .font(Theme.Typeface.hudBody)
+                .lineSpacing(3)
+                .foregroundStyle(ink.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: 8) {
-                Button("Open Settings") { model.openAutomationSettings() }
+            HStack(spacing: 12) {
                 Button("Try Again") { model.retryMediaPermission() }
+                    .buttonStyle(SoftButtonStyle(height: 32, cornerRadius: 9, pressedScale: 0.96))
+                Button("Open Settings") { model.openAutomationSettings() }
+                    .buttonStyle(SoftButtonStyle(height: 32, cornerRadius: 9, fill: Theme.Palette.blue, pressedScale: 0.96))
             }
-            .buttonStyle(SurfaceCapsuleButtonStyle(tint: Theme.Palette.accent))
-            .font(Theme.Typeface.caption)
+            .font(Theme.Typeface.body)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 24)
     }
 }
 
-/// Dips slightly on press, for controls with their own background.
-struct PressScaleStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.92 : 1)
-            .opacity(configuration.isPressed ? 0.85 : 1)
-            .animation(Theme.Motion.press, value: configuration.isPressed)
+/// The scrubber and its timestamps.
+///
+/// Split out so that the one part of the player that moves every frame is also
+/// the only part that redraws. It reads the frame clock; nothing above it does.
+struct ScrubberRow: View {
+    @Bindable var model: AppModel
+    let clock: FrameClock
+    let ink: Theme.Ink
+
+    var body: some View {
+        // Read so this view, and only this view, depends on the clock.
+        _ = clock.tick
+        let snapshot = model.media
+        return VStack(spacing: 6) {
+            Scrubber(
+                progress: snapshot?.progress() ?? 0,
+                track: ink.track,
+                fill: ink.fill
+            ) { target in
+                model.seek(toProgress: target)
+            }
+
+            HStack(spacing: 0) {
+                Text(Format.duration(snapshot?.extrapolatedPosition() ?? 0))
+                Spacer(minLength: 0)
+                Text(verbatim: "-\(Format.duration(snapshot?.remaining() ?? 0))")
+            }
+            .font(Theme.Typeface.stamp.monospacedDigit())
+            .foregroundStyle(ink.tertiary)
+        }
     }
 }
 
-struct SurfaceCapsuleButtonStyle: ButtonStyle {
-    var tint: Color = .white
-    @State private var isHovering = false
+/// A transport glyph, with the 3.5 pt state dot beneath it.
+///
+/// The dot is how a toggle reads as "on" without a fill: the glyph goes to full
+/// ink and a dot pops in below it, which is the convention across iOS.
+struct TransportGlyph: View {
+    let name: String
+    let size: CGFloat
+    let diameter: CGFloat
+    let isOn: Bool
+    let ink: Theme.Ink
+    /// Colour for the engaged state. Defaults to full-strength ink, which is
+    /// what the always-on glyphs — the skips — want.
+    var onColor: Color?
 
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(tint)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(
-                Capsule().fill(Color.white.opacity(configuration.isPressed ? 0.20 : (isHovering ? 0.14 : 0.09)))
+    /// Toggle glyphs go from tertiary to primary ink; the always-on ones — the
+    /// skips — are simply primary.
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Image(systemName: name)
+                .font(.system(size: size, weight: .medium))
+                .foregroundStyle(isOn ? (onColor ?? ink.primary) : ink.tertiary)
+            if isOn, onColor != nil {
+                Circle()
+                    .fill(onColor ?? ink.primary)
+                    .frame(width: 3.5, height: 3.5)
+                    .transition(.scale(scale: 0).combined(with: .opacity))
+            }
+        }
+        .frame(width: diameter, height: diameter)
+        .animation(Theme.Motion.symbolReplace, value: isOn)
+    }
+}
+
+/// Play and pause, swapped by replacement rather than by cross-fade.
+struct PlayPauseGlyph: View {
+    let isPlaying: Bool
+    let ink: Theme.Ink
+
+    var body: some View {
+        ZStack {
+            Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                .font(.system(size: 19, weight: .medium))
+                .foregroundStyle(ink.primary)
+                .id(isPlaying)
+                .transition(.scale(scale: 0.68).combined(with: .opacity))
+        }
+        .frame(width: 34, height: 34)
+        .animation(Theme.Motion.symbolReplace, value: isPlaying)
+    }
+}
+
+/// A draggable progress bar: 6 pt, no knob, seekable anywhere along its length.
+///
+/// Dragging updates a local value and only commits on release, so the bar
+/// follows the pointer exactly instead of fighting the poll that would otherwise
+/// snap it back to the player's last reported position.
+struct Scrubber: View {
+    let progress: Double
+    let track: Color
+    let fill: Color
+    let onSeek: (Double) -> Void
+
+    @State private var dragProgress: Double?
+
+    private var displayed: Double { dragProgress ?? progress }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 3, style: .continuous).fill(track)
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .fill(fill)
+                    .frame(width: max(0, min(width, width * displayed)))
+                    .animation(.linear(duration: 0.16), value: displayed)
+            }
+            .frame(height: 6)
+            .frame(maxHeight: .infinity, alignment: .center)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        dragProgress = (value.location.x / width).clamped(to: 0...1)
+                    }
+                    .onEnded { value in
+                        let target = (value.location.x / width).clamped(to: 0...1)
+                        dragProgress = nil
+                        onSeek(target)
+                    }
             )
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(Theme.Motion.press, value: configuration.isPressed)
-            .onHover { isHovering = $0 }
+        }
+        .frame(height: 12)
+        .accessibilityElement()
+        .accessibilityLabel("Playback position")
+        .accessibilityValue("\(Int(displayed * 100)) percent")
+        .accessibilityAdjustableAction { direction in
+            let step = 0.05
+            let target = direction == .increment ? displayed + step : displayed - step
+            onSeek(target.clamped(to: 0...1))
+        }
     }
 }

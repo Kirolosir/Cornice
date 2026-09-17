@@ -2,217 +2,219 @@ import SwiftUI
 
 /// The visual language.
 ///
-/// Two decisions shape everything here.
-///
-/// **The collapsed surface is always black; the expanded panel adapts.** When
-/// collapsed, the surface sits flush against a physical notch, which is an
-/// unlit region of the panel. Anything other than true black would show a seam
-/// against the hardware. The expanded panel floats away from the notch, so it
-/// is free to follow the system appearance — and should, because a light-mode
-/// user does not want a slab of black dropped onto their desktop.
-///
-/// **Colour carries status, not decoration.** A developer glancing at this
-/// needs "is anything wrong?" answered pre-attentively, so red, amber and green
-/// are reserved for failing, running and passing. The accent violet is used
-/// only for interactive affordances, which keeps it from competing with the
-/// status colours for attention.
+/// Two rules shape it. **The surface is true black wherever it touches the
+/// notch** — anything else shows a seam against the unlit cut-out — so only the
+/// expanded panel follows the system appearance. And **colour is carried by a
+/// value or a glyph, never by a block of text**, which is what keeps a surface
+/// this small from turning into a dashboard.
 enum Theme {
+
+    // MARK: - Ink
+
+    /// Foreground ramps. The light values are higher because alpha-muted ink
+    /// loses contrast faster on a light ground than on black.
+    struct Ink: Equatable {
+        /// Full-strength ink, for the one-off alphas the ramp does not name.
+        let base: Color
+        let primary: Color
+        let secondary: Color
+        let tertiary: Color
+        /// Background of a selected chip in the module switcher.
+        let chip: Color
+        /// Unfilled scrubber and slider track.
+        let track: Color
+        /// Filled portion of the scrubber.
+        let fill: Color
+        /// The hairline along the surface's bottom edge.
+        let hairline: Color
+
+        static let dark = Ink(
+            base: .white,
+            primary: .white,
+            secondary: Color(white: 1, opacity: 0.66),
+            tertiary: Color(white: 1, opacity: 0.52),
+            chip: Color(white: 1, opacity: 0.10),
+            track: Color(white: 1, opacity: 0.16),
+            fill: .white,
+            hairline: Color(white: 1, opacity: 0.07)
+        )
+
+        static let light = Ink(
+            base: Color(red: 0.086, green: 0.082, blue: 0.102),
+            primary: Color(red: 0.086, green: 0.082, blue: 0.102),
+            secondary: Color(red: 0.086, green: 0.082, blue: 0.102).opacity(0.72),
+            tertiary: Color(red: 0.086, green: 0.082, blue: 0.102).opacity(0.68),
+            chip: Color(red: 0.086, green: 0.082, blue: 0.102).opacity(0.07),
+            track: Color(red: 0.086, green: 0.082, blue: 0.102).opacity(0.14),
+            fill: Color(red: 0.086, green: 0.082, blue: 0.102),
+            hairline: Color(white: 0, opacity: 0.12)
+        )
+
+        static func of(_ scheme: ColorScheme) -> Ink { scheme == .dark ? .dark : .light }
+
+        /// Ink at an arbitrary alpha, lifted on a light ground to hold contrast.
+        func at(_ alpha: Double) -> Color {
+            base.opacity(base == .white ? alpha : min(1, alpha * 1.3))
+        }
+    }
 
     // MARK: - Palette
 
     enum Palette {
-        /// The notch's own black. Not `Color.black` through a material — an
-        /// exact opaque black, so the collapsed surface is seamless against the
-        /// hardware cut-out.
+        /// The notch's own black: exact and opaque, not a material, so the
+        /// resting surface is seamless against the cut-out.
         static let notch = Color(red: 0, green: 0, blue: 0)
+        /// The expanded panel's ground in light mode.
+        static let sheet = Color(red: 0.945, green: 0.941, blue: 0.929)
 
         /// Signature accent, used when artwork tinting is off or unavailable.
         static let accent = Color(red: 0.545, green: 0.486, blue: 1.0)
 
-        // Status colours, each with a dimmed variant for large fills where the
-        // saturated version would vibrate against black.
-        static let success = Color(red: 0.24, green: 0.80, blue: 0.47)
-        static let failure = Color(red: 1.00, green: 0.31, blue: 0.29)
-        static let running = Color(red: 1.00, green: 0.70, blue: 0.25)
-        static let neutral = Color(red: 0.56, green: 0.57, blue: 0.62)
+        // Apple's own values, so a charge reading here is the same green as a
+        // charge reading anywhere else on the machine.
+        static let green = Color(red: 0.196, green: 0.820, blue: 0.345)   // #32d158
+        static let red = Color(red: 1.000, green: 0.271, blue: 0.227)     // #ff453a
+        /// Timer digits.
+        static let orange = Color(red: 0.937, green: 0.604, blue: 0.110)  // #ef9a1c
+        /// Slider fills and the pressed state of the pause button.
+        static let orangeDeep = Color(red: 0.851, green: 0.518, blue: 0.059) // #d9840f
+        /// The pause button's resting fill.
+        static let orangeDark = Color(red: 0.761, green: 0.463, blue: 0.059) // #c2760f
+        /// Affirmative action.
+        static let blue = Color(red: 0.039, green: 0.435, blue: 0.847)    // #0a6fd8
+        /// Download progress.
+        static let blueLight = Color(red: 0.247, green: 0.608, blue: 0.961) // #3f9bf5
+        /// Do Not Disturb.
+        static let purple = Color(red: 0.663, green: 0.353, blue: 0.949)  // #a95af2
 
-        // Telemetry series. Distinguishable for the most common forms of colour
-        // vision deficiency by pairing hue with position — each metric always
-        // occupies the same slot in the grid, so hue is reinforcement, not the
-        // only signal.
-        static let cpu = Color(red: 0.36, green: 0.62, blue: 1.00)
-        static let memory = Color(red: 0.36, green: 0.80, blue: 0.62)
-        static let networkIn = Color(red: 0.98, green: 0.72, blue: 0.35)
-        static let networkOut = Color(red: 0.93, green: 0.45, blue: 0.42)
+        // Chart series. Each metric keeps the same slot in the row, so hue
+        // reinforces position rather than being the only signal.
+        static let cpu = Color(red: 0.290, green: 0.565, blue: 0.886)     // #4a90e2
+        static let memory = Color(red: 0.247, green: 0.663, blue: 0.420)  // #3fa96b
+        static let networkIn = Color(red: 0.878, green: 0.635, blue: 0.235)  // #e0a23c
+        static let networkOut = Color(red: 0.851, green: 0.345, blue: 0.247) // #d9583f
 
-        /// Panel background, adapting to appearance.
+        /// Green above 30%, amber below, red below 15%.
+        static func charge(_ level: Double) -> Color {
+            switch level {
+            case ..<0.15: red
+            case ..<0.30: orange
+            default: green
+            }
+        }
+
+        /// The expanded panel's ground.
         static func panel(_ scheme: ColorScheme) -> Color {
-            scheme == .dark
-                ? Color(red: 0.055, green: 0.055, blue: 0.065)
-                : Color(red: 0.98, green: 0.98, blue: 0.985)
+            scheme == .dark ? notch : sheet
         }
 
-        /// Raised card inside the panel.
+        /// A card inside the System module.
         static func card(_ scheme: ColorScheme) -> Color {
-            scheme == .dark
-                ? Color(red: 0.094, green: 0.094, blue: 0.106)
-                : Color(red: 1.0, green: 1.0, blue: 1.0)
+            scheme == .dark ? Color(white: 1, opacity: 0.055) : Color(white: 0, opacity: 0.045)
         }
 
-        static func hairline(_ scheme: ColorScheme) -> Color {
-            scheme == .dark ? Color.white.opacity(0.07) : Color.black.opacity(0.08)
-        }
-
-        static func primaryText(_ scheme: ColorScheme) -> Color {
-            scheme == .dark ? Color(white: 0.96) : Color(white: 0.10)
-        }
-
-        static func secondaryText(_ scheme: ColorScheme) -> Color {
-            scheme == .dark ? Color(white: 0.62) : Color(white: 0.42)
-        }
-
-        static func tertiaryText(_ scheme: ColorScheme) -> Color {
-            scheme == .dark ? Color(white: 0.44) : Color(white: 0.58)
+        /// The half-point highlight along a card's top edge.
+        static func cardHighlight(_ scheme: ColorScheme) -> Color {
+            scheme == .dark ? Color(white: 1, opacity: 0.10) : Color(white: 1, opacity: 0.55)
         }
     }
 
     // MARK: - Typography
 
-    /// A four-step scale. More steps than this and a panel this small stops
-    /// reading as a single object.
+    /// Numeric readouts use tabular figures throughout, so a count never shifts
+    /// its neighbours as it ticks.
     enum Typeface {
-        /// Headline values — a percentage, a timer, a branch name.
-        static let title = Font.system(size: 15, weight: .semibold, design: .default)
-        /// Standard row text.
-        static let body = Font.system(size: 12, weight: .medium, design: .default)
-        /// Labels and captions.
-        static let caption = Font.system(size: 10.5, weight: .medium, design: .default)
-        /// Hashes, ports, durations. Monospaced *digits* rather than a fully
-        /// monospaced face, so numbers do not jitter as they update while the
-        /// surrounding prose keeps normal letterforms.
-        static let mono = Font.system(size: 11, weight: .medium, design: .monospaced)
+        /// Panel title: the track name in the expanded player.
+        static let panelTitle = Font.system(size: 15, weight: .semibold)
+        /// HUD title.
+        static let hudTitle = Font.system(size: 14.5, weight: .semibold)
+        /// Device name in an activity or HUD pill.
+        static let deviceName = Font.system(size: 13.5, weight: .semibold)
+        /// Body emphasis and labels — the artist line, a timer's label.
+        static let body = Font.system(size: 13, weight: .medium)
+        static let bodyStrong = Font.system(size: 13, weight: .semibold)
+        /// Inline label in a short HUD.
+        static let hudInline = Font.system(size: 12.5, weight: .medium)
+        /// Status line and the source name in the top band.
+        static let status = Font.system(size: 11.5, weight: .medium)
+        static let statusStrong = Font.system(size: 11.5, weight: .semibold)
+        /// Timestamps and the charge value inside a ring.
+        static let stamp = Font.system(size: 11, weight: .medium)
+        /// HUD body copy.
+        static let hudBody = Font.system(size: 10.5, weight: .regular)
+        /// Card header: uppercase, tracked out.
+        static let cardHeader = Font.system(size: 10, weight: .semibold)
+        static let cardSub = Font.system(size: 10, weight: .regular)
+
+        /// A card's current value.
+        static let cardValue = Font.system(size: 21, weight: .semibold, design: .monospaced)
+        /// A session clock.
+        static let sessionClock = Font.system(size: 21, weight: .semibold, design: .monospaced)
+        /// A timer inside the Timers module.
+        ///
+        /// SF Pro with tabular figures, matching Apple's own countdowns. SF Mono
+        /// reads as a terminal beside them; tabular is the part that matters.
+        static let timerValue = Font.system(size: 30, weight: .medium).monospacedDigit()
+        /// A timer in its own HUD, where it is the only thing on the row.
+        static let timerHUD = Font.system(size: 34, weight: .medium).monospacedDigit()
+        /// Small monospaced readouts: a legend, a rate.
         static let monoSmall = Font.system(size: 10, weight: .medium, design: .monospaced)
-        /// Large telemetry readouts.
-        static let metric = Font.system(size: 19, weight: .semibold, design: .rounded)
-            .monospacedDigit()
     }
 
     // MARK: - Metrics
 
-    /// Everything is a multiple of 4 so nested containers stay on a common
-    /// rhythm and optical alignment does not have to be fixed by eye.
     enum Metrics {
-        static let gridUnit: CGFloat = 4
-
-        static let panelWidth: CGFloat = 560
-        static let panelCornerRadius: CGFloat = 26
-        static let panelPadding: CGFloat = 16
-        static let cardCornerRadius: CGFloat = 12
-        static let cardPadding: CGFloat = 10
-
-        /// Vertical offset of the expanded panel below the notch. Small enough
-        /// that the panel still reads as belonging to the notch, large enough
-        /// that its shadow is visible against the desktop.
-        static let panelDrop: CGFloat = 6
-
-        /// How far the collapsed surface extends past the notch on each side
-        /// when it has something to show.
-        ///
-        /// Sized so a typical prefixed branch name (`feature/notch-geometry`)
-        /// keeps enough of both ends to be recognisable after truncation.
-        static let wingWidth: CGFloat = 124
-        /// Extra height the collapsed surface gains when showing content, so
-        /// its rounded bottom edge clears the menu bar text beside it.
-        static let wingDrop: CGFloat = 6
-
-        static let rowHeight: CGFloat = 30
-        static let tabStripHeight: CGFloat = 30
+        /// Horizontal inset from the body's edge.
+        static let contentPadding: CGFloat = 22
+        /// First clear row below the notch band.
+        static let contentTop: CGFloat = 58
+        /// Vertical rhythm inside the expanded panel.
+        static let rowGap: CGFloat = 16
+        static let cardCornerRadius: CGFloat = 14
+        static let cardHeight: CGFloat = 146
+        static let cardGap: CGFloat = 12
+        /// Diameter of a module-switcher button.
+        static let switcherButton: CGFloat = 26
     }
 
     // MARK: - Motion
 
-    /// Durations and curves.
-    ///
-    /// The expand/collapse spring is critically damped rather than bouncy. A
-    /// surface anchored to the top edge of the screen that overshoots looks
-    /// like it has come unstuck from the hardware; Apple's own notch
-    /// animations settle rather than wobble.
+    /// Overshoot applies to width and height only, and height overshoots
+    /// *downward*. The top edge is a fixed anchor: a surface attached to the top
+    /// of the screen that overshoots upward looks like it has come unstuck.
     enum Motion {
-        /// Opening. A touch of overshoot — `dampingFraction` below 1 — so the
-        /// surface arrives with weight rather than easing to a polite stop.
-        /// This is the single most important curve in the app: it is what the
-        /// whole interaction is judged on.
+        /// Opening. A touch of overshoot so it arrives with weight. The whole
+        /// interaction is judged on this curve.
         static let expand = SwiftUI.Animation.spring(response: 0.38, dampingFraction: 0.76)
 
-        /// Closing. Faster and more damped than opening. Closing is a dismissal,
-        /// and a bouncy dismissal reads as indecision.
+        /// Closing. Faster and more damped: a bouncy dismissal reads as
+        /// indecision.
         static let collapse = SwiftUI.Animation.spring(response: 0.30, dampingFraction: 0.86)
 
-        /// Hover peek. Very fast, because this exists purely to acknowledge the
-        /// pointer — any perceptible delay here is what makes a notch app feel
-        /// unresponsive.
+        /// Hover peek. Very fast: this exists purely to acknowledge the pointer.
         static let peek = SwiftUI.Animation.spring(response: 0.22, dampingFraction: 0.82)
-        /// Content swaps inside an already-open panel. Fast and linear-ish:
-        /// this is a state change the user asked for, not an entrance.
+
+        /// Content inside an already-open panel. Near-linear: this is a state
+        /// change the user asked for, not an entrance.
         static let contentSwap = SwiftUI.Animation.easeOut(duration: 0.16)
+
         /// Value updates on a timer. Slow enough to read as continuous, short
         /// enough to finish before the next sample arrives.
         static let telemetry = SwiftUI.Animation.easeOut(duration: 0.45)
-        static let press = SwiftUI.Animation.easeOut(duration: 0.08)
-    }
-}
 
-// MARK: - Shared view modifiers
+        /// A button springing back after a press, with a small rebound past 1.
+        static let release = SwiftUI.Animation.spring(response: 0.15, dampingFraction: 0.52)
 
-/// A card surface inside the expanded panel.
-struct CardBackground: ViewModifier {
-    @Environment(\.colorScheme) private var scheme
-    var padding: CGFloat = Theme.Metrics.cardPadding
+        /// A symbol replace: the outgoing glyph is removed and the incoming one
+        /// pops in. Never a cross-fade of two glyphs.
+        static let symbolReplace = SwiftUI.Animation.spring(response: 0.28, dampingFraction: 0.55)
 
-    func body(content: Content) -> some View {
-        content
-            .padding(padding)
-            .background(Theme.Palette.card(scheme), in: RoundedRectangle(cornerRadius: Theme.Metrics.cardCornerRadius, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.Metrics.cardCornerRadius, style: .continuous)
-                    .strokeBorder(Theme.Palette.hairline(scheme), lineWidth: 1)
-            )
-    }
-}
+        // Content arrives in two groups at fixed points along the opening
+        // spring, so the outline is always ahead of what is in it.
 
-extension View {
-    func cardSurface(padding: CGFloat = Theme.Metrics.cardPadding) -> some View {
-        modifier(CardBackground(padding: padding))
-    }
-}
-
-/// A button style that dips slightly on press.
-///
-/// The panel has no window chrome and does not take focus, so without an
-/// explicit press state a click gives no feedback at all and feels broken.
-struct PanelButtonStyle: ButtonStyle {
-    var tint: Color?
-    @Environment(\.colorScheme) private var scheme
-    @State private var isHovering = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(tint ?? Theme.Palette.primaryText(scheme))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(backgroundColor(pressed: configuration.isPressed))
-            )
-            .scaleEffect(configuration.isPressed ? 0.96 : 1)
-            .animation(Theme.Motion.press, value: configuration.isPressed)
-            .onHover { isHovering = $0 }
-    }
-
-    private func backgroundColor(pressed: Bool) -> Color {
-        let base = scheme == .dark ? Color.white : Color.black
-        if pressed { return base.opacity(0.14) }
-        if isHovering { return base.opacity(0.08) }
-        return base.opacity(0.04)
+        /// Title and artist, arriving early in the morph.
+        static let contentEarly = SwiftUI.Animation.easeOut(duration: 0.055).delay(0.053)
+        /// The scrubber and transport, arriving once the shape is nearly there.
+        static let contentLate = SwiftUI.Animation.easeOut(duration: 0.115).delay(0.220)
     }
 }

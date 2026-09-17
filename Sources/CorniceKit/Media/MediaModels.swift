@@ -43,6 +43,15 @@ public enum RepeatMode: String, Sendable, Equatable, CaseIterable {
     case off
     case all
     case one
+
+    /// The order the button cycles through, matching both players' own.
+    public var next: RepeatMode {
+        switch self {
+        case .off: .all
+        case .all: .one
+        case .one: .off
+        }
+    }
 }
 
 /// One instant of what is playing.
@@ -99,6 +108,35 @@ public struct MediaSnapshot: Sendable, Equatable {
         self.repeatMode = repeatMode
         self.volume = volume
         self.capturedAt = capturedAt
+    }
+
+    /// A copy with one field replaced.
+    ///
+    /// Used to reflect a command locally before the player has been re-read, so
+    /// a toggle responds on the frame it was pressed rather than on the next
+    /// poll. The next real snapshot overwrites it either way, so an optimistic
+    /// value that turns out to be wrong corrects itself within a second.
+    public func with(
+        state: PlaybackState? = nil,
+        position: TimeInterval? = nil,
+        isShuffling: Bool? = nil,
+        repeatMode: RepeatMode? = nil
+    ) -> MediaSnapshot {
+        MediaSnapshot(
+            source: source,
+            state: state ?? self.state,
+            title: title,
+            artist: artist,
+            album: album,
+            duration: duration,
+            position: position ?? self.position,
+            artworkURL: artworkURL,
+            artworkData: artworkData,
+            isShuffling: isShuffling ?? self.isShuffling,
+            repeatMode: repeatMode ?? self.repeatMode,
+            volume: volume,
+            capturedAt: .now
+        )
     }
 
     /// Identity of the *track*, ignoring playhead movement.

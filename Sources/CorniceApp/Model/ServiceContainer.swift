@@ -14,6 +14,10 @@ struct ServiceContainer: Sendable {
     let hardware: HardwareIdentityProvider
     let visualizer: AudioVisualizerEngine
     let outputDevices: OutputDeviceMonitor
+    let reachability: NetworkReachability
+    let volume: SystemVolumeMonitor
+    let vpn: VPNMonitor
+    let downloads: DownloadsMonitor
 
     static func live() -> ServiceContainer {
         let runner = SubprocessRunner()
@@ -23,7 +27,11 @@ struct ServiceContainer: Sendable {
             preferences: PreferencesStore(),
             hardware: HardwareIdentityProvider(runner: runner),
             visualizer: AudioVisualizerEngine(bandCount: 8),
-            outputDevices: OutputDeviceMonitor()
+            outputDevices: OutputDeviceMonitor(),
+            reachability: NetworkReachability(),
+            volume: SystemVolumeMonitor(),
+            vpn: VPNMonitor(),
+            downloads: DownloadsMonitor()
         )
     }
 }

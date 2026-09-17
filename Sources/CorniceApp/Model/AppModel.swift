@@ -49,12 +49,20 @@ final class AppModel {
     private(set) var deviceActivity: DeviceActivity?
     private var activityDismissTask: Task<Void, Never>?
 
+    // MARK: - System HUDs
+
+    /// What the current HUD is saying, if one is up.
+    private(set) var hudContent: HUDContent?
+    var hudDismissTask: Task<Void, Never>?
+
     // MARK: - Visualiser
 
     /// Latest analysed audio. Pulled on the UI's own display timer rather than
     /// pushed from the audio thread — see `AudioVisualizerEngine`.
     private(set) var levels: AudioLevels
     private(set) var visualizerStatus: AudioVisualizerEngine.Status = .stopped
+    /// When the analyser last reported something other than silence.
+    private var lastAudioAt: Date?
 
     // MARK: - Other modules
 
@@ -81,11 +89,18 @@ final class AppModel {
         hardware = await serviceContainer.hardware.identity()
         Log.app.notice("running on \(self.hardware?.displayName ?? "unknown", privacy: .public)")
 
+        // Order matters here, and it took a stopwatch to see why. Starting the
+        // audio tap is the slowest thing the app ever does — building a process
+        // tap, an aggregate device and an IO proc measured 5.2 s on this machine
+        // — so anything sequenced behind it is dead for five seconds after
+        // launch. The cheap event sources go first, and the tap no longer runs
+        // on the main actor at all.
+        startOutputDeviceMonitoring()
+        startHUDSources()
+        restartRefreshLoops()
         if preferences.audioVisualizerEnabled {
             startVisualizer()
         }
-        startOutputDeviceMonitoring()
-        restartRefreshLoops()
     }
 
     func stopRefreshLoops() {
@@ -96,6 +111,8 @@ final class AppModel {
     func shutDown() {
         stopRefreshLoops()
         activityDismissTask?.cancel()
+        hudDismissTask?.cancel()
+        stopHUDSources()
         serviceContainer.visualizer.stop()
         serviceContainer.outputDevices.stop()
     }
@@ -164,9 +181,17 @@ final class AppModel {
         isHovering = hovering
     }
 
+    /// Called whenever the drawn surface changes size, so AppKit's hit-testing
+    /// and hover regions can be brought back into step with it.
+    ///
+    /// SwiftUI knows what it drew; AppKit does not. Any state change that skips
+    /// this leaves a surface that is visible but not clickable.
+    var onSurfaceStateChanged: (() -> Void)?
+
     func present(_ state: SurfaceState) {
         guard surfaceState != state else { return }
         surfaceState = state
+        onSurfaceStateChanged?()
         // Both loops change cadence with the surface state, so both are
         // rebuilt. Any state other than resting means the user is looking at
         // it, which forces an immediate read — this is what makes the lazy
@@ -179,6 +204,43 @@ final class AppModel {
 
     func toggle() {
         present(surfaceState.isOpen ? .collapsed : .expanded)
+    }
+
+    /// Whether the spectrum analyser is running and its output can be trusted.
+    ///
+    /// Deliberately not "is a player playing": the tap hears everything the Mac
+    /// outputs, including a browser tab that no scriptable player knows about.
+    /// Tying the indicator to Spotify's reported state meant it sat still
+    /// through music the app could plainly hear.
+    var isVisualizerLive: Bool {
+        preferences.audioVisualizerEnabled && visualizerStatus == .running
+    }
+
+    /// Whether the playing indicator has anything to report.
+    ///
+    /// Either the analyser is live — in which case it draws real audio, whatever
+    /// is producing it — or a player says it is playing, in which case the bars
+    /// report that and nothing more.
+    var showsIndicator: Bool {
+        isVisualizerLive || media?.state.isPlaying == true
+    }
+
+    /// Whether the travelling artwork is on screen at all.
+    ///
+    /// It is one view across every state, so this is asked once rather than
+    /// being decided independently by each layout — which is how it ended up
+    /// visible in one state and missing in the next.
+    var showsArtwork: Bool {
+        guard let media, media.hasTrack else { return false }
+        switch surfaceState {
+        // At rest the thumbnail sits in the menu bar, which some people would
+        // rather keep empty.
+        case .collapsed: return preferences.idleDisplay != .nothing
+        // Neither an activity pill nor a system HUD is about a track.
+        case .activity, .hud: return false
+        case .peek: return true
+        case .expanded: return activeModule == .media
+        }
     }
 
     func select(module: ModuleKind) {
@@ -223,8 +285,12 @@ final class AppModel {
     private func interval(for name: String) -> Double {
         switch name {
         case "telemetry":
-            // Only drawn when open.
-            return surfaceState.isOpen ? preferences.telemetryRefreshInterval : 15
+            // Drawn in the System module when the panel is open, but also the
+            // only source of battery transitions, which have to be noticed
+            // whether anyone is looking or not. Thirty seconds closed is a
+            // compromise: fast enough that a charge notice is not stale, slow
+            // enough to be free.
+            return surfaceState.isOpen ? preferences.telemetryRefreshInterval : 30
         default:
             // Each media poll is several Apple events to another process, and
             // profiling puts one Spotify round-trip at roughly 100 ms of CPU —
@@ -247,7 +313,11 @@ final class AppModel {
     private func refresh(_ name: String) async {
         switch name {
         case "media": await refreshMedia()
-        case "telemetry": telemetry.append(await serviceContainer.telemetry.sample())
+        case "telemetry":
+            let previousBattery = telemetry.latest?.battery
+            let sample = await serviceContainer.telemetry.sample()
+            telemetry.append(sample)
+            handleBatteryChange(from: previousBattery, to: sample.battery)
         default: break
         }
     }
@@ -290,12 +360,55 @@ final class AppModel {
     /// Pulls the newest audio frame. Called from the UI's display timer.
     func sampleLevels() {
         guard preferences.audioVisualizerEnabled else { return }
-        levels = serviceContainer.visualizer.latestLevels()
+        let latest = serviceContainer.visualizer.latestLevels()
+        levels = latest
+        if !latest.isSilent { lastAudioAt = .now }
     }
 
+    /// Whether the analyser has heard anything recently.
+    ///
+    /// macOS hands a process tap silence — not an error — when audio capture has
+    /// not been granted, so "the tap is running" says nothing about whether it
+    /// can hear. This is the question the interface actually needs answered.
+    var hasLiveAudio: Bool {
+        guard visualizerStatus == .running, let lastAudioAt else { return false }
+        return Date().timeIntervalSince(lastAudioAt) < 1.0
+    }
+
+    /// The tap is running, the music is playing, and it has heard nothing.
+    ///
+    /// The one combination that means the permission is missing rather than the
+    /// room being quiet.
+    var audioCaptureLooksBlocked: Bool {
+        guard visualizerStatus == .running, media?.state.isPlaying == true else { return false }
+        guard let lastAudioAt else { return true }
+        return Date().timeIntervalSince(lastAudioAt) > 4
+    }
+
+    /// Starts audio capture off the main actor.
+    ///
+    /// `start()` builds a Core Audio process tap, an aggregate device and an IO
+    /// proc, and can additionally block on a TCC prompt. Run on the main actor —
+    /// which is where it used to run — that is five seconds in which the surface
+    /// does not respond to the pointer and no other event source has been
+    /// attached yet. The engine is its own lock-guarded object, so there is no
+    /// reason for any of it to happen here.
     func startVisualizer() {
-        visualizerStatus = serviceContainer.visualizer.start()
-        if case .failed(let reason) = visualizerStatus {
+        let engine = serviceContainer.visualizer
+        Task.detached(priority: .utility) {
+            let status = engine.start()
+            // Hopped back rather than captured: `self` is main-actor isolated,
+            // and the whole point of this detour is that the slow part happens
+            // somewhere else.
+            await MainActor.run { [weak self] in
+                self?.applyVisualizerStatus(status)
+            }
+        }
+    }
+
+    func applyVisualizerStatus(_ status: AudioVisualizerEngine.Status) {
+        visualizerStatus = status
+        if case .failed(let reason) = status {
             Log.audio.notice("visualiser disabled: \(reason.message, privacy: .public)")
         }
     }
@@ -324,6 +437,10 @@ final class AppModel {
 
     func applyMedia(_ snapshot: MediaSnapshot?) {
         media = snapshot
+    }
+
+    func applyHUD(_ content: HUDContent?) {
+        hudContent = content
     }
 
     private(set) var toast: String?

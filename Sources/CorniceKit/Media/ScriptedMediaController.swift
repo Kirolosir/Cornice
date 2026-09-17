@@ -87,8 +87,8 @@ public actor ScriptedMediaController: MediaControlling {
             position: state.position,
             artworkURL: track.artworkURL,
             artworkData: track.artworkData,
-            isShuffling: track.isShuffling,
-            repeatMode: track.repeatMode,
+            isShuffling: state.isShuffling,
+            repeatMode: state.repeatMode,
             volume: state.volume,
             capturedAt: .now
         )
@@ -111,7 +111,7 @@ public actor ScriptedMediaController: MediaControlling {
         return """
         tell application "\(application)"
             set s to (player state as text)
-            if s is "stopped" then return "stopped\(Self.separator)\(Self.separator)0\(Self.separator)0\(Self.separator)0"
+            if s is "stopped" then return "stopped\(Self.separator)\(Self.separator)0\(Self.separator)0\(Self.separator)0\(Self.separator)false\(Self.separator)off"
             set trackName to ""
             set trackDuration to 0
             try
@@ -126,9 +126,25 @@ public actor ScriptedMediaController: MediaControlling {
             try
                 set vol to sound volume
             end try
-            return s & "\(Self.separator)" & trackName & "\(Self.separator)" & (\(durationExpression)) & "\(Self.separator)" & (pos as text) & "\(Self.separator)" & (vol as text)
+            set shuf to "false"
+            try
+                if \(dialect.shuffleProperty) then set shuf to "true"
+            end try
+            set rep to "off"
+            try
+                set rep to \(dialect.repeatExpression)
+            end try
+            return s & "\(Self.separator)" & trackName & "\(Self.separator)" & (\(durationExpression)) & "\(Self.separator)" & (pos as text) & "\(Self.separator)" & (vol as text) & "\(Self.separator)" & shuf & "\(Self.separator)" & rep
         end tell
         """
+    }
+
+    /// The two players' spellings for the properties the light read needs.
+    private var dialect: (shuffleProperty: String, repeatExpression: String) {
+        switch source {
+        case .spotify: ("shuffling", "(if repeating then \"all\" else \"off\")")
+        case .appleMusic: ("shuffle enabled", "(song repeat as text)")
+        }
     }
 
     /// Parsed result of `lightScript`.
@@ -138,6 +154,8 @@ public actor ScriptedMediaController: MediaControlling {
         var duration: TimeInterval
         var position: TimeInterval
         var volume: Double
+        var isShuffling: Bool
+        var repeatMode: RepeatMode
     }
 
     static func parseLight(_ raw: String, source: MediaSource) -> LightState? {
@@ -149,12 +167,18 @@ public actor ScriptedMediaController: MediaControlling {
         default: .stopped
         }
         let rawDuration = number(fields[2])
+        // Tolerant of a short reply: an older player, or one that raised on a
+        // property, still yields a usable playhead rather than nothing at all.
+        let shuffle = fields.count > 5 ? fields[5] == "true" : false
+        let repeatMode = fields.count > 6 ? RepeatMode(rawValue: fields[6]) ?? .off : .off
         return LightState(
             state: state,
             title: fields[1],
             duration: source == .spotify ? rawDuration / 1000 : rawDuration,
             position: number(fields[3]),
-            volume: (number(fields[4]) / 100).clamped(to: 0...1)
+            volume: (number(fields[4]) / 100).clamped(to: 0...1),
+            isShuffling: shuffle,
+            repeatMode: repeatMode
         )
     }
 

@@ -69,6 +69,7 @@ final class NotchWindowController {
         self.contentView = container
 
         model.updateGeometry(profile)
+        model.onSurfaceStateChanged = { [weak self] in self?.syncInteractiveRect() }
         syncInteractiveRect()
     }
 
@@ -86,18 +87,12 @@ final class NotchWindowController {
         geometry = SurfaceGeometry(
             notchSize: resolved.rect.size,
             notchCornerRadius: resolved.cornerRadius,
-            contentHeight: Self.contentHeight,
+            // Wider than the widest surface, because the resting state draws its
+            // thumbnail and track title in the menu bar *outside* the shape —
+            // the notch is a hole, so that is the only place they can go.
             windowWidth: min(SurfaceGeometry.expandedWidth + 80, resolved.screenFrame.width)
         )
     }
-
-    /// Height of the expanded content area.
-    ///
-    /// Fixed rather than measured from the content: the window has to exist
-    /// before SwiftUI lays out, and every pane is designed to this height so
-    /// switching tabs does not change the surface's size — which would mean a
-    /// second animation competing with the tab change.
-    private static let contentHeight: CGFloat = 188
 
     /// The window's frame: fixed size, centred on the notch, pinned to the top.
     private func windowFrame(for profile: NotchProfile, geometry: SurfaceGeometry) -> NSRect {

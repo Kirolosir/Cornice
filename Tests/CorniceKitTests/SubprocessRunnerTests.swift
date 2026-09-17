@@ -59,6 +59,10 @@ final class SubprocessRunnerTests: XCTestCase {
     }
 
     func testCancellationTerminatesTheProcess() async {
+        // Captured explicitly rather than through `self`: the child task needs
+        // the runner, not the test case, and sending the test case across an
+        // isolation boundary is what the compiler objects to.
+        let runner = runner
         let task = Task {
             try await runner.run(Command(executable: "/bin/sleep", arguments: ["30"], timeout: 30))
         }
@@ -128,11 +132,12 @@ final class SubprocessRunnerTests: XCTestCase {
     /// exhaust the pool and deadlock.
     func testConcurrentCommandsDoNotDeadlock() async {
         let started = Date()
+        let runner = runner
 
         await withTaskGroup(of: Void.self) { group in
             for index in 0..<16 {
                 group.addTask {
-                    _ = try? await self.runner.run(
+                    _ = try? await runner.run(
                         Command(executable: "/bin/echo", arguments: ["\(index)"])
                     )
                 }
@@ -194,7 +199,8 @@ final class ToolLocatorTests: XCTestCase {
     func testFindsToolsOnTheStandardPath() async {
         let locator = ToolLocator()
 
-        XCTAssertEqual(await locator.locate("echo"), "/bin/echo")
+        let echo = await locator.locate("echo")
+        XCTAssertEqual(echo, "/bin/echo")
     }
 
     /// A GUI app does not inherit the user's shell PATH, so lookups must not
@@ -207,7 +213,8 @@ final class ToolLocatorTests: XCTestCase {
     func testMissingToolReturnsNilAndThrowsOnRequire() async {
         let locator = ToolLocator()
 
-        XCTAssertNil(await locator.locate("definitely-not-a-real-tool-xyz"))
+        let missing = await locator.locate("definitely-not-a-real-tool-xyz")
+        XCTAssertNil(missing)
         do {
             _ = try await locator.require("definitely-not-a-real-tool-xyz")
             XCTFail("expected toolUnavailable")

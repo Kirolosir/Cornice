@@ -1,103 +1,126 @@
 import SwiftUI
 import CorniceKit
 
+/// The Timers module: presets on top, running timers beneath.
+///
+/// Each running timer is the system timer HUD *wholesale* — the same orange
+/// pause, the same grey dismiss, the same oversized count. A timer should look
+/// the same whether it is announcing itself from the notch or sitting in a list,
+/// because it is the same timer.
 struct TimersPane: View {
     @Bindable var model: AppModel
-    let tick: Int
+    let clock: FrameClock
 
-    private var tint: Color { model.artworkTint ?? Theme.Palette.accent }
+    @Environment(\.colorScheme) private var scheme
+    private var ink: Theme.Ink { .of(scheme) }
 
     var body: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
                 ForEach(model.preferences.timerPresetsMinutes, id: \.self) { minutes in
                     Button {
                         model.addTimer(minutes: minutes)
                     } label: {
                         Text(verbatim: "+\(minutes)m")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(Theme.Typeface.status)
                     }
-                    .buttonStyle(SurfaceCapsuleButtonStyle(tint: tint))
+                    .buttonStyle(SoftButtonStyle())
+                    .disabled(model.timers.entries.count >= TimerBoard.maximumTimers)
                 }
-                Spacer()
             }
 
             if model.timers.entries.isEmpty {
-                VStack(spacing: 6) {
-                    Image(systemName: "timer")
-                        .font(.system(size: 20, weight: .light))
-                        .foregroundStyle(Color(white: 0.4))
-                    Text("No timers running")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color(white: 0.55))
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Text("No timers running")
+                    .font(Theme.Typeface.body)
+                    .foregroundStyle(ink.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 22)
             } else {
-                VStack(spacing: 6) {
+                VStack(spacing: 10) {
                     ForEach(model.timers.entries) { entry in
-                        TimerRow(entry: entry, tint: tint, model: model)
+                        TimerRow(entry: entry, clock: clock, model: model)
                     }
-                    Spacer(minLength: 0)
                 }
             }
+
+            Spacer(minLength: 0)
         }
     }
 }
 
 struct TimerRow: View {
     let entry: TimerEntry
-    let tint: Color
+    let clock: FrameClock
     @Bindable var model: AppModel
 
+    private var id: UUID { entry.id }
+    private var label: String { entry.label }
+    private var isRunning: Bool { entry.isRunning }
+    private var isFinished: Bool { entry.isFinished }
+
+    @Environment(\.colorScheme) private var scheme
+    private var ink: Theme.Ink { .of(scheme) }
+
     var body: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack {
-                    Text(entry.label)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color(white: 0.7))
-                    Spacer()
-                    Text(Format.duration(entry.remaining()))
-                        .font(.system(size: 13, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(entry.isFinished ? Theme.Palette.success : .white)
-                }
-
-                GeometryReader { proxy in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color.white.opacity(0.14))
-                        Capsule()
-                            .fill(entry.isFinished ? Theme.Palette.success : tint)
-                            .frame(width: proxy.size.width * entry.progress())
-                    }
-                }
-                .frame(height: 4)
-            }
-
+        // Remaining time comes from the wall clock, so nothing in the model
+        // changes between the second a timer starts and the second it ends.
+        // Without a dependency on the frame clock the countdown was correct and
+        // simply never redrawn.
+        let reading = TimerCountdown.reading(entry, tick: clock.tick)
+        return HStack(spacing: 12) {
             Button {
-                model.toggleTimer(entry.id)
+                model.toggleTimer(id)
             } label: {
-                Image(systemName: entry.isRunning ? "pause.fill" : "play.fill")
-                    .font(.system(size: 10, weight: .bold))
+                Image(systemName: isRunning ? "pause.fill" : "play.fill")
+                    .font(.system(size: 12, weight: .bold))
             }
-            .buttonStyle(SurfaceIconButtonStyle(diameter: 24))
-            .disabled(entry.isFinished)
+            .buttonStyle(FilledCircleButtonStyle(
+                fill: Theme.Palette.orangeDark,
+                hoverFill: Theme.Palette.orangeDeep
+            ))
+            .disabled(isFinished)
+            .help(isRunning ? "Pause" : "Resume")
 
             Button {
-                model.removeTimer(entry.id)
+                model.removeTimer(id)
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 11, weight: .bold))
             }
-            .buttonStyle(SurfaceIconButtonStyle(diameter: 24))
-            .foregroundStyle(Theme.Palette.failure)
+            .buttonStyle(FilledCircleButtonStyle(
+                fill: ink.at(0.18),
+                hoverFill: ink.at(0.26)
+            ))
+            .help(isFinished ? "Stop the alarm" : "Dismiss")
+
+            Spacer(minLength: 0)
+
+            HStack(alignment: .firstTextBaseline, spacing: 11) {
+                Text(isFinished ? "\(label) · done" : label)
+                    .font(Theme.Typeface.body)
+                    .foregroundStyle(ink.at(0.58))
+                    .lineLimit(1)
+                Text(reading)
+                    .font(Theme.Typeface.timerValue)
+                    .tracking(-0.75)
+                    // Colour is carried by the value, never by the label beside
+                    // it — and finishing is the one state worth a different hue.
+                    .foregroundStyle(isFinished ? Theme.Palette.green : Theme.Palette.orange)
+                    .contentTransition(.numericText(countsDown: true))
+                    .animation(.easeOut(duration: 0.18), value: reading)
+            }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.white.opacity(0.05))
-        )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(entry.label), \(Format.duration(entry.remaining())) remaining")
+        .accessibilityLabel("\(label), \(reading) remaining")
+    }
+}
+
+/// Formats a countdown against the frame clock.
+enum TimerCountdown {
+    static func reading(_ entry: TimerEntry, tick: Int) -> String {
+        // `tick` is unused arithmetically and deliberately so: taking it as a
+        // parameter is what makes the caller depend on the clock.
+        _ = tick
+        return Format.duration(entry.remaining())
     }
 }

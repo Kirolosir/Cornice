@@ -1,69 +1,23 @@
 import SwiftUI
 import CorniceKit
 
-/// Vertical bars driven by the spectrum analyser.
+/// Album art that pulses with the beat.
 ///
-/// Drawn with `Canvas` rather than a stack of shapes: this repaints at display
-/// rate, and a view per bar would have SwiftUI diffing a tree sixty times a
-/// second for what is ultimately a handful of rounded rectangles.
-///
-/// When no audio is being captured the bars fall to a resting height rather
-/// than disappearing, so the component never pops in and out as playback
-/// starts and stops.
-struct SpectrumBars: View {
-    let levels: AudioLevels
-    let tint: Color
-    var barCount: Int = 5
-    /// Whether the music is actually playing. A paused track shows the resting
-    /// state even if stale audio is still in the buffer.
-    var isLive: Bool = true
-
-    /// Minimum bar height as a fraction, so the row reads as a control rather
-    /// than as a glitch when silent.
-    private let restingHeight: CGFloat = 0.14
+/// A thin wrapper whose only job is to read `levels` here, in a leaf, rather
+/// than in the view that positions it. Read higher up, every analysed frame
+/// invalidated the whole surface.
+struct PulsingArtwork: View {
+    @Bindable var model: AppModel
+    let size: CGFloat
+    let cornerRadius: CGFloat
 
     var body: some View {
-        Canvas { context, size in
-            let count = max(1, barCount)
-            let spacing = size.width * 0.22 / CGFloat(count)
-            let barWidth = (size.width - spacing * CGFloat(count - 1)) / CGFloat(count)
-            let radius = min(barWidth / 2, 2)
-
-            for index in 0..<count {
-                let value = bandValue(at: index, of: count)
-                let height = max(size.height * restingHeight, size.height * CGFloat(value))
-                let x = CGFloat(index) * (barWidth + spacing)
-                // Grown from the vertical centre, which reads as a waveform;
-                // growing from the baseline reads as a bar chart.
-                let rect = CGRect(
-                    x: x,
-                    y: (size.height - height) / 2,
-                    width: barWidth,
-                    height: height
-                )
-                context.fill(
-                    Path(roundedRect: rect, cornerRadius: radius),
-                    with: .color(tint.opacity(isLive ? 0.95 : 0.4))
-                )
-            }
-        }
-        .accessibilityHidden(true)
-    }
-
-    /// Maps the analyser's bands onto however many bars are being drawn.
-    ///
-    /// The collapsed surface shows four bars and the panel shows more, from the
-    /// same eight-band analysis, so bands are averaged into buckets rather than
-    /// the analyser being reconfigured per view.
-    private func bandValue(at index: Int, of count: Int) -> Float {
-        guard !levels.bands.isEmpty else { return 0 }
-        guard isLive else { return 0 }
-        let bandsPerBar = max(1, levels.bands.count / count)
-        let start = min(index * bandsPerBar, levels.bands.count - 1)
-        let end = min(start + bandsPerBar, levels.bands.count)
-        let slice = levels.bands[start..<end]
-        guard !slice.isEmpty else { return 0 }
-        return slice.reduce(0, +) / Float(slice.count)
+        ArtworkThumbnail(
+            image: model.artwork,
+            size: size,
+            cornerRadius: cornerRadius,
+            beatIntensity: model.levels.beatIntensity
+        )
     }
 }
 
@@ -102,57 +56,87 @@ struct ArtworkThumbnail: View {
     }
 }
 
-/// A draggable progress bar.
+/// The three-bar playing indicator beside a track title.
 ///
-/// Dragging updates a local value and only commits on release, so the bar
-/// follows the pointer exactly instead of fighting the poll that would
-/// otherwise snap it back to the player's last reported position.
-struct Scrubber: View {
-    let progress: Double
+/// This is a *playing* indicator first and a spectrum second, which is the
+/// distinction that decides how it behaves when system audio capture is off:
+/// it keeps the standard staggered bob, because what it is reporting then is
+/// "this is playing", not "the music sounds like this". When capture is on it
+/// is driven by the analyser instead and reports both.
+///
+/// Sized exactly as the handoff draws it: three 2 pt bars, 2 pt apart, 13 pt
+/// tall, standing on their baseline.
+struct EqualizerIndicator: View {
+    @Bindable var model: AppModel
+    /// Whether the track is actually playing. A paused track stands still.
+    let isLive: Bool
     let tint: Color
-    let onSeek: (Double) -> Void
 
-    @State private var dragProgress: Double?
-    @State private var isHovering = false
+    @State private var bobbing = false
 
-    private var displayed: Double { dragProgress ?? progress }
+    private var levels: AudioLevels { model.levels }
+
+    /// Whether there is real audio to draw.
+    ///
+    /// Not simply "is the tap running": macOS hands a tap silence rather than an
+    /// error when audio capture has not been granted, so a running tap that has
+    /// heard nothing for a second is indistinguishable from a denied one. Either
+    /// way the honest fallback is the standard playing bob, which reports that
+    /// something is playing without claiming to know what it sounds like.
+    private var audioDriven: Bool { model.hasLiveAudio }
+
+    /// Deliberately co-prime-ish, so the three bars never fall into step and
+    /// start reading as one block moving up and down.
+    private static let durations: [Double] = [0.80, 0.93, 1.06]
+    private static let phases: [Double] = [0, 0.17, 0.34]
+
+    private let barWidth: CGFloat = 2
+    private let barHeight: CGFloat = 13
+    private let resting: CGFloat = 0.3
 
     var body: some View {
-        GeometryReader { proxy in
-            let width = proxy.size.width
-            let height: CGFloat = isHovering || dragProgress != nil ? 6 : 4
-
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color.white.opacity(0.16))
-                Capsule()
+        HStack(alignment: .bottom, spacing: 2) {
+            ForEach(0..<3, id: \.self) { index in
+                Capsule(style: .continuous)
                     .fill(tint)
-                    .frame(width: max(0, min(width, width * displayed)))
+                    .frame(width: barWidth, height: barHeight)
+                    .scaleEffect(y: scale(at: index), anchor: .bottom)
+                    .animation(animation(at: index), value: animationKey(at: index))
             }
-            .frame(height: height)
-            .frame(maxHeight: .infinity, alignment: .center)
-            .contentShape(Rectangle())
-            .animation(.easeOut(duration: 0.12), value: height)
-            .onHover { isHovering = $0 }
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        dragProgress = (value.location.x / width).clamped(to: 0...1)
-                    }
-                    .onEnded { value in
-                        let target = (value.location.x / width).clamped(to: 0...1)
-                        dragProgress = nil
-                        onSeek(target)
-                    }
-            )
         }
-        .frame(height: 14)
-        .accessibilityElement()
-        .accessibilityLabel("Playback position")
-        .accessibilityValue("\(Int(displayed * 100)) percent")
-        .accessibilityAdjustableAction { direction in
-            let step = 0.05
-            let target = direction == .increment ? displayed + step : displayed - step
-            onSeek(target.clamped(to: 0...1))
-        }
+        .frame(width: barWidth * 3 + 4, height: barHeight, alignment: .bottom)
+        .onAppear { bobbing = true }
+        .accessibilityHidden(true)
+    }
+
+    private func scale(at index: Int) -> CGFloat {
+        guard isLive else { return resting }
+        if audioDriven { return max(resting, CGFloat(band(at: index))) }
+        return bobbing ? 1 : resting
+    }
+
+    /// What each bar's animation is keyed on, so the analyser-driven case
+    /// re-animates per sample and the procedural case animates exactly once.
+    private func animationKey(at index: Int) -> Double {
+        guard isLive else { return -1 }
+        return audioDriven ? Double(band(at: index)) : (bobbing ? 1 : 0)
+    }
+
+    private func animation(at index: Int) -> Animation? {
+        guard isLive else { return .easeOut(duration: 0.18) }
+        if audioDriven { return .easeOut(duration: 0.09) }
+        return .easeInOut(duration: Self.durations[index])
+            .repeatForever(autoreverses: true)
+            .delay(Self.phases[index])
+    }
+
+    private func band(at index: Int) -> Float {
+        guard !levels.bands.isEmpty else { return 0 }
+        let perBar = max(1, levels.bands.count / 3)
+        let start = min(index * perBar, levels.bands.count - 1)
+        let end = min(start + perBar, levels.bands.count)
+        let slice = levels.bands[start..<end]
+        guard !slice.isEmpty else { return 0 }
+        return slice.reduce(0, +) / Float(slice.count)
     }
 }

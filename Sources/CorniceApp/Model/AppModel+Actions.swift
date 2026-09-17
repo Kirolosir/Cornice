@@ -21,6 +21,7 @@ extension AppModel {
         let schedulingChanged = sanitized.mediaRefreshInterval != preferences.mediaRefreshInterval
             || sanitized.telemetryRefreshInterval != preferences.telemetryRefreshInterval
         let visualizerChanged = sanitized.audioVisualizerEnabled != preferences.audioVisualizerEnabled
+        let downloadsChanged = sanitized.downloadHUDEnabled != preferences.downloadHUDEnabled
 
         applyPreferences(sanitized)
 
@@ -33,6 +34,9 @@ extension AppModel {
 
         if visualizerChanged {
             sanitized.audioVisualizerEnabled ? startVisualizer() : stopVisualizer()
+        }
+        if downloadsChanged {
+            sanitized.downloadHUDEnabled ? startDownloadWatching() : stopDownloadWatching()
         }
         if schedulingChanged { restartRefreshLoops() }
     }
@@ -61,8 +65,26 @@ extension AppModel {
     }
 
     func setVolume(_ level: Double) { send(.setVolume(level)) }
-    func toggleShuffle() { send(.toggleShuffle) }
-    func cycleRepeat() { send(.cycleRepeat) }
+
+    /// Flipped locally before the command is sent, then confirmed by the next
+    /// poll — the same trick the scrubber uses.
+    ///
+    /// Without it the glyph does not change for up to a second, which reads as
+    /// the button having done nothing, so people press it again and toggle it
+    /// straight back.
+    func toggleShuffle() {
+        if let snapshot = media {
+            applyMedia(snapshot.with(isShuffling: !snapshot.isShuffling))
+        }
+        send(.toggleShuffle)
+    }
+
+    func cycleRepeat() {
+        if let snapshot = media {
+            applyMedia(snapshot.with(repeatMode: snapshot.repeatMode.next))
+        }
+        send(.cycleRepeat)
+    }
 
     private func send(_ command: MediaCommand) {
         guard let source = media?.source else { return }
@@ -134,10 +156,12 @@ extension AppModel {
     }
 
     func toggleTimer(_ id: UUID) {
+        TimerAlarm.shared.stop()
         mutateTimers { $0.toggle(id) }
     }
 
     func removeTimer(_ id: UUID) {
+        TimerAlarm.shared.stop()
         mutateTimers { $0.remove(id) }
     }
 
@@ -149,9 +173,18 @@ extension AppModel {
         var board = timers
         let completed = board.tick()
         applyTimers(board)
+        guard !completed.isEmpty else { return }
         guard preferences.notifyOnTimerComplete else { return }
+        // The sound is the point: a banner alone is no use for something you set
+        // a timer precisely so you could stop watching.
+        TimerAlarm.shared.start()
         for entry in completed {
             NotificationPresenter.shared.timerComplete(label: entry.label)
+        }
+        // And a face to go with the noise, so it can be silenced from the notch
+        // rather than by hunting for the panel.
+        if let finished = completed.first {
+            presentTimerHUD(for: finished)
         }
     }
 

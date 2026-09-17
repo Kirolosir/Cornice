@@ -41,7 +41,6 @@ enum DocsCapture {
         let geometry = SurfaceGeometry(
             notchSize: profile.rect.size,
             notchCornerRadius: profile.cornerRadius,
-            contentHeight: 188,
             windowWidth: SurfaceGeometry.expandedWidth + 80
         )
 
@@ -79,9 +78,48 @@ enum DocsCapture {
         try? await Task.sleep(for: .seconds(1.4))
         capture(model: model, geometry: geometry, name: "airpods", to: directory)
 
+        // Every system HUD, at its measured size. These are otherwise only on
+        // screen for a second or two when the machine does something.
+        model.present(.collapsed)
+
+        // The timer HUD reads its countdown from the board, so the gallery entry
+        // has to name a timer that is actually on it.
+        let liveTimer = model.timers.entries.first
+        for content in Self.hudGallery(timer: liveTimer) {
+            model.presentHUD(content)
+            try? await Task.sleep(for: .milliseconds(420))
+            capture(model: model, geometry: geometry, name: "hud-\(content.kind.rawValue)", to: directory)
+            model.dismissHUD()
+            try? await Task.sleep(for: .milliseconds(360))
+        }
+
         print("Wrote documentation images to \(directory.path)")
         exit(0)
     }
+
+    /// One of each, with representative values.
+    ///
+    /// The numbers here are the design's own specimen values rather than live
+    /// readings: these images document the layout, and a screenshot of whatever
+    /// the rendering machine's battery happened to be at is not a specification.
+    private static func hudGallery(timer: TimerEntry?) -> [HUDContent] { [
+        .noInternet,
+        .filesReceived(files: ["Debug Report.txt", "Debug Image.png"]),
+        .timerRunning(
+            id: timer?.id ?? UUID(),
+            label: "Timer",
+            isRunning: timer?.isRunning ?? true,
+            isFinished: false
+        ),
+        .charging(level: 0.67),
+        .batteryLow(level: 0.14),
+        .fullBattery,
+        .vpn(name: "VPN · utun4", since: Date().addingTimeInterval(-515)),
+        .volume(device: "MacBook Air Speakers", level: 0.62, isMuted: false),
+        .download(name: "ReallyVeryExtremelyImportBigNameForFile.mov", progress: 0.6, bytesPerSecond: 13_421_772),
+        .doNotDisturb,
+        .handoff,
+    ] }
 
     private static func capture(
         model: AppModel,
@@ -92,7 +130,13 @@ enum DocsCapture {
         let surfaceSize = geometry.size(for: model.surfaceState)
         // Enough room around the surface for its shadow, and enough above to
         // show that it is attached to the top edge of the screen.
-        let canvas = CGSize(width: surfaceSize.width + 120, height: surfaceSize.height + 56)
+        // A floor on the width because the resting state draws its thumbnail and
+        // title *outside* the surface, in the menu-bar margins — crop to the
+        // shape and the only two things it shows disappear.
+        let canvas = CGSize(
+            width: max(surfaceSize.width + 120, 520),
+            height: surfaceSize.height + 56
+        )
 
         let content = ZStack(alignment: .top) {
             // A desktop-ish backdrop so a black surface is visible at all.

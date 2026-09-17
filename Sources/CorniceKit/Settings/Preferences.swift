@@ -18,9 +18,9 @@ public enum ModuleKind: String, Codable, Sendable, CaseIterable, Identifiable {
 
     public var symbol: String {
         switch self {
-        case .media: "waveform"
+        case .media: "music.note"
         case .timers: "timer"
-        case .stats: "chart.bar.xaxis"
+        case .stats: "chart.bar.fill"
         }
     }
 }
@@ -88,6 +88,21 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var audioVisualizerEnabled: Bool
     /// Tint the surface with the album artwork's dominant colour.
     public var tintFromArtwork: Bool
+    /// How strongly, as a multiplier on the design's own tint alphas.
+    ///
+    /// The design specifies a deliberately restrained 22/8/0% wash, so that the
+    /// surface reads as black picking up colour from the cover rather than as a
+    /// coloured panel. This exists because "a little more noticeable" is a
+    /// legitimate taste, and it is the one place the spec invites a dial.
+    public var tintStrength: Double
+
+    // System HUDs
+    /// Watch the Downloads folder so a transfer in progress raises a HUD.
+    ///
+    /// Off by default, and deliberately so: reading that folder is
+    /// TCC-protected, and starting the watch at launch would spring a
+    /// permission dialog on somebody who never asked for a download HUD.
+    public var downloadHUDEnabled: Bool
 
     // Timers
     public var timerPresetsMinutes: [Int]
@@ -101,12 +116,14 @@ public struct Preferences: Codable, Equatable, Sendable {
         enabledModules: Set<ModuleKind> = Set(ModuleKind.allCases),
         activationStyle: ActivationStyle = .hover,
         hoverDwell: Double = 0.05,
-        idleDisplay: IdleDisplay = .artworkAndSpectrum,
+        idleDisplay: IdleDisplay = .artworkAndTitle,
         launchAtLogin: Bool = false,
         mediaRefreshInterval: Double = 1.0,
         hideWhenNothingPlaying: Bool = false,
         audioVisualizerEnabled: Bool = false,
         tintFromArtwork: Bool = true,
+        tintStrength: Double = 1.0,
+        downloadHUDEnabled: Bool = false,
         timerPresetsMinutes: [Int] = [5, 10, 15, 25],
         notifyOnTimerComplete: Bool = true,
         telemetryRefreshInterval: Double = 2
@@ -121,6 +138,8 @@ public struct Preferences: Codable, Equatable, Sendable {
         self.hideWhenNothingPlaying = hideWhenNothingPlaying
         self.audioVisualizerEnabled = audioVisualizerEnabled
         self.tintFromArtwork = tintFromArtwork
+        self.tintStrength = tintStrength
+        self.downloadHUDEnabled = downloadHUDEnabled
         self.timerPresetsMinutes = timerPresetsMinutes
         self.notifyOnTimerComplete = notifyOnTimerComplete
         self.telemetryRefreshInterval = telemetryRefreshInterval
@@ -150,6 +169,8 @@ public struct Preferences: Codable, Equatable, Sendable {
         hideWhenNothingPlaying = value(.hideWhenNothingPlaying, defaults.hideWhenNothingPlaying)
         audioVisualizerEnabled = value(.audioVisualizerEnabled, defaults.audioVisualizerEnabled)
         tintFromArtwork = value(.tintFromArtwork, defaults.tintFromArtwork)
+        tintStrength = value(.tintStrength, defaults.tintStrength)
+        downloadHUDEnabled = value(.downloadHUDEnabled, defaults.downloadHUDEnabled)
         timerPresetsMinutes = value(.timerPresetsMinutes, defaults.timerPresetsMinutes)
         notifyOnTimerComplete = value(.notifyOnTimerComplete, defaults.notifyOnTimerComplete)
         telemetryRefreshInterval = value(.telemetryRefreshInterval, defaults.telemetryRefreshInterval)
@@ -166,6 +187,9 @@ public struct Preferences: Codable, Equatable, Sendable {
         // anyway, so faster buys nothing.
         copy.mediaRefreshInterval = mediaRefreshInterval.clamped(to: 0.25...10)
         copy.telemetryRefreshInterval = telemetryRefreshInterval.clamped(to: 1...60)
+        // The upper bound is the point past which the accent stops being a tint
+        // and starts competing with the album art it came from.
+        copy.tintStrength = tintStrength.clamped(to: 0...1.4)
         copy.timerPresetsMinutes = timerPresetsMinutes
             .filter { (1...600).contains($0) }
             .reduplicated(by: \.self)
