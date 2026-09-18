@@ -56,8 +56,15 @@ extension AppModel {
         }
         send(.playPause)
     }
-    func nextTrack() { send(.next) }
-    func previousTrack() { send(.previous) }
+    func nextTrack() {
+        expectTrackChange()
+        send(.next)
+    }
+
+    func previousTrack() {
+        expectTrackChange()
+        send(.previous)
+    }
 
     func seek(toProgress progress: Double) {
         guard let snapshot = media, snapshot.duration > 0 else { return }

@@ -61,6 +61,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         installStatusItem(model: model, controller: controller)
 
+        // Repeat-one across a skip: the setting has to follow the user to
+        // whatever track they land on, which is the whole point of it.
+        if arguments.contains("--probe-repeat-skip") {
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(4))
+                guard let before = model.media else {
+                    Log.media.notice("skip probe: no track")
+                    exit(0)
+                }
+                if !before.state.isPlaying { model.playPause() }
+                try? await Task.sleep(for: .seconds(1))
+
+                for _ in 0..<3 where model.media?.repeatMode != .one {
+                    model.cycleRepeat()
+                    try? await Task.sleep(for: .milliseconds(700))
+                }
+                Log.media.notice("skip probe: mode=\(model.media?.repeatMode.rawValue ?? "?", privacy: .public) applies=\(model.appliesRepeatOne, privacy: .public)")
+
+                model.nextTrack()
+                try? await Task.sleep(for: .seconds(3))
+                guard let after = model.media else { exit(0) }
+                Log.media.notice(
+                    "skip probe: after skip mode=\(after.repeatMode.rawValue, privacy: .public) applies=\(model.appliesRepeatOne, privacy: .public) duration=\(after.duration, format: .fixed(precision: 1), privacy: .public)"
+                )
+
+                guard after.duration > 20 else { exit(0) }
+
+                // Two passes at the end of the track. The first is expected to
+                // be beaten by a crossfade and recovered from; the second should
+                // be pre-empted cleanly, using what the first one taught.
+                var trace: [String] = []
+                var identities: Set<String> = []
+                for pass in 1...2 {
+                    guard let track = model.media else { break }
+                    model.seek(toProgress: (track.duration - 8) / track.duration)
+                    try? await Task.sleep(for: .seconds(1))
+                    var pattern: [String] = []
+                    for _ in 0..<15 {
+                        try? await Task.sleep(for: .milliseconds(700))
+                        guard let now = model.media else { continue }
+                        identities.insert(now.trackIdentity)
+                        pattern.append(String(format: "%.0f", now.extrapolatedPosition()))
+                    }
+                    Log.media.notice(
+                        "skip probe: pass \(pass, privacy: .public) \(pattern.joined(separator: " "), privacy: .public) tracks=\(identities.count, privacy: .public)"
+                    )
+                    identities.removeAll()
+                    try? await Task.sleep(for: .seconds(2))
+                }
+                _ = trace
+                exit(0)
+            }
+        }
+
         // Drives repeat-one against the real player: seeks to just before the
         // end, waits, and reports whether the track looped instead of moving on.
         // Restores playback state afterwards.

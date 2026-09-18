@@ -53,6 +53,12 @@ final class AppModel {
     /// for it. Held here because the player has no way to report it back.
     private(set) var appliesRepeatOne = false
     private var repeatOneTask: Task<Void, Never>?
+    /// The last track seen, so an advance the app did not ask for can be caught.
+    private var lastSeenTrack: (identity: String, position: TimeInterval, duration: TimeInterval)?
+    /// How early this player has been seen to move on, learned from it doing so.
+    private var observedEarlyAdvance: TimeInterval = 0
+    /// Set when the user skips deliberately, so their skip is not undone.
+    private var expectsTrackChange = false
 
     /// Records what the user just asked for, so an in-flight poll cannot undo it.
     func holdToggle(
@@ -331,6 +337,53 @@ final class AppModel {
         updatePreferences { $0.appliesRepeatOne = applies }
     }
 
+    /// Notes that the user asked for a different track, so the next change is
+    /// theirs and must not be undone.
+    func expectTrackChange() {
+        expectsTrackChange = true
+    }
+
+    /// Puts the track back when the player moved on by itself.
+    ///
+    /// The pre-emptive loop is the seamless path, but it can be beaten: Spotify
+    /// can be set to crossfade, which starts the next track seconds before the
+    /// current one reaches the length it reports, and that setting lives on
+    /// Spotify's servers where it cannot be read. So the app also watches for a
+    /// track changing on its own near the end and goes back — and remembers how
+    /// early it happened, so the next loop lands ahead of the crossfade rather
+    /// than behind it and no second recovery is needed.
+    private func recoverFromAutomaticAdvance() {
+        guard let snapshot = media, snapshot.hasTrack else { return }
+        defer {
+            lastSeenTrack = (
+                snapshot.trackIdentity,
+                snapshot.extrapolatedPosition(),
+                snapshot.duration
+            )
+        }
+
+        guard appliesRepeatOne, let previous = lastSeenTrack else { return }
+        guard previous.identity != snapshot.trackIdentity else { return }
+
+        // A skip the user asked for is theirs: repeat-one then applies to
+        // whatever they landed on.
+        if expectsTrackChange {
+            expectsTrackChange = false
+            return
+        }
+        guard RepeatOneLoop.looksAutomatic(
+            previousPosition: previous.position,
+            previousDuration: previous.duration
+        ) else { return }
+
+        let early = max(0, previous.duration - previous.position)
+        observedEarlyAdvance = max(observedEarlyAdvance, early)
+        Log.media.notice(
+            "repeat one: player moved on \(early, format: .fixed(precision: 1), privacy: .public)s early; going back"
+        )
+        previousTrack()
+    }
+
     /// Arranges for the track to loop before the player can move on.
     ///
     /// Rescheduled on every snapshot rather than left to run: the playhead moves
@@ -344,7 +397,8 @@ final class AppModel {
         guard let delay = RepeatOneLoop.delay(
             duration: snapshot.duration,
             position: snapshot.extrapolatedPosition(),
-            isPlaying: snapshot.state.isPlaying
+            isPlaying: snapshot.state.isPlaying,
+            margin: RepeatOneLoop.margin(observedEarlyAdvance: observedEarlyAdvance)
         ) else { return }
 
         Log.media.info("repeat one: looping in \(delay, format: .fixed(precision: 1), privacy: .public)s")
@@ -487,6 +541,7 @@ final class AppModel {
             snapshot = current.with(repeatMode: .one)
         }
         media = snapshot
+        recoverFromAutomaticAdvance()
         scheduleRepeatOneLoop()
 
         guard let snapshot, snapshot.hasTrack else {

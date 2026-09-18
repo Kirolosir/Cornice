@@ -132,8 +132,16 @@ Repeat-one is a good example of the difference between the two. Music has a real
 three-way `song repeat`; Spotify's dictionary exposes `repeating` as a boolean
 and offers no way to ask for the track. So the app provides it: with repeat-one
 set, it seeks back to the start a moment before the end, and the player never
-reaches the point where it would move on. Pre-empting is what keeps it seamless —
-waiting for the track to change means the next one is already playing.
+reaches the point where it would move on.
+
+That moment has to be learned. Spotify can be set to crossfade, which begins the
+next track *seconds* before the current one reaches the length it reports — and
+that setting lives on Spotify's servers, where it cannot be read. Measured here,
+a 230.5 second track was abandoned at about 226. So the app also watches for a
+track changing on its own near the end, puts it back, and remembers how early it
+happened; the next loop lands ahead of the crossfade rather than behind it. A
+skip the user asked for is left alone, and repeat-one follows them to whatever
+they land on.
 
 Everything else that differs between the two players is normalised in one place:
 Spotify reports duration in milliseconds and Music in seconds, Music spells
@@ -220,7 +228,7 @@ Swift 6 with strict concurrency · SwiftUI + AppKit · Core Audio · vDSP · IOK
 SystemConfiguration · Network.framework · Carbon hot keys · no third-party
 dependencies.
 
-**170 tests** across the pure logic: player reply parsing, playhead
+**175 tests** across the pure logic: player reply parsing, playhead
 extrapolation, FFT and beat detection, notch geometry for every display
 configuration, the HUD size table, the indicator's loudness mapping, band
 calibration and spectral tilt, per-player repeat support, the telemetry probe against the running machine, every AppleScript
