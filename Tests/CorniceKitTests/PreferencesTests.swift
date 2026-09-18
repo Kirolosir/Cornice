@@ -196,3 +196,32 @@ final class PreferencesMigrationTests: XCTestCase {
         XCTAssertEqual(wild.sanitized().tintStrength, Preferences.maximumTintStrength)
     }
 }
+
+/// Repeat-one has to be remembered.
+final class RepeatOnePersistenceTests: XCTestCase {
+
+    /// The player has nowhere to store "repeat this track" — that is the whole
+    /// reason the app provides it — so if the app does not remember it either,
+    /// the setting vanishes at every launch. From the outside that is
+    /// indistinguishable from a button that does not work.
+    func testRepeatOneSurvivesAWriteAndRead() throws {
+        var preferences = Preferences()
+        preferences.appliesRepeatOne = true
+
+        let data = try JSONEncoder().encode(preferences)
+        let restored = try JSONDecoder().decode(Preferences.self, from: data)
+
+        XCTAssertTrue(restored.appliesRepeatOne)
+    }
+
+    /// And a file written before the setting existed still loads, with it off.
+    func testAFileWithoutTheSettingLoads() throws {
+        let json = Data(#"{"schemaVersion": 3, "hoverDwell": 0.05}"#.utf8)
+        let restored = try JSONDecoder().decode(Preferences.self, from: json)
+        XCTAssertFalse(restored.appliesRepeatOne)
+    }
+
+    func testItDefaultsOff() {
+        XCTAssertFalse(Preferences().appliesRepeatOne)
+    }
+}

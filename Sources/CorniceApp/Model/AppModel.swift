@@ -172,6 +172,9 @@ final class AppModel {
 
     func start() async {
         preferences = await serviceContainer.preferences.load()
+        // Restored, so the setting survives a relaunch the way a setting should.
+        appliesRepeatOne = preferences.appliesRepeatOne
+        if appliesRepeatOne { Log.media.notice("repeat one: restored") }
         hardware = await serviceContainer.hardware.identity()
         Log.app.notice("running on \(self.hardware?.displayName ?? "unknown", privacy: .public)")
 
@@ -325,6 +328,7 @@ final class AppModel {
         guard applies != appliesRepeatOne else { return }
         appliesRepeatOne = applies
         Log.media.notice("repeat one: \(applies ? "on" : "off", privacy: .public)")
+        updatePreferences { $0.appliesRepeatOne = applies }
     }
 
     /// Arranges for the track to loop before the player can move on.

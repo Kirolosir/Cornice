@@ -103,6 +103,14 @@ public struct Preferences: Codable, Equatable, Sendable {
     /// top of this range the surface stays dark enough behind its own text.
     public var tintStrength: Double
 
+    /// Repeat-one the app is providing for a player that has no such setting.
+    ///
+    /// Persisted because it is a *setting*, and because the player cannot be
+    /// asked to remember it: Spotify has nowhere to store "repeat this track".
+    /// Held only in memory it vanished at every launch, which from the outside
+    /// is indistinguishable from a button that does not work.
+    public var appliesRepeatOne: Bool
+
     // System HUDs
     /// Watch the Downloads folder so a transfer in progress raises a HUD.
     ///
@@ -130,6 +138,7 @@ public struct Preferences: Codable, Equatable, Sendable {
         audioVisualizerEnabled: Bool = false,
         tintFromArtwork: Bool = true,
         tintStrength: Double = 1.8,
+        appliesRepeatOne: Bool = false,
         downloadHUDEnabled: Bool = false,
         timerPresetsMinutes: [Int] = [5, 10, 15, 25],
         notifyOnTimerComplete: Bool = true,
@@ -146,6 +155,7 @@ public struct Preferences: Codable, Equatable, Sendable {
         self.audioVisualizerEnabled = audioVisualizerEnabled
         self.tintFromArtwork = tintFromArtwork
         self.tintStrength = tintStrength
+        self.appliesRepeatOne = appliesRepeatOne
         self.downloadHUDEnabled = downloadHUDEnabled
         self.timerPresetsMinutes = timerPresetsMinutes
         self.notifyOnTimerComplete = notifyOnTimerComplete
@@ -177,6 +187,7 @@ public struct Preferences: Codable, Equatable, Sendable {
         audioVisualizerEnabled = value(.audioVisualizerEnabled, defaults.audioVisualizerEnabled)
         tintFromArtwork = value(.tintFromArtwork, defaults.tintFromArtwork)
         tintStrength = value(.tintStrength, defaults.tintStrength)
+        appliesRepeatOne = value(.appliesRepeatOne, defaults.appliesRepeatOne)
         downloadHUDEnabled = value(.downloadHUDEnabled, defaults.downloadHUDEnabled)
         timerPresetsMinutes = value(.timerPresetsMinutes, defaults.timerPresetsMinutes)
         notifyOnTimerComplete = value(.notifyOnTimerComplete, defaults.notifyOnTimerComplete)

@@ -43,14 +43,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // button does nothing" can be told apart from "the player refused" and
         // from "the player has no such setting".
 
+        if arguments.contains("--probe-transport") {
+            Task { await Self.probeTransport() }
+            return
+        }
+
+        Log.app.notice("Cornice starting")
+
+        let services = ServiceContainer.live()
+        let model = AppModel(services: services)
+        let controller = NotchWindowController(model: model)
+
+        self.model = model
+        self.windowController = controller
+
+        UNUserNotificationCenter.current().delegate = notificationDelegate
+
+        installStatusItem(model: model, controller: controller)
+
         // Drives repeat-one against the real player: seeks to just before the
         // end, waits, and reports whether the track looped instead of moving on.
         // Restores playback state afterwards.
         if arguments.contains("--probe-repeat-one") {
             Task { @MainActor in
-                let model = AppModel(services: ServiceContainer.live())
-                await model.start()
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(for: .seconds(4))
 
                 guard let before = model.media, before.duration > 20 else {
                     Log.media.notice("repeat-one probe: need a loaded track")
@@ -117,26 +133,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Log.media.notice("repeat-one probe: restored")
                 exit(0)
             }
-            return
         }
 
-        if arguments.contains("--probe-transport") {
-            Task { await Self.probeTransport() }
-            return
-        }
-
-        Log.app.notice("Cornice starting")
-
-        let services = ServiceContainer.live()
-        let model = AppModel(services: services)
-        let controller = NotchWindowController(model: model)
-
-        self.model = model
-        self.windowController = controller
-
-        UNUserNotificationCenter.current().delegate = notificationDelegate
-
-        installStatusItem(model: model, controller: controller)
         // Opens the panel and reports what the indicator is actually being fed,
         // which is otherwise only observable by hovering the notch by hand.
         if arguments.contains("--probe-indicator") {
