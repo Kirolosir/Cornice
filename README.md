@@ -17,6 +17,9 @@ before I started building this. Cornice is my own take on the same idea, written
 from scratch in Swift 6 and SwiftUI. No Electron, no private APIs, no helper
 daemon.
 
+It's also the first thing I've written in Swift, which explains a few of the
+detours below.
+
 ![The player](Docs/images/player.png)
 
 ---
@@ -232,6 +235,77 @@ One more thing worth knowing: macOS hands a tap silence instead of an error when
 the permission is missing. So the app checks whether it's hearing anything while
 music is playing and says so, rather than showing you dead bars and leaving you
 to guess.
+
+---
+
+## Things that went wrong
+
+I kept these because the bugs were more interesting than the features, and
+because most of them took me a while to find.
+
+**The timer never counted down.** It showed the right number and then sat
+there. I went looking in the countdown logic, the formatting, the notification
+code. The problem was none of those. SwiftUI was memoising the row against a
+value that never changed, so it had no reason to redraw. The clock was fine the
+whole time and nothing was asking it for the time.
+
+**A one-line AppleScript mistake broke the entire app.** I wrote
+`set rep to (if repeating then "all" else "off")`, which looks reasonable and
+is not valid AppleScript, since there's no conditional expression in the
+language. A compile error kills the whole script, not the one line, so the app
+stopped showing any track at all. The lesson stuck: there's now a test that
+compiles every script the app can send, because a script that fails to compile
+fails completely and silently.
+
+**The visualiser danced along while my Mac was muted.** A process tap captures
+audio before the volume fader, so as far as the FFT was concerned the music was
+playing at full volume. I added the fader as a separate reading, then found the
+bars still twitched at zero because the floor I'd set for "something is playing"
+survived being multiplied by nothing. Then I found the beat detector was adding
+a kick outside that check too. Two separate leaks, same symptom.
+
+**Repeat-one kept switching itself off.** The app set the player's own repeat
+off, since its internal loop was doing the repeating, and then read the player
+back on the next poll, saw repeat was off, and concluded the user must have
+turned it off. It was undoing itself once a second. The mode is held locally now
+and only ends when you press the button.
+
+**A crossfade beat the loop.** Spotify can start the next track seconds before
+the current one reaches its stated length, and that setting lives on Spotify's
+servers where I can't read it. A 230.5 second track got abandoned at around 226,
+so the pre-emptive seek arrived to find a different song already playing. The
+app now watches for that, puts the track back, and remembers how early it
+happened so the next loop lands ahead of it.
+
+**The Spotify sign-in revoked itself two seconds after it worked.** The browser
+delivered the same `cornice://` redirect thirteen times. The first one redeemed
+the code and the other twelve found no pending request waiting, which I was
+treating as a failed sign-in. So it connected, then immediately disconnected,
+and the repeat button quietly went back to the fallback with nothing on screen
+to say why. A repeated redirect is now recognised as a repeat.
+
+**Three different things blocked startup, and I found them one at a time.**
+First the audio tap, which took 5.2 seconds on the main actor. Then
+`system_profiler`, which the app was waiting on to learn the Mac's marketing
+name, a string that only labels the Settings window. Then reading the Spotify
+token out of the Keychain, which stops to ask permission after a rebuild and
+waits as long as it takes you to notice the dialog. Each time, nothing polled
+until the slow thing finished: no track, no artwork, no timers. I'd written a
+comment warning about exactly this after the first one and then put the third
+one directly above it.
+
+**The test suite couldn't be built from a clone.** `Package.swift` declared a
+`Fixtures` folder as a test resource, but the folder was empty, so git never
+tracked it and it didn't exist for anyone who cloned the repo. `swift test`
+failed immediately. I only caught it because I cloned the project into a
+scratch directory to check what a stranger would get.
+
+The through-line is that I stopped guessing. Most of the second half of this
+project was spent building small diagnostic probes (`--probe-audio`,
+`--probe-repeat-one`, and friends, all in `Diagnostics/Probes.swift`) that run
+the real code from inside the app bundle and log what actually happened.
+Permissions are granted to a bundle and not to a terminal, so testing from the
+command line was answering a different question than the one I was asking.
 
 ---
 
