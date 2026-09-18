@@ -11,14 +11,21 @@ there too.
 It never takes focus, so clicking it doesn't pull you out of whatever you were
 doing.
 
-This is a passion project. I've wanted a Dynamic Island on my Mac since I first
-used one on a phone, and I was using [Atoll](https://github.com/Atoll-Labs/Atoll)
-before I started building this. Cornice is my own take on the same idea, written
-from scratch in Swift 6 and SwiftUI. No Electron, no private APIs, no helper
-daemon.
+I'm a CS student and this is the first thing I've written in Swift. I started it
+for two reasons. I'd wanted a Dynamic Island on my Mac since I first used one on
+a phone, and I wanted a project big enough to actually learn a language on
+instead of another CRUD app with a login page.
 
-It's also the first thing I've written in Swift, which explains a few of the
-detours below.
+It turned out to be a good choice for that, mostly because so much of it is
+stuff you can't fake. The notch is a real measurement, the audio is a real FFT,
+and the CPU numbers either match Activity Monitor or they don't. There's no
+partial credit. Most of what I now know about SwiftUI, Core Audio and
+AppleScript I learned by getting it wrong first, and I kept a section below
+about the bugs because they're the part I actually learned from.
+
+I was using [Atoll](https://github.com/Atoll-Labs/Atoll) before I started this,
+and it's what convinced me the idea works on a Mac. Cornice is my own take on it,
+written from scratch. No Electron, no private APIs, no helper daemon.
 
 ![The player](Docs/images/player.png)
 
@@ -99,6 +106,45 @@ keep. The refresh token it gives back is sensitive, and that goes in the Keychai
 
 ---
 
+## How the code is laid out
+
+Two targets. `CorniceKit` holds everything with no UI in it, and `CorniceApp` is
+the SwiftUI app on top. I split it that way so the logic could be tested without
+launching a window, which is why none of the tests need a running music player or
+audio permission.
+
+```
+Sources/
+  CorniceKit/
+    Audio/        FFT, band folding, beat detection, the Core Audio process tap
+    Media/        Apple Music and Spotify over AppleScript
+      Spotify/    OAuth and the Web API, for repeat-one
+    Notch/        Measuring the notch, picking which display to live on
+    System/       HUD sources: power, network, VPN, downloads
+    Telemetry/    CPU and memory out of host_statistics
+    Focus/        Timers
+    Process/      Running subprocesses with timeouts and cancellation
+    Settings/     Preferences and their migration
+    Support/      Errors, logging, formatting, clamping
+  CorniceApp/
+    Views/        The surface itself, the three panes, the HUDs
+    Model/        AppModel and its extensions, all the observable state
+    Window/       The NSPanel and its geometry
+    Design/       Colour, type and motion tokens
+    Diagnostics/  The --probe flags
+Tests/
+  CorniceKitTests/
+```
+
+Roughly 12,000 lines of Swift and 2,600 of tests.
+
+Most of the interesting stuff is in `CorniceKit`. If you only want to read one
+file, `Notch/NotchGeometryResolver.swift` is probably the most self-contained
+piece: it takes a screen and works out where the notch is, with two fallbacks for
+when macOS won't tell you directly.
+
+---
+
 ## How it works
 
 ### One object that changes size
@@ -172,7 +218,7 @@ The obvious route is closed. `MediaRemote` is the private framework most notch
 utilities use, and since macOS 15.4 Apple gates it on the caller's platform
 signature, so a third-party app just gets an empty dictionary back. The known
 workaround is to load a helper into an Apple-signed binary and inherit privileges
-that binary was granted and you weren't. I didn't want to ship that.
+that binary was granted and you weren't. I didn't want to ship something that fragile.
 
 The cost of staying on the supported path is browser audio, which Cornice can't
 see. What you get for it is full metadata and artwork, working transport control,
@@ -202,8 +248,8 @@ also watches for a track changing on its own near the end, puts it back, and
 remembers how early it happened. The next loop lands ahead of the crossfade
 instead of behind it.
 
-All of that is a lot of machinery standing in for one API call, which is most of
-why I went and made the API call.
+That's a lot of moving parts standing in for one API call, which is basically
+why I went and learned how to do the API call.
 
 One thing Cornice does differently from Spotify on purpose: with repeat-one on,
 the skip button restarts the song instead of moving to the next one. Spotify's
@@ -245,11 +291,11 @@ Band magnitudes get compensated for music's natural downward slope. Recorded
 music is roughly pink noise, meaning equal energy per octave, so the amplitude in
 any one FFT bin falls off as `1/√f`. Reading the peak bin per band reports the
 bottom of the spectrum as loud and the top as nearly silent, which is accurate
-and useless. Measured against synthetic pink noise the lowest band came back
+and useless. Measured against synthetic pink noise, the lowest band came back
 15.0× the highest, and `√f` predicts 15.5, so the compensation is `√(centre
 frequency)`. That's a property of the signal rather than a curve I fitted to one
-song. Pink noise now draws as a level row, which is the test that keeps it
-honest.
+song. Pink noise now draws as a flat row of bars, and there's a test that checks
+exactly that, so if I break the compensation later the test tells me.
 
 Calibration was a separate problem. A pure tone puts all its energy in one FFT
 bin and music spreads itself over hundreds, so a chain tuned on a sine wave reads
@@ -326,8 +372,9 @@ tracked it and it didn't exist for anyone who cloned the repo. `swift test`
 failed immediately. I only caught it because I cloned the project into a
 scratch directory to check what a stranger would get.
 
-The through-line is that I stopped guessing. Most of the second half of this
-project was spent building small diagnostic probes (`--probe-audio`,
+The pattern in all of these is that I was guessing, and guessing kept being
+wrong. So I stopped. A lot of the second half of this project went into small
+diagnostic probes (`--probe-audio`,
 `--probe-repeat-one`, and friends, all in `Diagnostics/Probes.swift`) that run
 the real code from inside the app bundle and log what actually happened.
 Permissions are granted to a bundle and not to a terminal, so testing from the
@@ -385,6 +432,33 @@ processes. None of them need a running music player or audio permission.
 ```bash
 make test
 ```
+
+---
+
+## What I'd do differently
+
+**`AppModel` is too big.** It's 780 lines even after splitting the actions, the
+HUD logic and the Spotify code into separate extension files. It ended up as the
+place where everything meets, which made it easy to write and is now the file I'm
+most nervous about changing. If I started again I'd give the media, timer and
+telemetry state their own observable objects instead of one.
+
+**I should have written the probes on day one.** I spent a long time guessing at
+things I could have just measured, particularly with the audio and the repeat
+handling. Every one of those bugs got fixed within an hour of the moment I
+stopped guessing and printed what was actually happening.
+
+**The tests don't run on my own machine.** XCTest ships with Xcode, not with the
+Command Line Tools, so `swift test` doesn't work on the setup I built this on.
+I got around it by writing a stand-in harness, which works but isn't the real
+thing. I should have noticed that constraint before writing 200 tests against a
+framework I couldn't run.
+
+**Browser audio still bothers me.** Most of what I listen to is in a browser tab,
+and Cornice can't see any of it, because the supported APIs only cover apps that
+expose a scripting interface. The visualiser picks it up, since the audio tap
+hears everything, but there's no track or artwork to show next to it. I don't
+have a good answer for this that doesn't involve private frameworks.
 
 ---
 
