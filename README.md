@@ -16,6 +16,11 @@ for two reasons. I'd wanted a Dynamic Island on my Mac since I first used one on
 a phone, and I wanted a project big enough to actually learn a language on
 instead of another CRUD app with a login page.
 
+I'm a big fan of Apple's hardware and the way they design software, and the
+Dynamic Island is my favourite thing they've shipped in years. It takes a piece
+of hardware nobody asked for and turns it into the most useful part of the
+screen. I wanted that on the machine I actually use all day.
+
 It turned out to be a good choice for that, mostly because so much of it is
 stuff you can't fake. The notch is a real measurement, the audio is a real FFT,
 and the CPU numbers either match Activity Monitor or they don't. There's no
@@ -493,9 +498,15 @@ have a good answer for this that doesn't involve private frameworks.
 
 The idea comes from Apple's Dynamic Island, and
 [Atoll](https://github.com/Atoll-Labs/Atoll) is what convinced me it could work
-on a Mac. Cornice shares no code with it. Atoll is GPL v3 and this is MIT, which
-only works because I wrote everything here from scratch, and writing it was the
-whole point.
+on a Mac. I used it for a while before starting this and it's a good app.
+
+Cornice is not a fork or a reskin of it. The UI is my own, the geometry is my
+own, and a fair amount of what's here Atoll doesn't do: the Spotify Web API
+sign-in for real repeat-one, the pink-noise spectral compensation on the
+visualiser, bars that respond to the system volume, per-region artwork tinting,
+and the eleven system HUDs. Cornice shares no code with it. Atoll is GPL v3 and
+this is MIT, which only works because I wrote everything here from scratch, and
+writing it was the whole point.
 
 ---
 
