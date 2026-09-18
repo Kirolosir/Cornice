@@ -98,13 +98,17 @@ extension AppModel {
         let wanted = snapshot.repeatMode.next(on: snapshot.source)
 
         // Where the player has no repeat-one of its own, the app provides it by
-        // looping the track. The player is still told to repeat, so that a
-        // missed loop lands on the playlist rather than stopping dead.
-        setAppliesRepeatOne(wanted == .one && !snapshot.source.nativelyRepeatsOne)
+        // looping the track itself.
+        let appProvides = wanted == .one && !snapshot.source.nativelyRepeatsOne
+        setAppliesRepeatOne(appProvides)
 
         applyMedia(snapshot.with(repeatMode: wanted))
         holdToggle(repeatMode: wanted)
-        send(.setRepeat(wanted))
+        // The player is told plain repeat is *off* for that mode, because the
+        // loop is what does the repeating. Leaving the player's own repeat on
+        // would mean the app's idea of the mode depended on a reading that says
+        // nothing about it.
+        send(.setRepeat(appProvides ? .off : wanted))
         scheduleRepeatOneLoop()
     }
 

@@ -322,7 +322,9 @@ final class AppModel {
 
     /// Marks repeat-one as the app's responsibility for this player.
     func setAppliesRepeatOne(_ applies: Bool) {
+        guard applies != appliesRepeatOne else { return }
         appliesRepeatOne = applies
+        Log.media.notice("repeat one: \(applies ? "on" : "off", privacy: .public)")
     }
 
     /// Arranges for the track to loop before the player can move on.
@@ -341,6 +343,7 @@ final class AppModel {
             isPlaying: snapshot.state.isPlaying
         ) else { return }
 
+        Log.media.info("repeat one: looping in \(delay, format: .fixed(precision: 1), privacy: .public)s")
         repeatOneTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled else { return }
@@ -467,14 +470,17 @@ final class AppModel {
 
         var snapshot = reconcile(polled)
         // The player cannot report a mode it does not have, so a repeat-one the
-        // app is providing is layered back on — and dropped the moment the user
-        // turns repeat off in the player itself.
+        // app is providing is layered back on.
+        //
+        // Held purely locally, and never cleared from a reading. Deciding it was
+        // off whenever the player reported repeat off made the feature
+        // self-destructing: the app sets the player's own repeat *off* for this
+        // mode — the loop is what does the repeating — so an honest poll saying
+        // "repeat is off" is the normal case, not a reason to give up. Any
+        // dropped command or race did the same thing. It now ends only when the
+        // button is pressed again.
         if appliesRepeatOne, let current = snapshot {
-            if current.repeatMode == .off {
-                appliesRepeatOne = false
-            } else {
-                snapshot = current.with(repeatMode: .one)
-            }
+            snapshot = current.with(repeatMode: .one)
         }
         media = snapshot
         scheduleRepeatOneLoop()

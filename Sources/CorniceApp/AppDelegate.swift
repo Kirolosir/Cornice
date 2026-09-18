@@ -74,14 +74,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
                 if !wasPlaying { model.playPause() }
                 try? await Task.sleep(for: .milliseconds(800))
+
+                // Soak: the mode has to survive a stretch of ordinary polling.
+                // Clearing it from a reading made the feature die quietly a few
+                // seconds after it was switched on.
+                var soak: [String] = []
+                for _ in 0..<6 {
+                    try? await Task.sleep(for: .seconds(2))
+                    let m = model.media
+                    soak.append(String(
+                        format: "%@/%@/%.0f",
+                        m?.repeatMode.rawValue ?? "?",
+                        m?.state.rawValue ?? "?",
+                        m?.extrapolatedPosition() ?? -1
+                    ))
+                }
+                Log.media.notice("repeat-one probe: soak \(soak.joined(separator: " "), privacy: .public)")
+
                 model.seek(toProgress: (before.duration - 6) / before.duration)
                 try? await Task.sleep(for: .seconds(1))
 
                 var trace: [String] = []
                 for _ in 0..<16 {
                     try? await Task.sleep(for: .milliseconds(750))
-                    let position = model.media?.extrapolatedPosition() ?? -1
-                    trace.append(String(format: "%.1f", position))
+                    let m = model.media
+                    trace.append(String(
+                        format: "%.1f%@", m?.extrapolatedPosition() ?? -1,
+                        m?.state.isPlaying == true ? "" : "(paused)"
+                    ))
                 }
                 Log.media.notice("repeat-one probe: positions \(trace.joined(separator: " "), privacy: .public)")
 
