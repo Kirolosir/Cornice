@@ -128,7 +128,14 @@ What the supported path gives up is browser audio. What it gains is full metadat
 and artwork, real transport control, and a binary that will not break on the next
 macOS release.
 
-Everything that differs between the two players is normalised in one place:
+Repeat-one is a good example of the difference between the two. Music has a real
+three-way `song repeat`; Spotify's dictionary exposes `repeating` as a boolean
+and offers no way to ask for the track. So the app provides it: with repeat-one
+set, it seeks back to the start a moment before the end, and the player never
+reaches the point where it would move on. Pre-empting is what keeps it seamless —
+waiting for the track to change means the next one is already playing.
+
+Everything else that differs between the two players is normalised in one place:
 Spotify reports duration in milliseconds and Music in seconds, Music spells
 repeat as `off`/`one`/`all` where Spotify uses a boolean, and AppleScript renders
 numbers in the user's locale — so a comma-decimal machine returns `182,813` and a
@@ -213,7 +220,7 @@ Swift 6 with strict concurrency · SwiftUI + AppKit · Core Audio · vDSP · IOK
 SystemConfiguration · Network.framework · Carbon hot keys · no third-party
 dependencies.
 
-**162 tests** across the pure logic: player reply parsing, playhead
+**167 tests** across the pure logic: player reply parsing, playhead
 extrapolation, FFT and beat detection, notch geometry for every display
 configuration, the HUD size table, the indicator's loudness mapping, band
 calibration and spectral tilt, per-player repeat support, the telemetry probe against the running machine, every AppleScript
@@ -230,9 +237,6 @@ make test
 ## Limitations
 
 - Apple Music and Spotify only; browser audio is invisible for the reason above.
-- **Repeat-one is Music only.** Spotify's scripting interface exposes `repeating`
-  as a boolean and nothing else, so the button toggles rather than cycling there.
-  Set repeat-one in Spotify itself and Cornice will show repeat as on.
 - Built-in display only, not every screen in a multi-monitor setup.
 - Ad-hoc signed, so not notarized — and because macOS ties a permission to the
   code signature, **rebuilding invalidates the audio-capture grant**. If the

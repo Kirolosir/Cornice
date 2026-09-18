@@ -94,12 +94,18 @@ extension AppModel {
     }
 
     func cycleRepeat() {
-        if let snapshot = media {
-            let wanted = snapshot.repeatMode.next(on: snapshot.source)
-            applyMedia(snapshot.with(repeatMode: wanted))
-            holdToggle(repeatMode: wanted)
-        }
-        send(.cycleRepeat)
+        guard let snapshot = media else { return }
+        let wanted = snapshot.repeatMode.next(on: snapshot.source)
+
+        // Where the player has no repeat-one of its own, the app provides it by
+        // looping the track. The player is still told to repeat, so that a
+        // missed loop lands on the playlist rather than stopping dead.
+        setAppliesRepeatOne(wanted == .one && !snapshot.source.nativelyRepeatsOne)
+
+        applyMedia(snapshot.with(repeatMode: wanted))
+        holdToggle(repeatMode: wanted)
+        send(.setRepeat(wanted))
+        scheduleRepeatOneLoop()
     }
 
     private func send(_ command: MediaCommand) {
@@ -151,6 +157,39 @@ extension AppModel {
     func openSoundSettings() {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.Sound-Settings.extension") else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    /// Clears the app's own audio-capture permission and asks again.
+    ///
+    /// Worth a button because this app is ad-hoc signed, and macOS ties a
+    /// permission to the code signature: every rebuild is a different signature
+    /// and therefore a different app as far as TCC is concerned, so the grant is
+    /// dropped and a fresh prompt appears. A prompt that is missed or dismissed
+    /// leaves the tap running and fed silence — macOS reports no error for a
+    /// refused tap — and the visualiser simply stops working with no way back
+    /// short of knowing the incantation.
+    ///
+    /// Only ever resets this app's own entry.
+    func resetAudioPermission() {
+        let bundleIdentifier = Bundle.main.bundleIdentifier ?? "dev.cornice.app"
+        Task { [weak self] in
+            let runner = SubprocessRunner()
+            do {
+                _ = try await runner.run(Command(
+                    executable: "/usr/bin/tccutil",
+                    arguments: ["reset", "AudioCapture", bundleIdentifier],
+                    timeout: 10
+                ))
+                Log.audio.notice("audio permission reset; restarting capture")
+            } catch {
+                Log.audio.error("could not reset audio permission: \(String(describing: error), privacy: .public)")
+            }
+            await MainActor.run {
+                guard let self else { return }
+                self.stopVisualizer()
+                self.startVisualizer()
+            }
+        }
     }
 
     func openAudioRecordingSettings() {

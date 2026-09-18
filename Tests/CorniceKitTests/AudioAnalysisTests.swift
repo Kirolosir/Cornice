@@ -353,36 +353,31 @@ final class SpectralTiltTests: XCTestCase {
     }
 }
 
-/// Which repeat modes each player can actually be put into.
+/// Repeat modes, and which of them the player itself can provide.
 final class RepeatModeTests: XCTestCase {
 
-    /// Music's `song repeat` is a real three-way.
-    func testMusicCyclesThroughAllThreeModes() {
-        XCTAssertEqual(RepeatMode.off.next(on: .appleMusic), .all)
-        XCTAssertEqual(RepeatMode.all.next(on: .appleMusic), .one)
-        XCTAssertEqual(RepeatMode.one.next(on: .appleMusic), .off)
+    /// The button offers all three on both players. Where the player has no
+    /// repeat-one, the app produces it by looping the track.
+    func testBothPlayersCycleThroughAllThreeModes() {
+        for source in MediaSource.allCases {
+            XCTAssertEqual(RepeatMode.off.next(on: source), .all, "\(source.rawValue)")
+            XCTAssertEqual(RepeatMode.all.next(on: source), .one, "\(source.rawValue)")
+            XCTAssertEqual(RepeatMode.one.next(on: source), .off, "\(source.rawValue)")
+        }
     }
 
-    /// Spotify's scripting interface exposes `repeating` as a boolean and
-    /// nothing else, so offering a third state would display a mode the player
-    /// is not in and make the second press look like it did nothing.
-    func testSpotifyOnlyToggles() {
-        XCTAssertEqual(RepeatMode.off.next(on: .spotify), .all)
-        XCTAssertEqual(RepeatMode.all.next(on: .spotify), .off)
-        XCTAssertEqual(RepeatMode.one.next(on: .spotify), .off)
+    /// Music's `song repeat` is a real three-way; Spotify's `repeating` is a
+    /// boolean, so repeat-one there is the app's own doing.
+    func testOnlyMusicRepeatsOneByItself() {
+        XCTAssertTrue(MediaSource.appleMusic.nativelyRepeatsOne)
+        XCTAssertFalse(MediaSource.spotify.nativelyRepeatsOne)
     }
 
-    func testOnlyMusicClaimsRepeatOne() {
-        XCTAssertTrue(MediaSource.appleMusic.supportsRepeatOne)
-        XCTAssertFalse(MediaSource.spotify.supportsRepeatOne)
-    }
-
-    /// Cycling a player can never land on a mode it does not support.
-    func testCyclingNeverReachesAnUnsupportedMode() {
-        var mode = RepeatMode.off
-        for _ in 0..<12 {
-            mode = mode.next(on: .spotify)
-            XCTAssertNotEqual(mode, .one)
+    func testCyclingReturnsToWhereItStartedAfterThreePresses() {
+        for source in MediaSource.allCases {
+            var mode = RepeatMode.off
+            for _ in 0..<3 { mode = mode.next(on: source) }
+            XCTAssertEqual(mode, .off, "\(source.rawValue)")
         }
     }
 }

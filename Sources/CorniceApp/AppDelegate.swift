@@ -42,6 +42,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Sends the transport commands and reads the player back, so "the
         // button does nothing" can be told apart from "the player refused" and
         // from "the player has no such setting".
+
+        // Drives repeat-one against the real player: seeks to just before the
+        // end, waits, and reports whether the track looped instead of moving on.
+        // Restores playback state afterwards.
+        if arguments.contains("--probe-repeat-one") {
+            Task { @MainActor in
+                let model = AppModel(services: ServiceContainer.live())
+                await model.start()
+                try? await Task.sleep(for: .seconds(2))
+
+                guard let before = model.media, before.duration > 20 else {
+                    Log.media.notice("repeat-one probe: need a loaded track")
+                    exit(0)
+                }
+                let wasPlaying = before.state.isPlaying
+                let wasAt = before.extrapolatedPosition()
+                Log.media.notice(
+                    "repeat-one probe: \(before.title.isEmpty ? "track" : "track", privacy: .public) duration=\(before.duration, format: .fixed(precision: 1), privacy: .public) wasPlaying=\(wasPlaying, privacy: .public)"
+                )
+
+                // Drive to repeat-one explicitly rather than assuming where the
+                // cycle starts.
+                let startedAt = before.repeatMode
+                for _ in 0..<3 where model.media?.repeatMode != .one {
+                    model.cycleRepeat()
+                    try? await Task.sleep(for: .milliseconds(700))
+                }
+                Log.media.notice("repeat-one probe: started from \(startedAt.rawValue, privacy: .public)")
+                Log.media.notice("repeat-one probe: mode=\(model.media?.repeatMode.rawValue ?? "?", privacy: .public) appApplies=\(model.appliesRepeatOne, privacy: .public)")
+
+                if !wasPlaying { model.playPause() }
+                try? await Task.sleep(for: .milliseconds(800))
+                model.seek(toProgress: (before.duration - 6) / before.duration)
+                try? await Task.sleep(for: .seconds(1))
+
+                var trace: [String] = []
+                for _ in 0..<16 {
+                    try? await Task.sleep(for: .milliseconds(750))
+                    let position = model.media?.extrapolatedPosition() ?? -1
+                    trace.append(String(format: "%.1f", position))
+                }
+                Log.media.notice("repeat-one probe: positions \(trace.joined(separator: " "), privacy: .public)")
+
+                // Put things back.
+                for _ in 0..<3 where model.media?.repeatMode != startedAt {
+                    model.cycleRepeat()
+                    try? await Task.sleep(for: .milliseconds(700))
+                }
+                model.seek(toProgress: wasAt / before.duration)
+                try? await Task.sleep(for: .milliseconds(500))
+                if !wasPlaying { model.playPause() }
+                try? await Task.sleep(for: .milliseconds(800))
+                Log.media.notice("repeat-one probe: restored")
+                exit(0)
+            }
+            return
+        }
+
         if arguments.contains("--probe-transport") {
             Task { await Self.probeTransport() }
             return

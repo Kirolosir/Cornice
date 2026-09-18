@@ -22,10 +22,12 @@ public enum MediaSource: String, Sendable, Codable, CaseIterable, Identifiable {
         }
     }
 
-    /// Whether the player can be asked to repeat a single track.
+    /// Whether the *player* can be asked to repeat a single track.
     ///
-    /// Music can; Spotify's dictionary has only a boolean `repeating`.
-    public var supportsRepeatOne: Bool {
+    /// Music can, through `song repeat`. Spotify's dictionary has only a boolean
+    /// `repeating`, so repeat-one there is the app's own doing — see
+    /// `RepeatOneLoop` — which is why the button offers it either way.
+    public var nativelyRepeatsOne: Bool {
         switch self {
         case .appleMusic: true
         case .spotify: false
@@ -54,15 +56,12 @@ public enum RepeatMode: String, Sendable, Equatable, CaseIterable {
     case all
     case one
 
-    /// The next mode the button moves to on the given player.
+    /// The next mode the button moves to.
     ///
-    /// Not every player has three. Spotify's scripting interface exposes
-    /// `repeating` as a **boolean** and nothing else — there is no way to ask it
-    /// for repeat-one, however many times its own button cycles — so offering a
-    /// third state there would show a mode the player is not in and make the
-    /// second press look broken. Music's `song repeat` is a real three-way.
+    /// All three on both players. Spotify cannot be *asked* for repeat-one, so
+    /// the app produces it by looping the track itself; from the button's point
+    /// of view the cycle is the same either way.
     public func next(on source: MediaSource) -> RepeatMode {
-        guard source.supportsRepeatOne else { return self == .off ? .all : .off }
         switch self {
         case .off: return .all
         case .all: return .one
@@ -203,6 +202,9 @@ public enum MediaCommand: Sendable, Equatable {
     case setVolume(Double)
     case toggleShuffle
     case cycleRepeat
+    /// Set the repeat mode outright. A boolean toggle cannot express three
+    /// states, and cannot be aimed at one.
+    case setRepeat(RepeatMode)
 }
 
 /// Reads and controls a media application.

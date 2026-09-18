@@ -49,6 +49,11 @@ final class AppModel {
 
     private var pendingToggle: PendingToggle?
 
+    /// Repeat-one the app is providing itself, for a player that cannot be asked
+    /// for it. Held here because the player has no way to report it back.
+    private(set) var appliesRepeatOne = false
+    private var repeatOneTask: Task<Void, Never>?
+
     /// Records what the user just asked for, so an in-flight poll cannot undo it.
     func holdToggle(
         isShuffling: Bool? = nil,
@@ -315,6 +320,41 @@ final class AppModel {
         isVisualizerLive || media?.state.isPlaying == true
     }
 
+    /// Marks repeat-one as the app's responsibility for this player.
+    func setAppliesRepeatOne(_ applies: Bool) {
+        appliesRepeatOne = applies
+    }
+
+    /// Arranges for the track to loop before the player can move on.
+    ///
+    /// Rescheduled on every snapshot rather than left to run: the playhead moves
+    /// when the user scrubs, the track changes, and playback pauses, and each of
+    /// those makes the previous plan wrong.
+    func scheduleRepeatOneLoop() {
+        repeatOneTask?.cancel()
+        repeatOneTask = nil
+
+        guard appliesRepeatOne, let snapshot = media, snapshot.hasTrack else { return }
+        guard let delay = RepeatOneLoop.delay(
+            duration: snapshot.duration,
+            position: snapshot.extrapolatedPosition(),
+            isPlaying: snapshot.state.isPlaying
+        ) else { return }
+
+        repeatOneTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            self?.loopCurrentTrack()
+        }
+    }
+
+    private func loopCurrentTrack() {
+        guard appliesRepeatOne, let snapshot = media, snapshot.state.isPlaying else { return }
+        Log.media.info("repeat one: looping \(snapshot.source.rawValue, privacy: .public)")
+        seek(toProgress: 0)
+        scheduleRepeatOneLoop()
+    }
+
     /// Whether the travelling artwork is on screen at all.
     ///
     /// It is one view across every state, so this is asked once rather than
@@ -425,8 +465,19 @@ final class AppModel {
         let polled = await coordinator.snapshot()
         mediaPermissionDenied = await coordinator.allSourcesUnavailable()
 
-        let snapshot = reconcile(polled)
+        var snapshot = reconcile(polled)
+        // The player cannot report a mode it does not have, so a repeat-one the
+        // app is providing is layered back on — and dropped the moment the user
+        // turns repeat off in the player itself.
+        if appliesRepeatOne, let current = snapshot {
+            if current.repeatMode == .off {
+                appliesRepeatOne = false
+            } else {
+                snapshot = current.with(repeatMode: .one)
+            }
+        }
         media = snapshot
+        scheduleRepeatOneLoop()
 
         guard let snapshot, snapshot.hasTrack else {
             artwork = nil

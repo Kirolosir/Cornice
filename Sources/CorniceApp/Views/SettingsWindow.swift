@@ -236,10 +236,17 @@ struct VisualizerSettings: View {
                             Text("The visualiser is running but hearing silence while music plays. macOS gives an app silence instead of an error when System Audio Recording has not been allowed.")
                                 .font(.caption)
                                 .fixedSize(horizontal: false, vertical: true)
-                            Button("Open Audio Recording settings") {
-                                model.openAudioRecordingSettings()
+                            HStack(spacing: 10) {
+                                Button("Ask again") { model.resetAudioPermission() }
+                                Button("Open Audio Recording settings") {
+                                    model.openAudioRecordingSettings()
+                                }
                             }
                             .font(.caption)
+                            Text("Cornice is ad-hoc signed, and macOS ties a permission to the code signature — so rebuilding it looks like a different app and the grant is dropped.")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }

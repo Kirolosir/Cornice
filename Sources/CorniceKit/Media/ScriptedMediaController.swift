@@ -404,6 +404,15 @@ public actor ScriptedMediaController: MediaControlling {
             case .appleMusic:
                 return "tell application \"Music\" to set shuffle enabled to not shuffle enabled"
             }
+        case .setRepeat(let mode):
+            switch source {
+            case .spotify:
+                // The only thing Spotify's dictionary offers. Repeat-one is
+                // carried by the app looping the track, not by the player.
+                return "tell application \"Spotify\" to set repeating to \(mode == .off ? "false" : "true")"
+            case .appleMusic:
+                return "tell application \"Music\" to set song repeat to \(mode.rawValue)"
+            }
         case .cycleRepeat:
             switch source {
             case .spotify:

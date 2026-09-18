@@ -164,12 +164,7 @@ struct MediaPane: View {
         switch snapshot.repeatMode {
         case .off: "Repeat off"
         case .one: "Repeating this track"
-        case .all:
-            snapshot.source.supportsRepeatOne
-                ? "Repeating everything"
-                // Spotify's scripting interface exposes repeat as a boolean, so
-                // "on" is the whole of what can be known or set from here.
-                : "Repeat on — Spotify only reports on or off"
+        case .all: "Repeating everything"
         }
     }
 
