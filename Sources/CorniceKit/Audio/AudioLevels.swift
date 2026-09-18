@@ -51,13 +51,30 @@ public struct AudioLevels: Sendable, Equatable {
         guard !bands.isEmpty else { return Array(repeating: resting, count: count) }
 
         // What is actually reaching the room: the stream's own level, scaled by
-        // how far the fader is up. The exponent softens it, because halving the
-        // volume does not halve how loud the music feels.
-        let audible = min(1, max(0, level)) * pow(min(1, max(0, outputVolume)), 0.6)
+        // how far the fader is up *relative to a normal listening volume*.
+        //
+        // Scaling straight off the fader was wrong in both directions. It shrank
+        // everything at ordinary volumes, so the indicator got quieter than it
+        // had been before the fader was considered at all; and the spread
+        // between one volume and another was too narrow to notice, so it did not
+        // buy the responsiveness it cost. Measured against a reference of 0.7,
+        // a normal volume now reads at full strength, a loud one is allowed to
+        // push past it, and a quiet one plainly falls away.
+        let reference: Float = 0.7
+        let fader = min(1, max(0, outputVolume))
+        let volumeFactor = min(1.3, fader / reference)
+        let audible = min(1, min(1, max(0, level)) * volumeFactor)
 
         // A floor under the swing, so quiet-but-audible music still moves rather
         // than sitting at rest and reading as broken — while loud music still
         // plainly moves more.
+        //
+        // Both numbers were wrong before and in the same direction: a floor of
+        // 0.25 under a 0.45 exponent is heavily compressive, and left barely a
+        // fifth of the bars' travel covering a tenfold change in volume. That is
+        // technically a response and perceptually a flat line. A lower floor and
+        // a gentler curve spread the same range over something a person can
+        // actually see.
         //
         // The gate is what stops that floor outliving the audio. Applied
         // unconditionally it left a quarter of the travel in place at zero
@@ -65,8 +82,10 @@ public struct AudioLevels: Sendable, Equatable {
         // was doing its job and doing it when there was nothing to report. It
         // closes smoothly rather than snapping, so the bars settle out as the
         // volume comes down instead of vanishing at a threshold.
-        let gate = min(1, audible / 0.02)
-        let headroom = gate * (0.25 + 0.75 * pow(audible, 0.45))
+        // Low enough that it only bites on genuine silence and a muted fader,
+        // rather than on quiet music.
+        let gate = min(1, audible / 0.006)
+        let headroom = gate * (0.10 + 0.90 * pow(audible, 0.8))
 
         return (0..<count).map { index in
             // Expanded a little before it drives the bar. Band values sit in the

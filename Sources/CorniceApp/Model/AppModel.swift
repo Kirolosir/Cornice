@@ -404,6 +404,7 @@ final class AppModel {
     // MARK: - Media
 
     private func refreshMedia() async {
+        readOutputVolume()
         let coordinator = serviceContainer.media
         runningPlayers = await coordinator.runningSources()
         let polled = await coordinator.snapshot()
@@ -442,12 +443,7 @@ final class AppModel {
     func sampleLevels() {
         guard preferences.audioVisualizerEnabled else { return }
         let now = Date()
-        if volumeReadAt.map({ now.timeIntervalSince($0) > 0.25 }) ?? true {
-            volumeReadAt = now
-            // No control at all means the device has no fader, which is not the
-            // same as silent — assume it is playing at full.
-            outputVolume = Float(serviceContainer.outputVolume.current() ?? 1)
-        }
+        readOutputVolume(at: now)
 
         let latest = serviceContainer.visualizer.latestLevels()
         levels = latest
@@ -459,6 +455,27 @@ final class AppModel {
         if !wasHearing, !latest.isSilent {
             Log.audio.notice("visualiser hearing audio")
         }
+    }
+
+    /// Re-reads the output fader, at most a few times a second.
+    ///
+    /// Called from the frame timer while the surface is visible *and* from the
+    /// polling loop, which always runs. Reading it only from the frame timer
+    /// meant the value stayed at its initial full-volume assumption until the
+    /// panel was first opened — and the bars are sized by it.
+    func readOutputVolume(at now: Date = .now) {
+        guard volumeReadAt.map({ now.timeIntervalSince($0) > 0.25 }) ?? true else { return }
+        volumeReadAt = now
+        // No control at all means the device has no fader, which is not the same
+        // as silent — assume it is playing at full.
+        let reading = serviceContainer.outputVolume.current()
+        let updated = Float(reading ?? 1)
+        if abs(updated - outputVolume) > 0.001 {
+            Log.audio.notice(
+                "output fader: \(reading.map { String(format: "%.3f", $0) } ?? "no control", privacy: .public)"
+            )
+        }
+        outputVolume = updated
     }
 
     /// Whether the analyser has heard anything recently.

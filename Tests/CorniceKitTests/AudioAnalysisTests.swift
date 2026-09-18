@@ -593,6 +593,30 @@ final class OutputVolumeResponseTests: XCTestCase {
         )
     }
 
+    /// The response has to be *perceptible*, not merely present.
+    ///
+    /// Every ordering test below passed against a curve that put barely a fifth
+    /// of the bars' travel across a tenfold change in volume — technically a
+    /// response, and a flat line to look at. This asserts the size of it.
+    func testTheFaderCoversAUsefulPartOfTheTravel() {
+        let loudest = levels(0.5).barHeights(count: 3, outputVolume: 1.0)[0]
+        let quietest = levels(0.5).barHeights(count: 3, outputVolume: 0.1)[0]
+        XCTAssertGreaterThan(loudest - quietest, 0.2, "a tenfold volume change must be plain to see")
+    }
+
+    /// And the extremes should span most of the bar, not huddle in the middle.
+    func testTheExtremesSpanTheBar() {
+        let loud = AudioLevels(
+            bands: [Float](repeating: 0.8, count: 8), level: 0.92, isBeat: false, beatIntensity: 0
+        ).barHeights(count: 3, outputVolume: 1)[0]
+        let quiet = AudioLevels(
+            bands: [Float](repeating: 0.25, count: 8), level: 0.15, isBeat: false, beatIntensity: 0
+        ).barHeights(count: 3, outputVolume: 0.2)[0]
+
+        XCTAssertGreaterThan(loud, 0.8, "loud music at full volume should nearly fill the bar")
+        XCTAssertLessThan(quiet, 0.45, "quiet music at low volume should sit low")
+    }
+
     func testSilenceStillRestsWhateverTheVolume() {
         let silent = AudioLevels(bands: [Float](repeating: 0, count: 8), level: 0, isBeat: false, beatIntensity: 0)
         XCTAssertEqual(silent.barHeights(count: 3, outputVolume: 1), [0.3, 0.3, 0.3])

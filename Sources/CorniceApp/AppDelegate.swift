@@ -59,6 +59,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UNUserNotificationCenter.current().delegate = notificationDelegate
 
         installStatusItem(model: model, controller: controller)
+        // Opens the panel and reports what the indicator is actually being fed,
+        // which is otherwise only observable by hovering the notch by hand.
+        if arguments.contains("--probe-indicator") {
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(4))
+                controller.toggle()
+                for _ in 0..<12 {
+                    try? await Task.sleep(for: .seconds(1))
+                    let bars = model.levels.barHeights(count: 3, outputVolume: model.outputVolume)
+                    let bandText = model.levels.bands.map { String(format: "%.2f", $0) }
+                        .joined(separator: ",")
+                    let barText = bars.map { String(format: "%.2f", $0) }.joined(separator: ",")
+                    let numbers = String(
+                        format: "level=%.3f fader=%.3f",
+                        model.levels.level, model.outputVolume
+                    )
+                    var summary = "state=\(model.surfaceState) live=\(model.hasLiveAudio)"
+                    summary += " shows=\(model.showsIndicator) " + numbers
+                    summary += " bands=" + bandText + " bars=" + barText
+                    Log.audio.notice("indicator: \(summary, privacy: .public)")
+                }
+                exit(0)
+            }
+        }
+
         controller.install()
 
         Task {

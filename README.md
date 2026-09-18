@@ -213,7 +213,7 @@ Swift 6 with strict concurrency · SwiftUI + AppKit · Core Audio · vDSP · IOK
 SystemConfiguration · Network.framework · Carbon hot keys · no third-party
 dependencies.
 
-**160 tests** across the pure logic: player reply parsing, playhead
+**162 tests** across the pure logic: player reply parsing, playhead
 extrapolation, FFT and beat detection, notch geometry for every display
 configuration, the HUD size table, the indicator's loudness mapping, band
 calibration and spectral tilt, per-player repeat support, the telemetry probe against the running machine, every AppleScript
