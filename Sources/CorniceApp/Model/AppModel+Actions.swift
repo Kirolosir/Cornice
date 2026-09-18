@@ -104,11 +104,18 @@ extension AppModel {
 
         applyMedia(snapshot.with(repeatMode: wanted))
         holdToggle(repeatMode: wanted)
-        // The player is told plain repeat is *off* for that mode, because the
-        // loop is what does the repeating. Leaving the player's own repeat on
-        // would mean the app's idea of the mode depended on a reading that says
-        // nothing about it.
-        send(.setRepeat(appProvides ? .off : wanted))
+        // The player's own repeat stays *on* for repeat-one, even though the
+        // loop is what repeats the track.
+        //
+        // Two reasons. Spotify's window is the thing most people are looking at,
+        // and switching its repeat off on the second press makes the button look
+        // like it undid itself. And if a loop is ever missed, the track ending
+        // lands on the playlist repeating rather than on playback stopping.
+        //
+        // This is safe now only because the mode is no longer inferred from what
+        // the player reports — that inference is what used to make the setting
+        // switch itself off.
+        send(.setRepeat(wanted))
         scheduleRepeatOneLoop()
     }
 
