@@ -22,6 +22,16 @@ public enum MediaSource: String, Sendable, Codable, CaseIterable, Identifiable {
         }
     }
 
+    /// Whether the player can be asked to repeat a single track.
+    ///
+    /// Music can; Spotify's dictionary has only a boolean `repeating`.
+    public var supportsRepeatOne: Bool {
+        switch self {
+        case .appleMusic: true
+        case .spotify: false
+        }
+    }
+
     public var bundleIdentifier: String {
         switch self {
         case .appleMusic: "com.apple.Music"
@@ -44,12 +54,19 @@ public enum RepeatMode: String, Sendable, Equatable, CaseIterable {
     case all
     case one
 
-    /// The order the button cycles through, matching both players' own.
-    public var next: RepeatMode {
+    /// The next mode the button moves to on the given player.
+    ///
+    /// Not every player has three. Spotify's scripting interface exposes
+    /// `repeating` as a **boolean** and nothing else — there is no way to ask it
+    /// for repeat-one, however many times its own button cycles — so offering a
+    /// third state there would show a mode the player is not in and make the
+    /// second press look broken. Music's `song repeat` is a real three-way.
+    public func next(on source: MediaSource) -> RepeatMode {
+        guard source.supportsRepeatOne else { return self == .off ? .all : .off }
         switch self {
-        case .off: .all
-        case .all: .one
-        case .one: .off
+        case .off: return .all
+        case .all: return .one
+        case .one: return .off
         }
     }
 }

@@ -308,3 +308,81 @@ final class BandCalibrationTests: XCTestCase {
         for band in heights { XCTAssertLessThan(band, 0.05) }
     }
 }
+
+/// Compensation for music's natural downward spectral slope.
+final class SpectralTiltTests: XCTestCase {
+
+    func testTiltRisesWithFrequency() {
+        let tilts = (0..<8).map { SpectrumAnalyzer.spectralTilt($0, of: 8) }
+        for index in 1..<tilts.count {
+            XCTAssertGreaterThan(tilts[index], tilts[index - 1], "band \(index)")
+        }
+    }
+
+    /// The bottom is trimmed so it is not permanently saturated, and the top is
+    /// lifted by roughly the amount real material falls off by.
+    func testTiltTrimsTheBottomAndLiftsTheTop() {
+        XCTAssertLessThan(SpectrumAnalyzer.spectralTilt(0, of: 8), 1)
+        XCTAssertGreaterThan(SpectrumAnalyzer.spectralTilt(7, of: 8), 4)
+    }
+
+    func testSingleBandIsUntouched() {
+        XCTAssertEqual(SpectrumAnalyzer.spectralTilt(0, of: 1), 1)
+    }
+
+    /// End to end: a high tone must move its bar about as much as a low one of
+    /// the same amplitude. Without compensation the top of the spectrum sat near
+    /// the resting height while the bottom pinned, which reads as a broken row
+    /// rather than as a quiet treble.
+    func testHighFrequenciesReachTheSameRangeAsLow() {
+        let rate = 48_000.0
+        let size = 1024
+
+        func peakBand(of hz: Double) -> Float {
+            let samples = (0..<size).map { 0.25 * Float(sin(2 * .pi * hz * Double($0) / rate)) }
+            let analyzer = SpectrumAnalyzer(bandCount: 8, fftSize: size, sampleRate: rate)
+            var state = SpectrumAnalyzer.State(bandCount: 8)
+            var levels = analyzer.analyze(samples, state: &state)
+            for _ in 0..<40 { levels = analyzer.analyze(samples, state: &state) }
+            return levels.bands.max() ?? 0
+        }
+
+        let low = peakBand(of: 100)
+        let high = peakBand(of: 8000)
+        XCTAssertGreaterThan(high, low * 0.8, "the top of the spectrum must not be a dead bar")
+    }
+}
+
+/// Which repeat modes each player can actually be put into.
+final class RepeatModeTests: XCTestCase {
+
+    /// Music's `song repeat` is a real three-way.
+    func testMusicCyclesThroughAllThreeModes() {
+        XCTAssertEqual(RepeatMode.off.next(on: .appleMusic), .all)
+        XCTAssertEqual(RepeatMode.all.next(on: .appleMusic), .one)
+        XCTAssertEqual(RepeatMode.one.next(on: .appleMusic), .off)
+    }
+
+    /// Spotify's scripting interface exposes `repeating` as a boolean and
+    /// nothing else, so offering a third state would display a mode the player
+    /// is not in and make the second press look like it did nothing.
+    func testSpotifyOnlyToggles() {
+        XCTAssertEqual(RepeatMode.off.next(on: .spotify), .all)
+        XCTAssertEqual(RepeatMode.all.next(on: .spotify), .off)
+        XCTAssertEqual(RepeatMode.one.next(on: .spotify), .off)
+    }
+
+    func testOnlyMusicClaimsRepeatOne() {
+        XCTAssertTrue(MediaSource.appleMusic.supportsRepeatOne)
+        XCTAssertFalse(MediaSource.spotify.supportsRepeatOne)
+    }
+
+    /// Cycling a player can never land on a mode it does not support.
+    func testCyclingNeverReachesAnUnsupportedMode() {
+        var mode = RepeatMode.off
+        for _ in 0..<12 {
+            mode = mode.next(on: .spotify)
+            XCTAssertNotEqual(mode, .one)
+        }
+    }
+}

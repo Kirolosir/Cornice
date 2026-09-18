@@ -279,25 +279,55 @@ struct PressScaleStyle: ButtonStyle {
     }
 }
 
-/// Skip forward and back, which travel in their own direction under the press.
+/// Skip forward and back, which travel in their own direction when pressed.
 ///
-/// The 3.5 pt nudge is the difference between a button that responds and a
-/// button that *goes* somewhere; it is the same cue iOS uses, and without it
-/// the two skip glyphs read as decoration either side of the play button.
-struct SkipButtonStyle: ButtonStyle {
+/// The travel is triggered by the *click* rather than being tied to how long the
+/// button is held. Driven by the press state alone, a quick tap — which is how
+/// anyone actually uses a skip button — released the glyph before it had moved
+/// far enough to see, so the cue was there in the code and invisible in use.
+///
+/// It goes out fast and springs back with a little overshoot, which is what
+/// makes it read as the track being thrown forward rather than as a button
+/// merely acknowledging a click.
+struct SkipButton<Label: View>: View {
     /// −1 for backward, +1 for forward.
-    var direction: CGFloat
+    let direction: CGFloat
+    let action: () -> Void
+    @ViewBuilder let label: () -> Label
 
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .contentShape(Rectangle())
-            .scaleEffect(configuration.isPressed ? 0.88 : 1)
-            .offset(x: configuration.isPressed ? direction * 3.5 : 0)
-            .opacity(configuration.isPressed ? 0.72 : 1)
-            .animation(
-                configuration.isPressed ? .easeOut(duration: 0.06) : Theme.Motion.release,
-                value: configuration.isPressed
-            )
+    @State private var travel: CGFloat = 0
+    @State private var squeeze: CGFloat = 1
+
+    /// How far the glyph throws. Larger than the 3.5 pt dip a held press gives,
+    /// because this one has to register in about a tenth of a second.
+    private let distance: CGFloat = 6
+
+    var body: some View {
+        Button {
+            action()
+            kick()
+        } label: {
+            label()
+                .offset(x: travel)
+                .scaleEffect(squeeze)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func kick() {
+        withAnimation(.easeOut(duration: 0.09)) {
+            travel = direction * distance
+            squeeze = 0.88
+        }
+        // Released on its own timer rather than on the button's press state, so
+        // the full gesture plays out however briefly the button was held.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.09) {
+            withAnimation(Theme.Motion.release) {
+                travel = 0
+                squeeze = 1
+            }
+        }
     }
 }
 

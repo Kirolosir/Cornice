@@ -100,10 +100,9 @@ struct MediaPane: View {
             Spacer(minLength: 0)
 
             HStack(spacing: 22) {
-                Button { model.previousTrack() } label: {
+                SkipButton(direction: -1) { model.previousTrack() } label: {
                     TransportGlyph(name: "backward.fill", size: 21, diameter: 32, isOn: true, ink: ink)
                 }
-                .buttonStyle(SkipButtonStyle(direction: -1))
                 .help("Previous")
 
                 Button { model.playPause() } label: {
@@ -118,10 +117,9 @@ struct MediaPane: View {
                 .help(snapshot.state.isPlaying ? "Pause" : "Play")
                 .keyboardShortcut(.space, modifiers: [])
 
-                Button { model.nextTrack() } label: {
+                SkipButton(direction: 1) { model.nextTrack() } label: {
                     TransportGlyph(name: "forward.fill", size: 21, diameter: 32, isOn: true, ink: ink)
                 }
-                .buttonStyle(SkipButtonStyle(direction: 1))
                 .help("Next")
             }
 

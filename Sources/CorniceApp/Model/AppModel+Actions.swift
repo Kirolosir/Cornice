@@ -81,7 +81,7 @@ extension AppModel {
 
     func cycleRepeat() {
         if let snapshot = media {
-            applyMedia(snapshot.with(repeatMode: snapshot.repeatMode.next))
+            applyMedia(snapshot.with(repeatMode: snapshot.repeatMode.next(on: snapshot.source)))
         }
         send(.cycleRepeat)
     }

@@ -88,19 +88,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         var peakLevel: Float = 0
-        var peakBand: Float = 0
+        var peakBands = [Float](repeating: 0, count: 8)
         var samples = 0
         for _ in 0..<160 {
             try? await Task.sleep(for: .milliseconds(50))
             let levels = engine.latestLevels()
             peakLevel = max(peakLevel, levels.level)
-            peakBand = max(peakBand, levels.bands.max() ?? 0)
+            for (index, value) in levels.bands.enumerated() where index < peakBands.count {
+                peakBands[index] = max(peakBands[index], value)
+            }
             if !levels.isSilent { samples += 1 }
         }
         engine.stop()
 
+        let perBand = peakBands.map { String(format: "%.3f", $0) }.joined(separator: " ")
         Log.audio.notice(
-            "probe: peakLevel=\(peakLevel, format: .fixed(precision: 4), privacy: .public) peakBand=\(peakBand, format: .fixed(precision: 4), privacy: .public) nonSilentSamples=\(samples, privacy: .public)/160"
+            "probe: peakLevel=\(peakLevel, format: .fixed(precision: 4), privacy: .public) nonSilent=\(samples, privacy: .public)/160 bands=[\(perBand, privacy: .public)]"
         )
         exit(0)
     }

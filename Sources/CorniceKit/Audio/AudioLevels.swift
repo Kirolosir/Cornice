@@ -154,7 +154,7 @@ public struct SpectrumAnalyzer: Sendable {
         // saturates instead, which is the right way round: a sine wave pegging
         // the meter is correct, a song failing to move it is not.
         for index in raw.indices {
-            raw[index] = Self.compress(raw[index] * Self.bandGain)
+            raw[index] = Self.compress(raw[index] * Self.bandGain * Self.spectralTilt(index, of: raw.count))
         }
 
         for index in state.smoothedBands.indices where index < raw.count {
@@ -255,6 +255,25 @@ public struct SpectrumAnalyzer: Sendable {
     /// than derived: it puts broadband audio at a normal listening level near
     /// the middle of the range and saturates a full-scale pure tone.
     static let bandGain: Float = 26
+
+    /// Per-band compensation for music's natural downward spectral slope.
+    ///
+    /// Recorded music carries most of its energy at the bottom. Measured on this
+    /// machine, real audio produced bands of
+    ///
+    ///     0.996  0.996  0.782  0.563  0.367  0.341  0.265  0.177
+    ///
+    /// which is a pinned bar on the left and an almost motionless one on the
+    /// right — the spectrum was being reported faithfully and reading as broken.
+    /// This tilts roughly +16 dB from the bottom of the range to the top, and
+    /// trims the very bottom so it is not permanently saturated, which leaves
+    /// all three bars with room to move while still showing the shape of the
+    /// music rather than a flat row.
+    static func spectralTilt(_ index: Int, of count: Int) -> Float {
+        guard count > 1 else { return 1 }
+        let position = Float(index) / Float(count - 1)
+        return 0.75 * pow(6.3, position)
+    }
 
     /// Maps a magnitude to 0...1 with a perceptual curve.
     static func compress(_ value: Float) -> Float {

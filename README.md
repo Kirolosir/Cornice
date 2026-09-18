@@ -153,8 +153,11 @@ decides the *shape* of the three bars and the overall level decides how much roo
 that shape has to move in, so a quiet passage barely stirs and a loud one swings
 the full height.
 
-Band magnitudes are scaled against material the app actually meets, which took a
-measurement to get right. A pure tone puts all of its energy in one FFT bin,
+Band magnitudes are scaled against material the app actually meets, and tilted to
+compensate for music's natural downward slope — measured here, real audio came
+back as `0.996 0.996 0.782 0.563 0.367 0.341 0.265 0.177`, which is a pinned bar
+on the left and a motionless one on the right. Both took a measurement to get
+right. A pure tone puts all of its energy in one FFT bin,
 while music spreads itself across hundreds — so a chain calibrated on a sine wave
 reads a song as almost nothing. Measured on this machine: a full-scale 1 kHz tone
 put its band at 0.89 and real audio put it at 0.06, moving a 13 pt bar by a fifth
@@ -204,10 +207,10 @@ Swift 6 with strict concurrency · SwiftUI + AppKit · Core Audio · vDSP · IOK
 SystemConfiguration · Network.framework · Carbon hot keys · no third-party
 dependencies.
 
-**137 tests** across the pure logic: player reply parsing, playhead
+**145 tests** across the pure logic: player reply parsing, playhead
 extrapolation, FFT and beat detection, notch geometry for every display
-configuration, the HUD size table, the indicator's loudness mapping and band
-calibration, the telemetry probe against the running machine, every AppleScript
+configuration, the HUD size table, the indicator's loudness mapping, band
+calibration and spectral tilt, per-player repeat support, the telemetry probe against the running machine, every AppleScript
 the app sends (compiled, not just parsed), preference migration, and
 subprocess timeout and cancellation against real processes. No test needs a running music player or
 audio permission.
@@ -221,6 +224,9 @@ make test
 ## Limitations
 
 - Apple Music and Spotify only; browser audio is invisible for the reason above.
+- **Repeat-one is Music only.** Spotify's scripting interface exposes `repeating`
+  as a boolean and nothing else, so the button toggles rather than cycling there.
+  Set repeat-one in Spotify itself and Cornice will show repeat as on.
 - Built-in display only, not every screen in a multi-monitor setup.
 - Ad-hoc signed, so not notarized — and because macOS ties a permission to the
   code signature, **rebuilding invalidates the audio-capture grant**. If the
