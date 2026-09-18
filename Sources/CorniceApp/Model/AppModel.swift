@@ -181,20 +181,34 @@ final class AppModel {
         // Restored, so the setting survives a relaunch the way a setting should.
         appliesRepeatOne = preferences.appliesRepeatOne
         if appliesRepeatOne { Log.media.notice("repeat one: restored") }
-        hardware = await serviceContainer.hardware.identity()
-        Log.app.notice("running on \(self.hardware?.displayName ?? "unknown", privacy: .public)")
-
-        // Order matters here, and it took a stopwatch to see why. Starting the
-        // audio tap is the slowest thing the app ever does — building a process
-        // tap, an aggregate device and an IO proc measured 5.2 s on this machine
-        // — so anything sequenced behind it is dead for five seconds after
-        // launch. The cheap event sources go first, and the tap no longer runs
-        // on the main actor at all.
+        // Order matters here, and it has taken a stopwatch to see why more than
+        // once. Nothing the app actually *does* may sit behind something slow.
+        //
+        // The two offenders were the audio tap — building a process tap, an
+        // aggregate device and an IO proc, measured at 5.2 s — and the machine's
+        // marketing name, which shells out to `system_profiler` and can take
+        // longer still. Both used to run before the polling loop started, so the
+        // app read nothing at all until they finished: no track, no artwork, and
+        // no repeat-one timer, which is a long time for a thing whose whole job
+        // is to show what is playing.
+        //
+        // The cheap event sources and the polling loop go first. Everything slow
+        // runs on its own task and reports back when it is ready.
         startOutputDeviceMonitoring()
         startHUDSources()
         restartRefreshLoops()
+
         if preferences.audioVisualizerEnabled {
             startVisualizer()
+        }
+
+        // Cosmetic: it names the Mac in Settings and in the About tab.
+        let hardwareProvider = serviceContainer.hardware
+        Task.detached(priority: .utility) {
+            let identity = await hardwareProvider.identity()
+            await MainActor.run { [weak self] in
+                self?.applyHardware(identity)
+            }
         }
     }
 
@@ -673,6 +687,11 @@ final class AppModel {
                 self?.applyVisualizerStatus(status)
             }
         }
+    }
+
+    func applyHardware(_ identity: HardwareIdentity?) {
+        hardware = identity
+        Log.app.notice("running on \(identity?.displayName ?? "unknown", privacy: .public)")
     }
 
     func applyVisualizerStatus(_ status: AudioVisualizerEngine.Status) {
