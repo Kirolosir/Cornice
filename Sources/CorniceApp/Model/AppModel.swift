@@ -59,6 +59,9 @@ final class AppModel {
 
     /// Whether Spotify's Web API can be asked for a repeat mode. Drives Settings.
     var spotifyStatus: SpotifyWebRemote.Status = .unconfigured
+    /// What went wrong last, if anything. Held apart from `spotifyStatus` so a
+    /// refused command reports itself without also revoking the connection.
+    var spotifyError: String?
     /// Spotify's own repeat mode, as the Web API last reported it.
     var spotifyRepeat: RepeatMode?
     /// When that was, so the read stays on its own slow cadence.
@@ -192,17 +195,18 @@ final class AppModel {
         // Restored, so the setting survives a relaunch the way a setting should.
         appliesRepeatOne = preferences.appliesRepeatOne
         if appliesRepeatOne { Log.media.notice("repeat one: restored") }
-        await configureSpotify()
         // Order matters here, and it has taken a stopwatch to see why more than
         // once. Nothing the app actually *does* may sit behind something slow.
         //
-        // The two offenders were the audio tap — building a process tap, an
-        // aggregate device and an IO proc, measured at 5.2 s — and the machine's
-        // marketing name, which shells out to `system_profiler` and can take
-        // longer still. Both used to run before the polling loop started, so the
-        // app read nothing at all until they finished: no track, no artwork, and
-        // no repeat-one timer, which is a long time for a thing whose whole job
-        // is to show what is playing.
+        // Three offenders so far: the audio tap — building a process tap, an
+        // aggregate device and an IO proc, measured at 5.2 s — the machine's
+        // marketing name, which shells out to `system_profiler`, and reading the
+        // Spotify token out of the Keychain, which can stop to ask the user for
+        // permission and wait as long as it likes for an answer. Each of them,
+        // in turn, used to run before the polling loop started, and each in turn
+        // meant the app read nothing at all until it finished: no track, no
+        // artwork, and no repeat-one timer, which is a long time for a thing
+        // whose whole job is to show what is playing.
         //
         // The cheap event sources and the polling loop go first. Everything slow
         // runs on its own task and reports back when it is ready.
@@ -213,6 +217,12 @@ final class AppModel {
         if preferences.audioVisualizerEnabled {
             startVisualizer()
         }
+
+        // Reads the Keychain, which is allowed to take as long as it likes —
+        // after a rebuild macOS asks the user before handing the token over,
+        // and an ad-hoc signature is rebuilt often. Nothing else waits on it:
+        // until it lands, the repeat button uses the fallback it always had.
+        Task { [weak self] in await self?.configureSpotify() }
 
         // Cosmetic: it names the Mac in Settings and in the About tab.
         let hardwareProvider = serviceContainer.hardware

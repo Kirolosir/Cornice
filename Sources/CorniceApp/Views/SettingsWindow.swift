@@ -237,9 +237,16 @@ struct SpotifySettings: View {
                     case .signedIn:
                         Label("Connected", systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
-                    case .failing(let reason):
-                        Text(reason).foregroundStyle(.orange)
                     }
+                }
+
+                // Shown beside the connection rather than in place of it: a
+                // command can be refused — nothing playing, a rate limit —
+                // while the sign-in itself is perfectly good.
+                if let problem = model.spotifyError {
+                    Text(problem)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 }
             }
 

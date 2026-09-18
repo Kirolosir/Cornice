@@ -46,10 +46,10 @@ extension AppModel {
                 let url = try await self.serviceContainer.spotify.beginSignIn()
                 NSWorkspace.shared.open(url)
             } catch let error as ServiceError {
-                self.spotifyStatus = .failing(error.detail)
+                self.spotifyError = error.detail
                 self.flashToast(error.headline)
             } catch {
-                self.spotifyStatus = .failing("Sign-in could not be started.")
+                self.spotifyError = "Sign-in could not be started."
             }
         }
     }
@@ -61,14 +61,17 @@ extension AppModel {
             do {
                 try await self.serviceContainer.spotify.completeSignIn(callback: url)
                 await self.configureSpotify()
-                self.flashToast("Spotify connected")
+                if self.spotifyStatus == .signedIn {
+                    self.spotifyError = nil
+                    self.flashToast("Spotify connected")
+                }
                 self.refreshNow("media")
             } catch let error as ServiceError {
                 Log.media.error("spotify sign-in failed: \(error.headline, privacy: .public)")
-                self.spotifyStatus = .failing(error.detail)
+                self.spotifyError = error.detail
                 self.flashToast(error.headline)
             } catch {
-                self.spotifyStatus = .failing("Sign-in failed.")
+                self.spotifyError = "Sign-in failed."
             }
         }
     }
@@ -99,13 +102,13 @@ extension AppModel {
             guard let self else { return }
             do {
                 try await self.serviceContainer.spotify.setRepeat(mode)
-                self.spotifyStatus = .signedIn
+                self.spotifyError = nil
                 self.setAppliesRepeatOne(false)
                 self.spotifyRepeat = mode
                 Log.media.notice("spotify: repeat set to \(mode.rawValue, privacy: .public)")
             } catch let error as ServiceError {
                 Log.media.error("spotify repeat failed: \(error.headline, privacy: .public)")
-                self.spotifyStatus = .failing(error.detail)
+                self.spotifyError = error.detail
                 self.flashToast(error.headline)
                 // Fall back to doing it ourselves.
                 if mode == .one {

@@ -320,6 +320,50 @@ final class SpotifyWebTests: XCTestCase {
         XCTAssertEqual(after, .signedIn)
     }
 
+    func testARepeatedRedirectDoesNotTearDownASignInThatWorked() async throws {
+        // Observed in the wild: the browser delivered the same redirect
+        // thirteen times. The first consumed the verifier and the rest found
+        // nothing waiting, which was being read as a failed sign-in — so a
+        // connection that had just succeeded was immediately revoked, and the
+        // repeat button silently fell back to imitating repeat-one.
+        let store = EphemeralTokenStore()
+        let transport = StubTransport([tokenReply(refresh: "refresh-new")])
+        let remote = SpotifyWebRemote(clientID: "abc", store: store, transport: transport)
+
+        let url = try await remote.beginSignIn()
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems ?? []
+        let state = items.first { $0.name == "state" }!.value!
+        let callback = URL(string: "cornice://spotify-callback?code=c1&state=\(state)")!
+
+        try await remote.completeSignIn(callback: callback)
+        // The replays. None of these may throw, and none may sign the user out.
+        for _ in 0..<5 {
+            try await remote.completeSignIn(callback: callback)
+        }
+
+        let status = await remote.status()
+        XCTAssertEqual(status, .signedIn)
+        XCTAssertEqual(store.loadRefreshToken(), "refresh-new")
+        // Only the first redirect was redeemed; the replays cost no requests.
+        XCTAssertEqual(transport.sent.count, 1)
+    }
+
+    func testAnUnexpectedRedirectIsStillRefusedWhenNobodyIsSignedIn() async {
+        let remote = SpotifyWebRemote(
+            clientID: "abc", store: EphemeralTokenStore(), transport: StubTransport([])
+        )
+        do {
+            try await remote.completeSignIn(
+                callback: URL(string: "cornice://spotify-callback?code=c1&state=s1")!
+            )
+            XCTFail("expected an unsolicited redirect to be refused")
+        } catch {
+            guard case ServiceError.unauthorized = error else {
+                return XCTFail("expected unauthorized, got \(error)")
+            }
+        }
+    }
+
     func testWithoutAClientIDSignInIsNotOffered() async {
         let remote = SpotifyWebRemote(
             clientID: "", store: EphemeralTokenStore(), transport: StubTransport([])

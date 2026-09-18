@@ -81,14 +81,18 @@ public struct SpotifyPlaybackState: Sendable, Equatable {
 /// Spotify window, it survives skips, and it needs no timers at all.
 public actor SpotifyWebRemote {
 
+    /// Whether the API can be called at all.
+    ///
+    /// Deliberately only about credentials. A failed *command* — no active
+    /// device, a rate limit — is reported separately, because folding it in
+    /// here meant one transient refusal disabled the Web API path for the rest
+    /// of the session and quietly reverted to imitating repeat-one.
     public enum Status: Sendable, Equatable {
         /// No client ID entered, so sign-in cannot be offered yet.
         case unconfigured
         /// Configured, but nobody has signed in.
         case signedOut
         case signedIn
-        /// Signed in, but Spotify refused a command. Carries what to tell the user.
-        case failing(String)
     }
 
     private static let base = URL(string: "https://api.spotify.com/v1")!
@@ -138,6 +142,16 @@ public actor SpotifyWebRemote {
     /// Redeems the code the browser handed back.
     public func completeSignIn(callback: URL) async throws {
         guard let pending else {
+            // A redirect can arrive more than once: the browser re-sends it on a
+            // reload, and macOS delivers it again if it had to launch the app to
+            // do so. The first copy consumes the verifier, so the rest find
+            // nothing waiting — which is a replay of work already done, not a
+            // failure, and treating it as one used to tear down the sign-in that
+            // had just succeeded.
+            if store.loadRefreshToken() != nil {
+                Log.media.debug("spotify: ignoring a repeated sign-in reply")
+                return
+            }
             throw ServiceError.unauthorized(detail: "No sign-in was waiting for a reply.")
         }
         self.pending = nil
