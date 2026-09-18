@@ -137,7 +137,9 @@ struct MediaPane: View {
                     )
                 }
                 .buttonStyle(PressScaleStyle(pressedScale: 0.84))
-                .help("Repeat")
+                // Spells out the state, because Spotify's is a two-way where
+                // Music's is a three-way and nothing on the glyph says so.
+                .help(Self.repeatHelp(snapshot))
 
                 // Where the sound is actually going. Worth a permanent slot: with
                 // wireless audio it is genuinely ambiguous, and it is the question
@@ -154,6 +156,20 @@ struct MediaPane: View {
                 .buttonStyle(PressScaleStyle(pressedScale: 0.84))
                 .help(model.outputDevice.map { "Output: \($0.name)" } ?? "Output device")
             }
+        }
+    }
+
+    /// A tooltip that names the current repeat state.
+    static func repeatHelp(_ snapshot: MediaSnapshot) -> String {
+        switch snapshot.repeatMode {
+        case .off: "Repeat off"
+        case .one: "Repeating this track"
+        case .all:
+            snapshot.source.supportsRepeatOne
+                ? "Repeating everything"
+                // Spotify's scripting interface exposes repeat as a boolean, so
+                // "on" is the whole of what can be known or set from here.
+                : "Repeat on — Spotify only reports on or off"
         }
     }
 
