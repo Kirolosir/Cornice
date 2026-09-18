@@ -66,6 +66,10 @@ final class AppModel {
     var spotifyRepeat: RepeatMode?
     /// When that was, so the read stays on its own slow cadence.
     var lastSpotifyRead: Date?
+
+    /// Whether the user has already been told the tap cannot hear. One message
+    /// per grant, not one per frame.
+    private var warnedTapIsDeaf = false
     private var repeatOneTask: Task<Void, Never>?
     /// The last track seen, so an advance the app did not ask for can be caught.
     private var lastSeenTrack: (identity: String, position: TimeInterval, duration: TimeInterval)?
@@ -628,6 +632,23 @@ final class AppModel {
         // denied as running and simply feeds it silence.
         if !wasHearing, !latest.isSilent {
             Log.audio.notice("visualiser hearing audio")
+            // Heard something, so any earlier complaint was wrong or has been
+            // fixed. Arm it again for the next time the grant goes.
+            warnedTapIsDeaf = false
+        }
+
+        // Say so once, where the user is actually looking.
+        //
+        // The Settings tab has carried this warning for a while, but nobody
+        // opens Settings to find out why a row of bars looks wrong. From the
+        // outside a refused tap is indistinguishable from music the visualiser
+        // does not like: the bars fall back to the standard bob and keep going,
+        // so it reads as "it doesn't react to some songs" rather than as a
+        // permission that needs granting again.
+        if audioCaptureLooksBlocked, !warnedTapIsDeaf {
+            warnedTapIsDeaf = true
+            Log.audio.error("visualiser is running but hearing nothing while a player is playing")
+            flashToast("Visualiser can't hear audio. See Settings.")
         }
     }
 

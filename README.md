@@ -475,9 +475,13 @@ have a good answer for this that doesn't involve private frameworks.
   prebuilt copy passed around would be stopped by Gatekeeper; building it
   yourself avoids that, because locally built apps aren't quarantined.
 - Ad-hoc signed, so it isn't notarized. macOS ties permissions to the code
-  signature, so **rebuilding invalidates the audio-capture grant**. If the
-  visualiser goes quiet after a rebuild, reset it and relaunch:
-  `tccutil reset AudioCapture dev.cornice.app`.
+  signature, so **rebuilding invalidates the audio-capture grant**. This doesn't
+  look like a permission problem when it happens, which is the annoying part:
+  macOS gives a refused tap silence rather than an error, so the bars fall back
+  to their idle animation and keep moving. It reads as "the visualiser doesn't
+  react to this song" when actually it can't hear anything at all. Cornice now
+  says so when it notices, and the fix is:
+  `tccutil reset AudioCapture dev.cornice.app`, then relaunch and allow it.
 - For the same reason, macOS asks again before handing back the stored Spotify
   token after a rebuild, since the new binary is a different code identity.
   Answer **Always Allow**. It doesn't block startup; the app keeps polling while
