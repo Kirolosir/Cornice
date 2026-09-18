@@ -15,7 +15,6 @@ final class HUDTests: XCTestCase {
             .batteryLow: (352, 126, 24, 20),
             .fullBattery: (352, 104, 24, 20),
             .vpn: (560, 92, 24, 20),
-            .volume: (480, 104, 24, 20),
             .download: (560, 104, 24, 20),
             .doNotDisturb: (425, 42, 14, 12),
             .handoff: (300, 40, 13, 11),
@@ -63,17 +62,13 @@ final class HUDTests: XCTestCase {
         XCTAssertEqual(HUDContent.noInternet.kind, .noInternet)
         XCTAssertEqual(HUDContent.charging(level: 0.5).kind, .charging)
         XCTAssertEqual(HUDContent.fullBattery.kind, .fullBattery)
-        XCTAssertEqual(HUDContent.volume(device: "x", level: 0.2, isMuted: false).kind, .volume)
         XCTAssertEqual(HUDContent.handoff.kind, .handoff)
     }
 
-    /// Volume has to outrank everything that is not waiting on an answer: it is
-    /// raised by a key the user is holding down, and a pill that refuses to
-    /// update while they hold it makes the keyboard feel broken.
-    func testVolumeOutranksPassiveAnnouncements() {
-        let volume = HUDContent.volume(device: "Speakers", level: 0.4, isMuted: false)
+    /// An alert waiting on an answer outranks a passing announcement.
+    func testAlertsOutrankAnnouncements() {
         for other in [HUDContent.charging(level: 0.8), .fullBattery, .doNotDisturb, .handoff, .vpn(name: "v", since: .now)] {
-            XCTAssertGreaterThan(volume.priority, other.priority, "volume vs \(other.kind.rawValue)")
+            XCTAssertGreaterThan(HUDContent.noInternet.priority, other.priority, "vs \(other.kind.rawValue)")
         }
     }
 
@@ -81,6 +76,5 @@ final class HUDTests: XCTestCase {
         XCTAssertTrue(HUDContent.noInternet.isInteractive)
         XCTAssertTrue(HUDContent.timerRunning(id: UUID(), label: "x", isRunning: true, isFinished: false).isInteractive)
         XCTAssertFalse(HUDContent.charging(level: 0.3).isInteractive)
-        XCTAssertFalse(HUDContent.volume(device: "x", level: 0.3, isMuted: false).isInteractive)
     }
 }

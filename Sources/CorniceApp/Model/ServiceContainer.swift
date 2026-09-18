@@ -15,7 +15,6 @@ struct ServiceContainer: Sendable {
     let visualizer: AudioVisualizerEngine
     let outputDevices: OutputDeviceMonitor
     let reachability: NetworkReachability
-    let volume: SystemVolumeMonitor
     let vpn: VPNMonitor
     let downloads: DownloadsMonitor
 
@@ -29,7 +28,6 @@ struct ServiceContainer: Sendable {
             visualizer: AudioVisualizerEngine(bandCount: 8),
             outputDevices: OutputDeviceMonitor(),
             reachability: NetworkReachability(),
-            volume: SystemVolumeMonitor(),
             vpn: VPNMonitor(),
             downloads: DownloadsMonitor()
         )

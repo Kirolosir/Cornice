@@ -25,9 +25,8 @@ extension AppModel {
         // that is mid-spin.
         guard surfaceState != .expanded, surfaceState != .activity else { return }
 
-        // A HUD already up only yields to something at least as important. The
-        // volume pill outranks the rest because it is raised by a key the user
-        // is holding down.
+        // A HUD already up only yields to something at least as important: an
+        // alert waiting on an answer is not interrupted by an announcement.
         if let current = hudContent, surfaceState.hud != nil,
            current.priority > content.priority {
             return
@@ -89,16 +88,6 @@ extension AppModel {
             }
         }
 
-        serviceContainer.volume.start { [weak self] reading in
-            Task { @MainActor in
-                self?.presentHUD(.volume(
-                    device: reading.deviceName,
-                    level: reading.level,
-                    isMuted: reading.isMuted
-                ))
-            }
-        }
-
         serviceContainer.vpn.start { [weak self] connection in
             Task { @MainActor in
                 guard let self, let connection else { return }
@@ -111,7 +100,6 @@ extension AppModel {
 
     func stopHUDSources() {
         serviceContainer.reachability.stop()
-        serviceContainer.volume.stop()
         serviceContainer.vpn.stop()
         serviceContainer.downloads.stop()
     }

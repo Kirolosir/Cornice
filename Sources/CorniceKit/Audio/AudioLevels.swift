@@ -49,7 +49,7 @@ public struct AudioLevels: Sendable, Equatable {
 
         // Slightly concave, so ordinary listening levels already move properly
         // rather than only the loudest choruses.
-        let headroom = pow(min(1, max(0, level)), 0.7)
+        let headroom = pow(min(1, max(0, level)), 0.5)
 
         return (0..<count).map { index in
             let energy = min(1, max(0, peak(of: index, of: count)))
@@ -140,10 +140,21 @@ public struct SpectrumAnalyzer: Sendable {
         let magnitudes = FFT.magnitudes(of: samples, size: fftSize)
         var raw = Self.fold(magnitudes, into: bandCount, sampleRate: sampleRate, fftSize: fftSize)
 
-        // Perceptual scaling. Linear magnitudes make everything above the bass
-        // look flat, because hearing is roughly logarithmic in amplitude.
+        // Gain, then perceptual scaling.
+        //
+        // The gain is the part that took a measurement to get right. A single
+        // FFT bin holds all of a pure tone's energy but only a fraction of
+        // broadband material's, because music spreads itself across hundreds of
+        // bins — so a chain calibrated on a sine wave reads real music as almost
+        // nothing. Measured here: a full-scale 1 kHz tone put its band at 0.89,
+        // while noise at a normal listening level put its band at 0.09, and the
+        // bars moved by a fraction of a point.
+        //
+        // This lifts broadband material into the usable range. A pure tone now
+        // saturates instead, which is the right way round: a sine wave pegging
+        // the meter is correct, a song failing to move it is not.
         for index in raw.indices {
-            raw[index] = Self.compress(raw[index])
+            raw[index] = Self.compress(raw[index] * Self.bandGain)
         }
 
         for index in state.smoothedBands.indices where index < raw.count {
@@ -239,6 +250,11 @@ public struct SpectrumAnalyzer: Sendable {
         }
         return bands
     }
+
+    /// Calibration for band magnitudes, chosen against measured material rather
+    /// than derived: it puts broadband audio at a normal listening level near
+    /// the middle of the range and saturates a full-scale pure tone.
+    static let bandGain: Float = 16
 
     /// Maps a magnitude to 0...1 with a perceptual curve.
     static func compress(_ value: Float) -> Float {

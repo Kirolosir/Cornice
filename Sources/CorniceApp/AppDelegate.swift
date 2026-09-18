@@ -31,6 +31,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // The same for audio capture. macOS reports a tap it has denied as
+        // running and simply feeds it silence, so "did it start" answers
+        // nothing — only measuring what arrives does.
+        if arguments.contains("--probe-audio") {
+            Task { await Self.probeAudio() }
+            return
+        }
+
         Log.app.notice("Cornice starting")
 
         let services = ServiceContainer.live()
@@ -69,6 +77,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Prints live player state, for verifying the scripting path.
+    private static func probeAudio() async {
+        let engine = AudioVisualizerEngine(bandCount: 8)
+        let status = engine.start()
+        Log.audio.notice("probe: status \(String(describing: status), privacy: .public)")
+
+        guard status == .running else {
+            Log.audio.notice("probe: tap did not start")
+            exit(0)
+        }
+
+        var peakLevel: Float = 0
+        var peakBand: Float = 0
+        var samples = 0
+        for _ in 0..<160 {
+            try? await Task.sleep(for: .milliseconds(50))
+            let levels = engine.latestLevels()
+            peakLevel = max(peakLevel, levels.level)
+            peakBand = max(peakBand, levels.bands.max() ?? 0)
+            if !levels.isSilent { samples += 1 }
+        }
+        engine.stop()
+
+        Log.audio.notice(
+            "probe: peakLevel=\(peakLevel, format: .fixed(precision: 4), privacy: .public) peakBand=\(peakBand, format: .fixed(precision: 4), privacy: .public) nonSilentSamples=\(samples, privacy: .public)/160"
+        )
+        exit(0)
+    }
+
     private static func probeMedia() async {
         let coordinator = MediaCoordinator.live()
         let running = await coordinator.runningSources()

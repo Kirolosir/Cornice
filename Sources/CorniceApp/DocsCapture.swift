@@ -115,7 +115,6 @@ enum DocsCapture {
         .batteryLow(level: 0.14),
         .fullBattery,
         .vpn(name: "VPN · utun4", since: Date().addingTimeInterval(-515)),
-        .volume(device: "MacBook Air Speakers", level: 0.62, isMuted: false),
         .download(name: "ReallyVeryExtremelyImportBigNameForFile.mov", progress: 0.6, bytesPerSecond: 13_421_772),
         .doNotDisturb,
         .handoff,

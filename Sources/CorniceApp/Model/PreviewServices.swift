@@ -19,7 +19,6 @@ enum PreviewServices {
             visualizer: AudioVisualizerEngine(bandCount: 8),
             outputDevices: OutputDeviceMonitor(),
             reachability: NetworkReachability(),
-            volume: SystemVolumeMonitor(),
             vpn: VPNMonitor(),
             downloads: DownloadsMonitor()
         )

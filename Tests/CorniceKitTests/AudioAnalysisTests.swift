@@ -237,3 +237,74 @@ final class IndicatorBarTests: XCTestCase {
         XCTAssertEqual(levels(bands: [], level: 0.5).barHeights(count: 3), [0.3, 0.3, 0.3])
     }
 }
+
+/// Calibration of band magnitudes against material the app actually meets.
+///
+/// These exist because the chain was correct for a sine wave and useless for a
+/// song. A pure tone puts all of its energy in one FFT bin; music spreads itself
+/// across hundreds, so a scale calibrated on a tone reads real audio as almost
+/// nothing and the bars move by a fraction of a point.
+final class BandCalibrationTests: XCTestCase {
+
+    private let rate = 48_000.0
+    private let size = 1024
+
+    private func tone(_ hz: Double, amplitude: Float) -> [Float] {
+        (0..<size).map { amplitude * Float(sin(2 * .pi * hz * Double($0) / rate)) }
+    }
+
+    /// Twelve tones spread across the spectrum: deterministic, and broadband in
+    /// the way music is.
+    private func broadband(amplitude: Float) -> [Float] {
+        let frequencies = (0..<12).map { 60.0 * pow(2, Double($0) / 2) }
+        var samples = [Float](repeating: 0, count: size)
+        for frequency in frequencies {
+            let partial = tone(frequency, amplitude: amplitude)
+            for index in 0..<size { samples[index] += partial[index] }
+        }
+        return samples
+    }
+
+    private func bands(_ samples: [Float]) -> [Float] {
+        let analyzer = SpectrumAnalyzer(bandCount: 8, fftSize: size, sampleRate: rate)
+        var state = SpectrumAnalyzer.State(bandCount: 8)
+        // Several passes, because the analyser smooths towards its target.
+        var levels = analyzer.analyze(samples, state: &state)
+        for _ in 0..<40 { levels = analyzer.analyze(samples, state: &state) }
+        return levels.bands
+    }
+
+    func testBroadbandMaterialReachesTheUsableRange() {
+        let peak = bands(broadband(amplitude: 0.06)).max() ?? 0
+        XCTAssertGreaterThan(peak, 0.4, "broadband audio must move a bar, not sit at the floor")
+    }
+
+    /// The other end: a full-scale tone should saturate rather than being the
+    /// only thing that ever fills the meter.
+    func testFullScaleToneSaturates() {
+        let peak = bands(tone(1000, amplitude: 1.0)).max() ?? 0
+        XCTAssertGreaterThan(peak, 0.95)
+    }
+
+    /// The whole chain, end to end: ordinary material has to produce bars that
+    /// are visibly off their resting height.
+    func testBarsMoveVisiblyForOrdinaryMaterial() {
+        let analyzer = SpectrumAnalyzer(bandCount: 8, fftSize: size, sampleRate: rate)
+        var state = SpectrumAnalyzer.State(bandCount: 8)
+        let samples = broadband(amplitude: 0.06)
+        var levels = analyzer.analyze(samples, state: &state)
+        for _ in 0..<40 { levels = analyzer.analyze(samples, state: &state) }
+
+        let heights = levels.barHeights(count: 3)
+        let tallest = heights.max() ?? 0
+        XCTAssertGreaterThan(
+            tallest, 0.5,
+            "a 13pt bar resting at 0.3 has to reach past half height to read as moving"
+        )
+    }
+
+    func testSilenceStillRests() {
+        let heights = bands([Float](repeating: 0, count: size))
+        for band in heights { XCTAssertLessThan(band, 0.05) }
+    }
+}

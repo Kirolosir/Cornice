@@ -33,8 +33,6 @@ struct HUDView: View {
             case .batteryLow(let level): batteryLow(level)
             case .fullBattery: fullBattery
             case .vpn(let name, let since): vpn(name: name, since: since)
-            case .volume(let device, let level, let isMuted):
-                volume(device: device, level: level, isMuted: isMuted)
             case .download(let name, let progress, let rate):
                 download(name: name, progress: progress, bytesPerSecond: rate)
             case .doNotDisturb: doNotDisturb
@@ -303,45 +301,6 @@ struct HUDView: View {
                     .font(Theme.Typeface.sessionClock)
                     .monospacedDigit()
                     .foregroundStyle(Theme.Palette.orange)
-            }
-        }
-    }
-
-    // MARK: - Volume
-
-    private func volume(device: String, level: Double, isMuted: Bool) -> some View {
-        panel {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(device)
-                    .font(Theme.Typeface.bodyStrong)
-                    .tracking(-0.13)
-                    .foregroundStyle(ink.primary)
-                    .lineLimit(1)
-
-                HStack(spacing: 12) {
-                    Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(ink.primary)
-                        .frame(width: 17, alignment: .leading)
-
-                    GeometryReader { proxy in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(ink.at(0.18))
-                            Capsule()
-                                .fill(Theme.Palette.orangeDeep)
-                                .frame(width: max(0, proxy.size.width * (isMuted ? 0 : level)))
-                        }
-                        .frame(height: 7)
-                        .frame(maxHeight: .infinity, alignment: .center)
-                    }
-                    .frame(height: 14)
-
-                    Text(verbatim: "\(Int((level * 100).rounded()))")
-                        .font(Theme.Typeface.hudInline)
-                        .monospacedDigit()
-                        .foregroundStyle(ink.primary)
-                        .frame(width: 26, alignment: .trailing)
-                }
             }
         }
     }

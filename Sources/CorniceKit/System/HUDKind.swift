@@ -20,7 +20,6 @@ public enum HUDKind: String, Equatable, Sendable, CaseIterable, Identifiable {
     case batteryLow
     case fullBattery
     case vpn
-    case volume
     case download
     case doNotDisturb
     case handoff
@@ -32,7 +31,7 @@ public enum HUDKind: String, Equatable, Sendable, CaseIterable, Identifiable {
         switch self {
         case .noInternet, .filesReceived: 197.5   // 604
         case .vpn, .download: 175.5               // 560
-        case .timerRunning, .volume: 135.5        // 480
+        case .timerRunning: 135.5                 // 480
         case .charging, .doNotDisturb: 108        // 425
         case .batteryLow, .fullBattery: 71.5      // 352
         case .handoff: 45.5                       // 300
@@ -49,7 +48,6 @@ public enum HUDKind: String, Equatable, Sendable, CaseIterable, Identifiable {
         case .batteryLow: 88         // 126
         case .fullBattery: 66        // 104
         case .vpn: 54                // 92
-        case .volume: 66             // 104
         case .download: 66           // 104
         case .doNotDisturb: 4        // 42
         case .handoff: 2             // 40
@@ -59,7 +57,7 @@ public enum HUDKind: String, Equatable, Sendable, CaseIterable, Identifiable {
     public var bottomRadius: CGFloat {
         switch self {
         case .noInternet, .filesReceived: 28
-        case .timerRunning, .batteryLow, .fullBattery, .vpn, .volume, .download: 24
+        case .timerRunning, .batteryLow, .fullBattery, .vpn, .download: 24
         case .charging, .doNotDisturb: 14
         case .handoff: 13
         }
@@ -68,7 +66,7 @@ public enum HUDKind: String, Equatable, Sendable, CaseIterable, Identifiable {
     public var flareRadius: CGFloat {
         switch self {
         case .noInternet, .filesReceived: 24
-        case .timerRunning, .batteryLow, .fullBattery, .vpn, .volume, .download: 20
+        case .timerRunning, .batteryLow, .fullBattery, .vpn, .download: 20
         case .charging, .doNotDisturb: 12
         case .handoff: 11
         }
@@ -96,7 +94,7 @@ public enum HUDKind: String, Equatable, Sendable, CaseIterable, Identifiable {
         case .batteryLow: 48
         case .fullBattery: 46
         case .download: 46
-        case .timerRunning, .vpn, .volume: 44
+        case .timerRunning, .vpn: 44
         // The short pills have no clear row: everything lives in the two
         // margins beside the hole.
         case .charging, .doNotDisturb, .handoff: 0
@@ -121,7 +119,6 @@ public enum HUDKind: String, Equatable, Sendable, CaseIterable, Identifiable {
         case .batteryLow: 5
         case .fullBattery: 3
         case .vpn: 3
-        case .volume: 1.6
         case .download: 3
         case .doNotDisturb: 2
         case .handoff: 1.5

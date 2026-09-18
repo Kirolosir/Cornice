@@ -132,7 +132,7 @@ struct GeneralSettings: View {
             }
 
             Section("System HUDs") {
-                Text("Charge, volume, network and VPN notices appear on their own. They use readings the app already takes, so there is nothing to turn on.")
+                Text("Charge, network and VPN notices appear on their own. They use readings the app already takes, so there is nothing to turn on.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

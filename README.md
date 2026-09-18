@@ -5,7 +5,7 @@
 Cornice turns the camera notch into a Dynamic Island. At rest it is invisible.
 Move the pointer onto it and it grows out of the cut-out — album art, track,
 artist — and opens into a full transport with a draggable scrubber, timers, and
-charted system stats. Charge, volume, network and VPN notices appear there too.
+charted system stats. Charge, network and VPN notices appear there too.
 
 It never takes focus, so clicking it does not pull you out of what you were
 doing.
@@ -24,7 +24,7 @@ Native Swift 6 and SwiftUI. No Electron, no private APIs, no helper daemon.
 | **System** | CPU, memory and network as filled sparklines over the last 48 samples. |
 | **Timers** | Up to four at once, with presets and an alarm. |
 | **AirPods** | A live activity when a wireless device connects, with its charge. |
-| **System HUDs** | Charging, battery low, full battery, volume, no internet, VPN, downloads — each at its own size. |
+| **System HUDs** | Charging, battery low, full battery, no internet, VPN, downloads — each at its own size. |
 
 ![System](Docs/images/stats.png)
 ![Charging](Docs/images/hud-charging.png)
@@ -132,8 +132,14 @@ audio thread schedules main-actor work faster than it drains.
 The playing indicator is driven by both halves of the analysis: the spectrum
 decides the *shape* of the three bars and the overall level decides how much room
 that shape has to move in, so a quiet passage barely stirs and a loud one swings
-the full height. Bands alone gave every passage the same amplitude, because each
-band is already perceptually compressed — the music changed shape but never size.
+the full height.
+
+Band magnitudes are scaled against material the app actually meets, which took a
+measurement to get right. A pure tone puts all of its energy in one FFT bin,
+while music spreads itself across hundreds — so a chain calibrated on a sine wave
+reads a song as almost nothing. Measured on this machine: a full-scale 1 kHz tone
+put its band at 0.89 and real audio put it at 0.06, moving a 13 pt bar by a fifth
+of a point. Corrected, the same audio reads 0.54.
 
 macOS hands a tap silence rather than an error when the permission is missing, so
 the app checks whether it is hearing anything while music plays and says so
@@ -179,10 +185,10 @@ Swift 6 with strict concurrency · SwiftUI + AppKit · Core Audio · vDSP · IOK
 SystemConfiguration · Network.framework · Carbon hot keys · no third-party
 dependencies.
 
-**127 tests** across the pure logic: player reply parsing, playhead
+**131 tests** across the pure logic: player reply parsing, playhead
 extrapolation, FFT and beat detection, notch geometry for every display
-configuration, the HUD size table, the indicator's loudness mapping, every
-AppleScript the app sends (compiled, not just parsed), preference migration, and
+configuration, the HUD size table, the indicator's loudness mapping and band
+calibration, every AppleScript the app sends (compiled, not just parsed), preference migration, and
 subprocess timeout and cancellation against real processes. No test needs a running music player or
 audio permission.
 

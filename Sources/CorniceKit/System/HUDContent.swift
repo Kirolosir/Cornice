@@ -3,10 +3,8 @@ import Foundation
 /// What a system HUD is actually saying.
 ///
 /// The payload is carried with the state rather than read back out of the model
-/// when the view draws, because a HUD outlives the condition that raised it: the
-/// volume pill is still on screen a second after the volume stopped changing,
-/// and a charge notice should not blank out because the next telemetry sample
-/// landed.
+/// when the view draws, because a HUD outlives the condition that raised it: a
+/// charge notice should not blank out because the next telemetry sample landed.
 public enum HUDContent: Equatable, Sendable {
     case noInternet
     case filesReceived(files: [String])
@@ -15,7 +13,6 @@ public enum HUDContent: Equatable, Sendable {
     case batteryLow(level: Double)
     case fullBattery
     case vpn(name: String, since: Date)
-    case volume(device: String, level: Double, isMuted: Bool)
     /// `progress` is nil when the source does not publish an expected size,
     /// which is the normal case for a Chromium download. The bar is omitted
     /// rather than guessed at.
@@ -32,7 +29,6 @@ public enum HUDContent: Equatable, Sendable {
         case .batteryLow: .batteryLow
         case .fullBattery: .fullBattery
         case .vpn: .vpn
-        case .volume: .volume
         case .download: .download
         case .doNotDisturb: .doNotDisturb
         case .handoff: .handoff
@@ -41,13 +37,10 @@ public enum HUDContent: Equatable, Sendable {
 
     /// Whether a newly-raised HUD should replace this one.
     ///
-    /// Volume is the one that has to win: it is raised by a key the user is
-    /// holding down, and anything that outranks it makes the keyboard feel
-    /// broken. An unanswered alert outranks everything else, because it is
-    /// waiting on an answer.
+    /// An unanswered alert outranks everything else, because it is waiting on an
+    /// answer; a charge warning outranks the rest of the announcements.
     public var priority: Int {
         switch self {
-        case .volume: 3
         case .noInternet, .timerRunning, .filesReceived: 2
         case .batteryLow: 1
         default: 0
