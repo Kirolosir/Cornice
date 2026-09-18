@@ -501,10 +501,10 @@ The idea comes from Apple's Dynamic Island, and
 on a Mac. I used it for a while before starting this and it's a good app.
 
 Cornice is not a fork or a reskin of it. The UI is my own, the geometry is my
-own, and a fair amount of what's here Atoll doesn't do: the Spotify Web API
-sign-in for real repeat-one, the pink-noise spectral compensation on the
-visualiser, bars that respond to the system volume, per-region artwork tinting,
-and the eleven system HUDs. Cornice shares no code with it. Atoll is GPL v3 and
+own, and so are the parts I spent the most time on: the Spotify Web API sign-in
+for real repeat-one, the pink-noise spectral compensation on the visualiser, bars
+that respond to the system volume, per-region artwork tinting, and the eleven
+system HUDs. Cornice shares no code with it. Atoll is GPL v3 and
 this is MIT, which only works because I wrote everything here from scratch, and
 writing it was the whole point.
 
