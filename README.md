@@ -47,6 +47,20 @@ icon — the app lives in the menu bar.
 The visualiser asks for System Audio Recording permission the first time you
 enable it. Everything else works without granting anything.
 
+### Connecting Spotify (optional)
+
+Only needed for real repeat-one — everything else works without it. Requires
+Spotify Premium, because that is what the Web API's playback controls require.
+
+1. At [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard),
+   create an app. Any name will do.
+2. Add `cornice://spotify-callback` as a Redirect URI, and tick **Web API**.
+3. Copy the app's Client ID into Cornice's **Settings → Spotify**, and press
+   **Connect Spotify**.
+
+The client ID is not a secret: the sign-in uses PKCE, so there is no secret to
+keep. The refresh token it produces is, and that goes in the Keychain.
+
 ---
 
 ## How it works
@@ -130,9 +144,20 @@ macOS release.
 
 Repeat-one is a good example of the difference between the two. Music has a real
 three-way `song repeat`; Spotify's dictionary exposes `repeating` as a boolean
-and offers no way to ask for the track. So the app provides it: with repeat-one
-set, it seeks back to the start a moment before the end, and the player never
-reaches the point where it would move on.
+and offers no way to ask for the track. So Cornice does it two ways, and prefers
+the honest one.
+
+**Connect Spotify** in Settings and it asks the player outright. Spotify's Web
+API takes `off`, `context` or `track`, so repeat-one becomes the player's own
+setting: the `1` appears on Spotify's button, it survives skips and restarts, and
+nothing has to watch for the end of a song. The sign-in is authorization code
+with PKCE — a desktop bundle cannot hold a client secret, because anyone with the
+bundle can read it — and the refresh token lives in the Keychain, device-only.
+Cornice asks for two scopes, both about playback, and never sees the password.
+
+Without that sign-in it falls back to imitating the setting: with repeat-one set,
+it seeks back to the start a moment before the end, and the player never reaches
+the point where it would move on.
 
 That moment has to be learned. Spotify can be set to crossfade, which begins the
 next track *seconds* before the current one reaches the length it reports — and
@@ -142,6 +167,9 @@ track changing on its own near the end, puts it back, and remembers how early it
 happened; the next loop lands ahead of the crossfade rather than behind it. A
 skip the user asked for is left alone, and repeat-one follows them to whatever
 they land on.
+
+Which is a lot of machinery to stand in for one API call — which is the argument
+for making the call.
 
 Everything else that differs between the two players is normalised in one place:
 Spotify reports duration in milliseconds and Music in seconds, Music spells
@@ -250,6 +278,9 @@ make test
   code signature, **rebuilding invalidates the audio-capture grant**. If the
   visualiser goes quiet after a rebuild, reset it and relaunch:
   `tccutil reset AudioCapture dev.cornice.app`.
+- Spotify's repeat-one is imitated unless you connect the Web API in Settings,
+  which needs a free app registration and a Premium account. Without it the
+  fallback still replays the track; Spotify's own button just won't show the `1`.
 - The hot key is fixed at ⌥⌘D.
 - Do Not Disturb, AirDrop and Handoff HUDs are drawn but not wired: macOS does
   not publish that state without Full Disk Access or an API that does not exist.
