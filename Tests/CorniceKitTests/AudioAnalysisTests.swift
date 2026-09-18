@@ -178,3 +178,62 @@ final class AudioAnalysisTests: XCTestCase {
         XCTAssertTrue(silent.isSilent)
     }
 }
+
+/// The mapping from analysed audio onto the compact playing indicator.
+final class IndicatorBarTests: XCTestCase {
+
+    private func levels(bands: [Float], level: Float, beat: Float = 0) -> AudioLevels {
+        AudioLevels(bands: bands, level: level, isBeat: beat > 0, beatIntensity: beat)
+    }
+
+    /// The whole point of the change: the same spectrum played louder has to
+    /// move further. Driving the bars from the bands alone gave every passage
+    /// the same amplitude, because each band is already compressed.
+    func testLouderAudioSwingsFurtherForTheSameSpectrum() {
+        let spectrum: [Float] = [0.8, 0.8, 0.7, 0.7, 0.6, 0.6, 0.5, 0.5]
+        let quiet = levels(bands: spectrum, level: 0.2).barHeights(count: 3)
+        let loud = levels(bands: spectrum, level: 0.9).barHeights(count: 3)
+
+        for index in 0..<3 {
+            XCTAssertGreaterThan(loud[index], quiet[index], "bar \(index)")
+        }
+        XCTAssertGreaterThan(loud[0] - quiet[0], 0.15, "the difference should be plainly visible")
+    }
+
+    /// Silence rests rather than collapsing, so the row reads as a control
+    /// rather than as a component that failed to load.
+    func testSilenceRests() {
+        let heights = levels(bands: [0, 0, 0, 0, 0, 0, 0, 0], level: 0).barHeights(count: 3)
+        XCTAssertEqual(heights, [0.3, 0.3, 0.3])
+    }
+
+    /// A narrow tone should move its bar fully instead of being averaged into
+    /// nothing by the quiet bins beside it.
+    func testABarTakesThePeakOfItsSliceNotTheMean() {
+        let spike: [Float] = [1, 0, 0, 0, 0, 0, 0, 0]
+        let heights = levels(bands: spike, level: 1).barHeights(count: 3)
+        XCTAssertGreaterThan(heights[0], 0.9)
+        XCTAssertEqual(heights[1], 0.3, accuracy: 0.001)
+    }
+
+    /// Every band belongs to some bar: eight bands across three bars must not
+    /// leave the top of the spectrum unrepresented.
+    func testTheLastBarTakesTheRemainingBands() {
+        var bands = [Float](repeating: 0, count: 8)
+        bands[7] = 1
+        let heights = levels(bands: bands, level: 1).barHeights(count: 3)
+        XCTAssertGreaterThan(heights[2], 0.9)
+    }
+
+    /// An onset punches the low bar without letting it exceed full height.
+    func testBeatPunchesTheLowBarAndStaysInRange() {
+        let spectrum = [Float](repeating: 1, count: 8)
+        let heights = levels(bands: spectrum, level: 1, beat: 1).barHeights(count: 3)
+        XCTAssertLessThanOrEqual(heights[0], 1)
+        for height in heights { XCTAssertGreaterThanOrEqual(height, 0.3) }
+    }
+
+    func testNoBandsYieldsRestingBars() {
+        XCTAssertEqual(levels(bands: [], level: 0.5).barHeights(count: 3), [0.3, 0.3, 0.3])
+    }
+}

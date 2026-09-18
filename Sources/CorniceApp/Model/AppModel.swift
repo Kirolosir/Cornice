@@ -190,16 +190,25 @@ final class AppModel {
 
     func present(_ state: SurfaceState) {
         guard surfaceState != state else { return }
+        let wasOpen = surfaceState.isOpen
         surfaceState = state
         onSurfaceStateChanged?()
-        // Both loops change cadence with the surface state, so both are
-        // rebuilt. Any state other than resting means the user is looking at
-        // it, which forces an immediate read — this is what makes the lazy
-        // collapsed cadence invisible: by the time the peek has finished
-        // animating, the data behind it is current.
-        if state != .collapsed { refreshNow("media") }
-        restartLoop("media")
-        restartLoop("telemetry")
+
+        // Both loops poll faster while the panel is open, so they are rebuilt
+        // when that changes — and `restartLoop` reads immediately, so opening
+        // already refreshes. Rebuilding on *every* transition instead, with a
+        // separate forced read on top, meant one hover fired four Apple events
+        // in a millisecond: peek and expanded, twice each. At roughly 100 ms of
+        // CPU per round trip that is most of a frame budget spent re-reading
+        // what had just been read.
+        if wasOpen != state.isOpen {
+            restartLoop("media")
+            restartLoop("telemetry")
+        } else if state != .collapsed {
+            // Anything other than resting means the user is looking at it, so
+            // the lazy resting cadence is erased before it can be seen.
+            refreshNow("media")
+        }
     }
 
     func toggle() {
@@ -362,7 +371,14 @@ final class AppModel {
         guard preferences.audioVisualizerEnabled else { return }
         let latest = serviceContainer.visualizer.latestLevels()
         levels = latest
+        let wasHearing = hasLiveAudio
         if !latest.isSilent { lastAudioAt = .now }
+        // Logged on the edge only. "Is the visualiser working?" is otherwise
+        // unanswerable from outside the app, because macOS reports a tap it has
+        // denied as running and simply feeds it silence.
+        if !wasHearing, !latest.isSilent {
+            Log.audio.notice("visualiser hearing audio")
+        }
     }
 
     /// Whether the analyser has heard anything recently.

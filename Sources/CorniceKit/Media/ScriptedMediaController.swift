@@ -55,6 +55,10 @@ public actor ScriptedMediaController: MediaControlling {
         let light = try await runner.run(lightScript, target: source.scriptingName)
         guard let raw = light.string else { return nil }
         guard let state = Self.parseLight(raw, source: source) else { return nil }
+        // State only, never the track: enough to tell a working poll from a
+        // failing one in a bug report, without writing what someone is listening
+        // to into the system log.
+        Log.media.info("\(self.source.rawValue, privacy: .public) poll: \(state.state.rawValue, privacy: .public)")
 
         guard state.state != .stopped else {
             cachedTrack = nil
@@ -105,7 +109,7 @@ public actor ScriptedMediaController: MediaControlling {
     // MARK: - Reading
 
     /// The cheap read: only what changes between polls.
-    private var lightScript: String {
+    nonisolated var lightScript: String {
         let application = source.scriptingName
         let durationExpression = "trackDuration as text"
         return """
@@ -132,7 +136,7 @@ public actor ScriptedMediaController: MediaControlling {
             end try
             set rep to "off"
             try
-                set rep to \(dialect.repeatExpression)
+                \(dialect.repeatStatement)
             end try
             return s & "\(Self.separator)" & trackName & "\(Self.separator)" & (\(durationExpression)) & "\(Self.separator)" & (pos as text) & "\(Self.separator)" & (vol as text) & "\(Self.separator)" & shuf & "\(Self.separator)" & rep
         end tell
@@ -140,10 +144,15 @@ public actor ScriptedMediaController: MediaControlling {
     }
 
     /// The two players' spellings for the properties the light read needs.
-    private var dialect: (shuffleProperty: String, repeatExpression: String) {
+    ///
+    /// Both are *statements*, not expressions. AppleScript has no conditional
+    /// expression — `set x to (if p then "a" else "b")` is a compile error, and a
+    /// compile error fails the whole script, so a surrounding `try` does not
+    /// contain it.
+    nonisolated var dialect: (shuffleProperty: String, repeatStatement: String) {
         switch source {
-        case .spotify: ("shuffling", "(if repeating then \"all\" else \"off\")")
-        case .appleMusic: ("shuffle enabled", "(song repeat as text)")
+        case .spotify: ("shuffling", "if repeating then set rep to \"all\"")
+        case .appleMusic: ("shuffle enabled", "set rep to (song repeat as text)")
         }
     }
 
@@ -191,7 +200,7 @@ public actor ScriptedMediaController: MediaControlling {
     /// Wrapped in `try` blocks because a player that is open with nothing
     /// loaded raises on `current track` rather than returning empty — so the
     /// script degrades to a "stopped" answer instead of throwing.
-    private var readScript: String {
+    nonisolated var readScript: String {
         switch source {
         case .spotify:
             """
@@ -363,7 +372,7 @@ public actor ScriptedMediaController: MediaControlling {
 
     // MARK: - Commands
 
-    private func commandScript(for command: MediaCommand) -> String? {
+    nonisolated func commandScript(for command: MediaCommand) -> String? {
         let application = source.scriptingName
 
         switch command {

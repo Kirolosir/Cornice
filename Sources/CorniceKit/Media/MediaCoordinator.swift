@@ -68,6 +68,13 @@ public actor MediaCoordinator {
                 // A player that is open with nothing loaded raises rather than
                 // returning empty; that is not worth surfacing.
             } catch {
+                // Everything else used to be dropped on the floor, which meant a
+                // script that failed for any reason at all — a syntax error, a
+                // player mid-launch — showed up as an empty surface and nothing
+                // else. Silence is the worst possible diagnosis.
+                Log.media.error(
+                    "\(source.displayName, privacy: .public) poll failed: \(String(describing: error), privacy: .public)"
+                )
                 continue
             }
         }

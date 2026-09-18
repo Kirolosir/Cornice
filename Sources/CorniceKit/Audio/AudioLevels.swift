@@ -29,6 +29,50 @@ public struct AudioLevels: Sendable, Equatable {
     }
 
     public var isSilent: Bool { level < 0.001 }
+
+    /// Bar heights for a compact playing indicator, each 0...1 of full height.
+    ///
+    /// The spectrum decides the *shape* and the overall level decides how much
+    /// room that shape has to move in. That second half is what makes a quiet
+    /// passage barely stir and a loud one swing the full height: driving the
+    /// bars from the bands alone gives every passage the same amplitude, because
+    /// each band is already perceptually compressed, so the music changes shape
+    /// but never size.
+    ///
+    /// - Parameters:
+    ///   - count: how many bars to fill.
+    ///   - resting: the height a bar holds in silence, so the row reads as a
+    ///     control rather than as a glitch.
+    public func barHeights(count: Int, resting: Float = 0.3) -> [Float] {
+        guard count > 0 else { return [] }
+        guard !bands.isEmpty else { return Array(repeating: resting, count: count) }
+
+        // Slightly concave, so ordinary listening levels already move properly
+        // rather than only the loudest choruses.
+        let headroom = pow(min(1, max(0, level)), 0.7)
+
+        return (0..<count).map { index in
+            let energy = min(1, max(0, peak(of: index, of: count)))
+            // A little extra punch on the lowest bar when an onset lands, so the
+            // row reads as locked to the beat rather than merely busy.
+            let kick = index == 0 ? beatIntensity * 0.14 : 0
+            let swing = (1 - resting) * energy * headroom + kick
+            return min(1, max(resting, resting + swing))
+        }
+    }
+
+    /// The loudest band in one bar's slice of the spectrum.
+    ///
+    /// Peak rather than mean, for the same reason the analyser folds bins that
+    /// way: a narrow tone should move its bar fully instead of being averaged
+    /// into nothing by the quiet bins beside it.
+    private func peak(of index: Int, of count: Int) -> Float {
+        let perBar = max(1, bands.count / count)
+        let start = min(index * perBar, bands.count - 1)
+        // The last bar takes whatever is left, so no band goes unrepresented.
+        let end = index == count - 1 ? bands.count : min(start + perBar, bands.count)
+        return bands[start..<end].max() ?? 0
+    }
 }
 
 /// Turns a block of PCM samples into `AudioLevels`.

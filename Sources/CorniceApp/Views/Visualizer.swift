@@ -109,17 +109,19 @@ struct EqualizerIndicator: View {
         .accessibilityHidden(true)
     }
 
+    /// How tall a bar stands, 0...1 of its full height. The mapping itself lives
+    /// in `AudioLevels`, where it can be tested against known spectra.
     private func scale(at index: Int) -> CGFloat {
         guard isLive else { return resting }
-        if audioDriven { return max(resting, CGFloat(band(at: index))) }
-        return bobbing ? 1 : resting
+        guard audioDriven else { return bobbing ? 1 : resting }
+        let heights = levels.barHeights(count: 3, resting: Float(resting))
+        guard index < heights.count else { return resting }
+        return CGFloat(heights[index])
     }
 
-    /// What each bar's animation is keyed on, so the analyser-driven case
-    /// re-animates per sample and the procedural case animates exactly once.
     private func animationKey(at index: Int) -> Double {
         guard isLive else { return -1 }
-        return audioDriven ? Double(band(at: index)) : (bobbing ? 1 : 0)
+        return audioDriven ? Double(scale(at: index)) : (bobbing ? 1 : 0)
     }
 
     private func animation(at index: Int) -> Animation? {
@@ -130,13 +132,4 @@ struct EqualizerIndicator: View {
             .delay(Self.phases[index])
     }
 
-    private func band(at index: Int) -> Float {
-        guard !levels.bands.isEmpty else { return 0 }
-        let perBar = max(1, levels.bands.count / 3)
-        let start = min(index * perBar, levels.bands.count - 1)
-        let end = min(start + perBar, levels.bands.count)
-        let slice = levels.bands[start..<end]
-        guard !slice.isEmpty else { return 0 }
-        return slice.reduce(0, +) / Float(slice.count)
-    }
 }

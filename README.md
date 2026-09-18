@@ -129,6 +129,12 @@ Analysis happens in the audio callback and writes into a lock-protected box; the
 UI *pulls* the newest frame on its own timer. Pushing observable updates from the
 audio thread schedules main-actor work faster than it drains.
 
+The playing indicator is driven by both halves of the analysis: the spectrum
+decides the *shape* of the three bars and the overall level decides how much room
+that shape has to move in, so a quiet passage barely stirs and a loud one swings
+the full height. Bands alone gave every passage the same amplitude, because each
+band is already perceptually compressed — the music changed shape but never size.
+
 macOS hands a tap silence rather than an error when the permission is missing, so
 the app checks whether it is hearing anything while music plays and says so
 plainly instead of showing dead bars.
@@ -173,10 +179,11 @@ Swift 6 with strict concurrency · SwiftUI + AppKit · Core Audio · vDSP · IOK
 SystemConfiguration · Network.framework · Carbon hot keys · no third-party
 dependencies.
 
-**118 tests** across the pure logic: player reply parsing, playhead
+**127 tests** across the pure logic: player reply parsing, playhead
 extrapolation, FFT and beat detection, notch geometry for every display
-configuration, the HUD size table, preference migration, and subprocess timeout
-and cancellation against real processes. No test needs a running music player or
+configuration, the HUD size table, the indicator's loudness mapping, every
+AppleScript the app sends (compiled, not just parsed), preference migration, and
+subprocess timeout and cancellation against real processes. No test needs a running music player or
 audio permission.
 
 ```bash
