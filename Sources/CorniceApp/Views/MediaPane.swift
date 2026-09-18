@@ -303,34 +303,64 @@ struct PlayPauseGlyph: View {
     }
 }
 
-/// A draggable progress bar: 6 pt, no knob, seekable anywhere along its length.
+/// The progress bar. 6 pt tall, no knob, and you can seek by clicking anywhere
+/// along it.
 ///
-/// Dragging updates a local value and only commits on release, so the bar
-/// follows the pointer exactly instead of fighting the poll that would otherwise
-/// snap it back to the player's last reported position.
+/// Three different things move this bar and they should not look alike:
+///
+/// - Playing. The position is extrapolated every frame, so it is already smooth
+///   and gets no animation at all. Animating it would mean starting a new
+///   animation on every frame, which costs CPU and buys nothing.
+/// - Dragging. Follows the pointer exactly, with no animation, because any
+///   easing here reads as the bar lagging behind the mouse.
+/// - Jumping. A seek, a skip, or a track starting over. This one springs, so
+///   you see the playhead travel and know the press landed.
+///
+/// While you are dragging, the position is kept locally and only sent to the
+/// player on release. Otherwise the next poll would snap the bar back to where
+/// the song actually is, halfway through the drag.
 struct Scrubber: View {
     let progress: Double
     let track: Color
     let fill: Color
     let onSeek: (Double) -> Void
 
+    /// Where the pointer is, while a drag is in progress.
     @State private var dragProgress: Double?
+    /// Where the bar is drawn. Follows `progress` except during a drag.
+    @State private var shown: Double = 0
+    @State private var isHovering = false
 
-    private var displayed: Double { dragProgress ?? progress }
+    private var isDragging: Bool { dragProgress != nil }
+    private var displayed: Double { dragProgress ?? shown }
+
+    /// Grows under the pointer, and again when you grab it. Same idea as the
+    /// scrubber in Music: the bar acknowledges that it is a control.
+    private var barHeight: CGFloat {
+        if isDragging { return 10 }
+        return isHovering ? 8 : 6
+    }
+
+    /// Anything bigger than this did not get there by playing.
+    ///
+    /// A frame of playback moves the bar by well under a thousandth, even on a
+    /// very short track, so there is a lot of room between the two cases.
+    private static let jumpThreshold = 0.04
 
     var body: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 3, style: .continuous).fill(track)
-                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                Capsule(style: .continuous).fill(track)
+                Capsule(style: .continuous)
                     .fill(fill)
                     .frame(width: max(0, min(width, width * displayed)))
-                    .animation(.linear(duration: 0.16), value: displayed)
             }
-            .frame(height: 6)
+            .frame(height: barHeight)
             .frame(maxHeight: .infinity, alignment: .center)
+            .animation(Theme.Motion.scrubGrab, value: barHeight)
             .contentShape(Rectangle())
+            .onHover { isHovering = $0 }
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
@@ -338,12 +368,25 @@ struct Scrubber: View {
                     }
                     .onEnded { value in
                         let target = (value.location.x / width).clamped(to: 0...1)
+                        // Take the drop position before letting go of the drag,
+                        // or the bar flicks back to the last poll for the moment
+                        // it takes the player to answer.
+                        shown = target
                         dragProgress = nil
                         onSeek(target)
                     }
             )
         }
         .frame(height: 12)
+        .onAppear { shown = progress }
+        .onChange(of: progress) { previous, current in
+            guard !isDragging else { return }
+            if abs(current - previous) > Self.jumpThreshold {
+                withAnimation(Theme.Motion.scrubJump) { shown = current }
+            } else {
+                shown = current
+            }
+        }
         .accessibilityElement()
         .accessibilityLabel("Playback position")
         .accessibilityValue("\(Int(displayed * 100)) percent")

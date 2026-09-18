@@ -209,6 +209,15 @@ enum Theme {
         /// pops in. Never a cross-fade of two glyphs.
         static let symbolReplace = SwiftUI.Animation.spring(response: 0.28, dampingFraction: 0.55)
 
+        /// The scrubber growing under the pointer and shrinking again after.
+        static let scrubGrab = SwiftUI.Animation.spring(response: 0.25, dampingFraction: 0.7)
+
+        /// The playhead moving somewhere it did not get to by playing: a seek,
+        /// a skip, a track starting over. Springy enough that you can see it
+        /// travel, which is the difference between a seek that registered and
+        /// one you have to check.
+        static let scrubJump = SwiftUI.Animation.spring(response: 0.42, dampingFraction: 0.8)
+
         // Content arrives in two groups at fixed points along the opening
         // spring, so the outline is always ahead of what is in it.
 
