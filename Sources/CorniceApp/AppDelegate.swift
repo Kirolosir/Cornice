@@ -54,6 +54,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Where the Spotify sign-in comes back to.
+    ///
+    /// The browser is handed a `cornice://spotify-callback` redirect, and macOS
+    /// routes it here through the URL type declared in `Info.plist`. The code it
+    /// carries is worthless without the PKCE verifier held in this process, and
+    /// the `state` it carries is checked against the one this process generated,
+    /// so a URL from anywhere else is refused rather than redeemed.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls where url.scheme == "cornice" && url.host == "spotify-callback" {
+            model?.completeSpotifySignIn(url)
+        }
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         model?.stopRefreshLoops()
         windowController?.tearDown()

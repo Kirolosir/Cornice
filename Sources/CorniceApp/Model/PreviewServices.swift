@@ -21,7 +21,9 @@ enum PreviewServices {
             outputVolume: OutputVolumeReader(),
             reachability: NetworkReachability(),
             vpn: VPNMonitor(),
-            downloads: DownloadsMonitor()
+            downloads: DownloadsMonitor(),
+            // No client ID, so it stays unconfigured and never reaches the network.
+            spotify: SpotifyWebRemote(clientID: "", store: EphemeralTokenStore())
         )
     }
 

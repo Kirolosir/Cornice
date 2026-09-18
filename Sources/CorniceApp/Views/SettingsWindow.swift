@@ -56,6 +56,8 @@ struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
             VisualizerSettings(model: model)
                 .tabItem { Label("Visualiser", systemImage: "waveform") }
+            SpotifySettings(model: model)
+                .tabItem { Label("Spotify", systemImage: "music.note") }
             AboutSettings(model: model)
                 .tabItem { Label("About", systemImage: "info.circle") }
         }
@@ -198,6 +200,106 @@ struct GeneralSettings: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+/// Connects Spotify's Web API, for the one thing its scripting interface cannot
+/// express.
+///
+/// Worth the tab rather than a line in General, because it asks the user to do
+/// something — register an application — and an instruction with no explanation
+/// beside it reads as an imposition.
+struct SpotifySettings: View {
+    @Bindable var model: AppModel
+    @State private var clientID: String = ""
+    @State private var copied = false
+
+    private var status: SpotifyWebRemote.Status { model.spotifyStatus }
+
+    var body: some View {
+        Form {
+            Section("Repeat one track") {
+                Text("""
+                Spotify's scripting interface reports repeat as a single on/off \
+                switch, so Cornice imitates repeat-one by restarting the track \
+                when it ends. Connecting Spotify sets the real thing: the 1 \
+                appears on Spotify's own button, and it survives skips.
+                """)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+
+                LabeledContent("Status") {
+                    switch status {
+                    case .unconfigured:
+                        Text("Not set up").foregroundStyle(.secondary)
+                    case .signedOut:
+                        Text("Not connected").foregroundStyle(.secondary)
+                    case .signedIn:
+                        Label("Connected", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    case .failing(let reason):
+                        Text(reason).foregroundStyle(.orange)
+                    }
+                }
+            }
+
+            Section("Application") {
+                TextField("Client ID", text: $clientID, prompt: Text("From your Spotify dashboard"))
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(saveClientID)
+
+                LabeledContent("Redirect URI") {
+                    HStack {
+                        Text(SpotifyAuthorization.redirectURI)
+                            .font(.callout.monospaced())
+                            .textSelection(.enabled)
+                        Button(copied ? "Copied" : "Copy") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(
+                                SpotifyAuthorization.redirectURI, forType: .string
+                            )
+                            copied = true
+                        }
+                    }
+                }
+
+                HStack {
+                    if status == .signedIn {
+                        Button("Disconnect", role: .destructive) { model.disconnectSpotify() }
+                    } else {
+                        Button("Connect Spotify") {
+                            saveClientID()
+                            model.beginSpotifySignIn()
+                        }
+                        .disabled(clientID.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                    Spacer()
+                    Link("Spotify dashboard", destination: URL(string: "https://developer.spotify.com/dashboard")!)
+                }
+            }
+
+            Section {
+                Text("""
+                Create an app on the dashboard, add the redirect URI above to \
+                it, and paste its client ID here. The client ID is not a secret \
+                — sign-in uses PKCE, so Cornice never needs one. Controlling \
+                playback this way requires Spotify Premium; without it Cornice \
+                keeps imitating repeat-one as before.
+                """)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear { clientID = model.preferences.spotifyClientID }
+        .onChange(of: clientID) { copied = false }
+    }
+
+    private func saveClientID() {
+        let trimmed = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed != model.preferences.spotifyClientID else { return }
+        model.updatePreferences { $0.spotifyClientID = trimmed }
+        Task { await model.configureSpotify() }
     }
 }
 

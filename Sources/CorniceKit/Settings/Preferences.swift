@@ -111,6 +111,18 @@ public struct Preferences: Codable, Equatable, Sendable {
     /// is indistinguishable from a button that does not work.
     public var appliesRepeatOne: Bool
 
+    /// The Spotify application's client ID, for the Web API sign-in.
+    ///
+    /// Not a secret. The sign-in uses PKCE precisely because a desktop app has
+    /// nowhere to keep one, so this identifies the application and nothing more
+    /// — it lives here, in plain preferences, where the user can read and change
+    /// it. The refresh token that sign-in produces is the credential, and that
+    /// goes in the Keychain.
+    ///
+    /// Empty until the user pastes one in, in which case Cornice falls back to
+    /// driving Spotify over AppleScript and looping the track itself.
+    public var spotifyClientID: String
+
     // System HUDs
     /// Watch the Downloads folder so a transfer in progress raises a HUD.
     ///
@@ -139,6 +151,7 @@ public struct Preferences: Codable, Equatable, Sendable {
         tintFromArtwork: Bool = true,
         tintStrength: Double = 1.8,
         appliesRepeatOne: Bool = false,
+        spotifyClientID: String = "",
         downloadHUDEnabled: Bool = false,
         timerPresetsMinutes: [Int] = [5, 10, 15, 25],
         notifyOnTimerComplete: Bool = true,
@@ -156,6 +169,7 @@ public struct Preferences: Codable, Equatable, Sendable {
         self.tintFromArtwork = tintFromArtwork
         self.tintStrength = tintStrength
         self.appliesRepeatOne = appliesRepeatOne
+        self.spotifyClientID = spotifyClientID
         self.downloadHUDEnabled = downloadHUDEnabled
         self.timerPresetsMinutes = timerPresetsMinutes
         self.notifyOnTimerComplete = notifyOnTimerComplete
@@ -188,6 +202,7 @@ public struct Preferences: Codable, Equatable, Sendable {
         tintFromArtwork = value(.tintFromArtwork, defaults.tintFromArtwork)
         tintStrength = value(.tintStrength, defaults.tintStrength)
         appliesRepeatOne = value(.appliesRepeatOne, defaults.appliesRepeatOne)
+        spotifyClientID = value(.spotifyClientID, defaults.spotifyClientID)
         downloadHUDEnabled = value(.downloadHUDEnabled, defaults.downloadHUDEnabled)
         timerPresetsMinutes = value(.timerPresetsMinutes, defaults.timerPresetsMinutes)
         notifyOnTimerComplete = value(.notifyOnTimerComplete, defaults.notifyOnTimerComplete)
@@ -215,6 +230,8 @@ public struct Preferences: Codable, Equatable, Sendable {
         if copy.timerPresetsMinutes.isEmpty {
             copy.timerPresetsMinutes = Preferences().timerPresetsMinutes
         }
+        // Pasting from a browser brings whitespace with it more often than not.
+        copy.spotifyClientID = spotifyClientID.trimmingCharacters(in: .whitespacesAndNewlines)
         // Media is the point of the app; it cannot be switched off.
         copy.enabledModules.insert(.media)
         return copy

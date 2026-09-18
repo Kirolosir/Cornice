@@ -51,7 +51,18 @@ final class AppModel {
 
     /// Repeat-one the app is providing itself, for a player that cannot be asked
     /// for it. Held here because the player has no way to report it back.
+    ///
+    /// Only used when Spotify's Web API is not signed in. With a sign-in the
+    /// player is asked for repeat-one directly and this stays false — see
+    /// `AppModel+Spotify`.
     private(set) var appliesRepeatOne = false
+
+    /// Whether Spotify's Web API can be asked for a repeat mode. Drives Settings.
+    var spotifyStatus: SpotifyWebRemote.Status = .unconfigured
+    /// Spotify's own repeat mode, as the Web API last reported it.
+    var spotifyRepeat: RepeatMode?
+    /// When that was, so the read stays on its own slow cadence.
+    var lastSpotifyRead: Date?
     private var repeatOneTask: Task<Void, Never>?
     /// The last track seen, so an advance the app did not ask for can be caught.
     private var lastSeenTrack: (identity: String, position: TimeInterval, duration: TimeInterval)?
@@ -181,6 +192,7 @@ final class AppModel {
         // Restored, so the setting survives a relaunch the way a setting should.
         appliesRepeatOne = preferences.appliesRepeatOne
         if appliesRepeatOne { Log.media.notice("repeat one: restored") }
+        await configureSpotify()
         // Order matters here, and it has taken a stopwatch to see why more than
         // once. Nothing the app actually *does* may sit behind something slow.
         //
@@ -475,7 +487,7 @@ final class AppModel {
             while !Task.isCancelled {
                 guard let self else { return }
                 await self.refresh(name)
-                let interval = await self.interval(for: name)
+                let interval = self.interval(for: name)
                 do { try await Task.sleep(for: .seconds(interval)) } catch { return }
             }
         }
@@ -553,6 +565,13 @@ final class AppModel {
         // button is pressed again.
         if appliesRepeatOne, let current = snapshot {
             snapshot = current.with(repeatMode: .one)
+        }
+        // With a Web API sign-in the player is the authority on its own repeat
+        // mode, so what it says replaces anything inferred locally.
+        await refreshSpotifyRepeat(for: snapshot)
+        if let reported = spotifyReportedRepeat,
+           let current = snapshot, current.source == .spotify {
+            snapshot = current.with(repeatMode: reported)
         }
         media = snapshot
         recoverFromAutomaticAdvance()

@@ -104,6 +104,17 @@ extension AppModel {
         guard let snapshot = media else { return }
         let wanted = snapshot.repeatMode.next(on: snapshot.source)
 
+        // Spotify, signed in to the Web API: it can be told to repeat one track
+        // outright, so tell it. This is the real setting — the `1` appears on
+        // Spotify's own button, it survives skips and restarts, and no part of
+        // the app has to watch for the end of the song.
+        if snapshot.source == .spotify, spotifyCanSetRepeat {
+            applyMedia(snapshot.with(repeatMode: wanted))
+            holdToggle(repeatMode: wanted)
+            sendSpotifyRepeat(wanted)
+            return
+        }
+
         // Where the player has no repeat-one of its own, the app provides it by
         // looping the track itself.
         let appProvides = wanted == .one && !snapshot.source.nativelyRepeatsOne

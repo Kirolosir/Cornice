@@ -104,6 +104,6 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
               // an arbitrary scheme.
               url.scheme == "https"
         else { return }
-        await MainActor.run { NSWorkspace.shared.open(url) }
+        await MainActor.run { _ = NSWorkspace.shared.open(url) }
     }
 }

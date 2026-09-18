@@ -75,9 +75,24 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
          Only requested when you turn the visualiser on in Settings. -->
     <key>NSAudioCaptureUsageDescription</key>
     <string>Cornice reads the audio your Mac is playing so the visualiser follows the music. Audio is analysed in memory for the spectrum display and is never recorded, saved, or sent anywhere.</string>
-    <!-- Cornice reads local repositories and talks to api.github.com only.
-         It requests no camera, microphone, location, contacts, or full-disk
-         access, and declares no URL schemes it can be launched with. -->
+    <!-- Registered so the Spotify sign-in can hand the browser somewhere to
+         come back to. The redirect carries an authorization code that is
+         useless without the PKCE verifier held in memory by the process that
+         started the sign-in, and its state parameter is checked on arrival. -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>dev.cornice.app.callback</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>cornice</string>
+            </array>
+        </dict>
+    </array>
+    <!-- Cornice talks to accounts.spotify.com and api.spotify.com, and only
+         once you connect Spotify in Settings. It requests no camera,
+         microphone, location, contacts, or full-disk access. -->
     <key>NSSupportsAutomaticTermination</key>
     <false/>
     <key>NSSupportsSuddenTermination</key>

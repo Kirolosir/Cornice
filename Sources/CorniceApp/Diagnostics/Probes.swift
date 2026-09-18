@@ -119,7 +119,7 @@ enum Probes {
                 // Two passes at the end of the track. The first is expected to
                 // be beaten by a crossfade and recovered from; the second should
                 // be pre-empted cleanly, using what the first one taught.
-                var trace: [String] = []
+                let trace: [String] = []
                 var identities: Set<String> = []
                 for pass in 1...2 {
                     guard let track = model.media else { break }
@@ -305,11 +305,11 @@ enum Probes {
         // optimistic flip, the hold that stops a stale poll undoing it, and the
         // refresh afterwards. Probing the coordinator underneath it answers a
         // different question from "does the button work".
-        let model = await AppModel(services: ServiceContainer.live())
+        let model = AppModel(services: ServiceContainer.live())
         await model.start()
         try? await Task.sleep(for: .seconds(2))
 
-        guard let before = await model.media else {
+        guard let before = model.media else {
             Log.media.notice("transport probe: no player with a track")
             exit(0)
         }
@@ -318,11 +318,11 @@ enum Probes {
         )
 
         for round in 1...3 {
-            await model.cycleRepeat()
+            model.cycleRepeat()
             var trace: [String] = []
             for _ in 0..<10 {
                 try? await Task.sleep(for: .milliseconds(200))
-                let mode = await model.media?.repeatMode.rawValue ?? "?"
+                let mode = model.media?.repeatMode.rawValue ?? "?"
                 trace.append(mode)
             }
             Log.media.notice(

@@ -18,6 +18,9 @@ struct ServiceContainer: Sendable {
     let reachability: NetworkReachability
     let vpn: VPNMonitor
     let downloads: DownloadsMonitor
+    /// Spotify's Web API, for the repeat state its scripting interface cannot
+    /// express. Idle — and asking for nothing — until a client ID is entered.
+    let spotify: SpotifyWebRemote
 
     static func live() -> ServiceContainer {
         let runner = SubprocessRunner()
@@ -31,7 +34,8 @@ struct ServiceContainer: Sendable {
             outputVolume: OutputVolumeReader(),
             reachability: NetworkReachability(),
             vpn: VPNMonitor(),
-            downloads: DownloadsMonitor()
+            downloads: DownloadsMonitor(),
+            spotify: SpotifyWebRemote(clientID: "")
         )
     }
 }
