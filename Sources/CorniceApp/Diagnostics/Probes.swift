@@ -89,13 +89,14 @@ enum Probes {
             }
         }
 
-        // Repeat-one across a skip: the setting has to follow the user to
-        // whatever track they land on, which is the whole point of it.
+        // Skip while repeat-one is holding: it should start the song again
+        // rather than leave it. Verified against the player, because the whole
+        // question is what the *player* does with the command.
         if arguments.contains("--probe-repeat-skip") {
             Task { @MainActor in
-                try? await Task.sleep(for: .seconds(4))
-                guard let before = model.media else {
-                    Log.media.notice("skip probe: no track")
+                try? await Task.sleep(for: .seconds(6))
+                guard let before = model.media, before.duration > 40 else {
+                    Log.media.notice("skip probe: no track long enough to test")
                     exit(0)
                 }
                 if !before.state.isPlaying { model.playPause() }
@@ -103,42 +104,38 @@ enum Probes {
 
                 for _ in 0..<3 where model.media?.repeatMode != .one {
                     model.cycleRepeat()
-                    try? await Task.sleep(for: .milliseconds(700))
+                    try? await Task.sleep(for: .milliseconds(800))
                 }
-                Log.media.notice("skip probe: mode=\(model.media?.repeatMode.rawValue ?? "?", privacy: .public) applies=\(model.appliesRepeatOne, privacy: .public)")
+                guard model.media?.repeatMode == .one else {
+                    Log.media.notice("skip probe: could not reach repeat one")
+                    exit(0)
+                }
+
+                // Somewhere clearly into the track, so a restart is unambiguous.
+                model.seek(toProgress: 0.4)
+                try? await Task.sleep(for: .seconds(2))
+                guard let armed = model.media else { exit(0) }
+                let identity = armed.trackIdentity
+                Log.media.notice(
+                    "skip probe: holding at \(armed.extrapolatedPosition(), format: .fixed(precision: 1), privacy: .public)s"
+                )
 
                 model.nextTrack()
                 try? await Task.sleep(for: .seconds(3))
-                guard let after = model.media else { exit(0) }
+                guard let held = model.media else { exit(0) }
+                let sameTrack = held.trackIdentity == identity
                 Log.media.notice(
-                    "skip probe: after skip mode=\(after.repeatMode.rawValue, privacy: .public) applies=\(model.appliesRepeatOne, privacy: .public) duration=\(after.duration, format: .fixed(precision: 1), privacy: .public)"
+                    "skip probe: held=\(sameTrack, privacy: .public) at \(held.extrapolatedPosition(), format: .fixed(precision: 1), privacy: .public)s"
                 )
 
-                guard after.duration > 20 else { exit(0) }
-
-                // Two passes at the end of the track. The first is expected to
-                // be beaten by a crossfade and recovered from; the second should
-                // be pre-empted cleanly, using what the first one taught.
-                let trace: [String] = []
-                var identities: Set<String> = []
-                for pass in 1...2 {
-                    guard let track = model.media else { break }
-                    model.seek(toProgress: (track.duration - 8) / track.duration)
-                    try? await Task.sleep(for: .seconds(1))
-                    var pattern: [String] = []
-                    for _ in 0..<15 {
-                        try? await Task.sleep(for: .milliseconds(700))
-                        guard let now = model.media else { continue }
-                        identities.insert(now.trackIdentity)
-                        pattern.append(String(format: "%.0f", now.extrapolatedPosition()))
-                    }
-                    Log.media.notice(
-                        "skip probe: pass \(pass, privacy: .public) \(pattern.joined(separator: " "), privacy: .public) tracks=\(identities.count, privacy: .public)"
-                    )
-                    identities.removeAll()
-                    try? await Task.sleep(for: .seconds(2))
-                }
-                _ = trace
+                // Released, the same button has to move again — a skip that
+                // never skips would be the worse bug of the two.
+                model.cycleRepeat()
+                try? await Task.sleep(for: .seconds(1))
+                model.nextTrack()
+                try? await Task.sleep(for: .seconds(3))
+                let moved = model.media?.trackIdentity != identity
+                Log.media.notice("skip probe: released, moved=\(moved, privacy: .public)")
                 exit(0)
             }
         }

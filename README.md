@@ -171,6 +171,12 @@ they land on.
 Which is a lot of machinery to stand in for one API call — which is the argument
 for making the call.
 
+One deliberate departure: with repeat-one set, Cornice's skip button restarts the
+song instead of advancing. Spotify's own Next advances even while repeat-one is
+on, but "repeat this song" and "now play a different one" are contradictory
+instructions, and the one pressed more recently should win. Press repeat again to
+release it and skip goes back to skipping.
+
 Everything else that differs between the two players is normalised in one place:
 Spotify reports duration in milliseconds and Music in seconds, Music spells
 repeat as `off`/`one`/`all` where Spotify uses a boolean, and AppleScript renders

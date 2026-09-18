@@ -56,14 +56,49 @@ extension AppModel {
         }
         send(.playPause)
     }
+    /// Whether repeat-one is holding the player on this track.
+    ///
+    /// Reads the mode rather than the mechanism, so it is true whether the
+    /// player is repeating the track itself — Music always, Spotify once the
+    /// Web API is connected — or the app is imitating it.
+    var holdsCurrentTrack: Bool {
+        media?.repeatMode == .one
+    }
+
+    /// Skip, unless repeat-one is holding this track.
+    ///
+    /// Spotify's own Next advances even with repeat-one set, and Cornice used
+    /// to match that. But "repeat this song" and "and now play a different one"
+    /// are contradictory instructions, and of the two the one the user pressed
+    /// most recently should not be the one that loses. So while repeat-one is
+    /// on, skipping starts the song again: the playhead jumping back to zero is
+    /// visible feedback that the button worked and the song is being held.
+    ///
+    /// Press repeat again to release it, and skip goes back to skipping.
     func nextTrack() {
+        guard !holdsCurrentTrack else { return restartTrack() }
         expectTrackChange()
         send(.next)
     }
 
     func previousTrack() {
+        guard !holdsCurrentTrack else { return restartTrack() }
+        stepToPreviousTrack()
+    }
+
+    /// Moves to the previous track even while repeat-one is holding.
+    ///
+    /// Kept apart from the button, because the automatic-advance recovery is
+    /// the one caller that genuinely has to move: it runs *because* the player
+    /// already left the track, so restarting whatever it landed on instead
+    /// would lock repeat-one onto the wrong song.
+    func stepToPreviousTrack() {
         expectTrackChange()
         send(.previous)
+    }
+
+    private func restartTrack() {
+        seek(toProgress: 0)
     }
 
     func seek(toProgress progress: Double) {

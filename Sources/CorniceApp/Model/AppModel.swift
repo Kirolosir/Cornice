@@ -417,7 +417,7 @@ final class AppModel {
         Log.media.notice(
             "repeat one: player moved on \(early, format: .fixed(precision: 1), privacy: .public)s early; going back"
         )
-        previousTrack()
+        stepToPreviousTrack()
     }
 
     /// Arranges for the track to loop before the player can move on.
