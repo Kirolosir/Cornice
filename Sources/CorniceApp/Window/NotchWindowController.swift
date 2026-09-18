@@ -88,8 +88,8 @@ final class NotchWindowController {
             notchSize: resolved.rect.size,
             notchCornerRadius: resolved.cornerRadius,
             // Wider than the widest surface, because the resting state draws its
-            // thumbnail and track title in the menu bar *outside* the shape —
-            // the notch is a hole, so that is the only place they can go.
+            // thumbnail and track title in the menu bar *outside* the shape. The
+            // notch is a hole, so that is the only place they can go.
             windowWidth: min(SurfaceGeometry.expandedWidth + 80, resolved.screenFrame.width)
         )
     }
@@ -125,7 +125,7 @@ final class NotchWindowController {
     /// Re-measures after a display change and moves the window.
     ///
     /// Screen parameters change on attaching or detaching a display, changing
-    /// resolution or scaling, rotation, and lid open/close — several of which
+    /// resolution or scaling, rotation, and lid open/close. Several of which
     /// change the notch's size *in points* with no hardware change at all.
     private func handleScreenChange() {
         let hadProfile = profile != nil

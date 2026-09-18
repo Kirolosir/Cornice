@@ -48,7 +48,7 @@ public enum IdleDisplay: String, Codable, Sendable, CaseIterable, Identifiable {
     case artworkAndSpectrum
     /// Album art and the scrolling track title.
     case artworkAndTitle
-    /// Nothing at all — the notch stays exactly as the hardware made it.
+    /// Nothing at all. The notch stays exactly as the hardware made it.
     case nothing
 
     public var id: String { rawValue }
@@ -114,8 +114,8 @@ public struct Preferences: Codable, Equatable, Sendable {
     /// The Spotify application's client ID, for the Web API sign-in.
     ///
     /// Not a secret. The sign-in uses PKCE precisely because a desktop app has
-    /// nowhere to keep one, so this identifies the application and nothing more
-    /// — it lives here, in plain preferences, where the user can read and change
+    /// nowhere to keep one, so this identifies the application and nothing more.
+    /// It lives here, in plain preferences, where the user can read and change
     /// it. The refresh token that sign-in produces is the credential, and that
     /// goes in the Keychain.
     ///
@@ -179,8 +179,8 @@ public struct Preferences: Codable, Equatable, Sendable {
     /// Decodes every field independently with a fallback to its default.
     ///
     /// The synthesised initialiser requires *every* key, so adding one setting
-    /// would make every existing file fail to decode — and since a decode
-    /// failure falls back to defaults, upgrading would silently reset everyone's
+    /// would make every existing file fail to decode, and since a decode failure
+    /// falls back to defaults, upgrading would silently reset everyone's
     /// configuration. Decoding key by key makes schema changes additive.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)

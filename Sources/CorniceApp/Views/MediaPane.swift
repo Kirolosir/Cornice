@@ -80,7 +80,7 @@ struct MediaPane: View {
     }
 
     /// Glyph only, no button fills. On the Island the transport has no chrome at
-    /// all — the surface is the chrome — and adding circles behind these turns a
+    /// all (the surface is the chrome), and adding circles behind these turns a
     /// media surface into a media *player*, which is a different, heavier thing.
     private func transport(_ snapshot: MediaSnapshot) -> some View {
         HStack(spacing: 0) {
@@ -256,11 +256,11 @@ struct TransportGlyph: View {
     let isOn: Bool
     let ink: Theme.Ink
     /// Colour for the engaged state. Defaults to full-strength ink, which is
-    /// what the always-on glyphs — the skips — want.
+    /// what the always-on glyphs (the skips) want.
     var onColor: Color?
 
-    /// Toggle glyphs go from tertiary to primary ink; the always-on ones — the
-    /// skips — are simply primary.
+    /// Toggle glyphs go from tertiary to primary ink; the always-on ones (the
+    /// skips) are simply primary.
     var body: some View {
         ZStack(alignment: .bottom) {
             // The glyph goes to full-strength ink when engaged, and the album's

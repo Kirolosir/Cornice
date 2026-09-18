@@ -60,9 +60,9 @@ public enum FocusTimerState: Equatable, Sendable {
 
 /// Drives the focus timer.
 ///
-/// Pure state transitions with an injected clock, so the whole state machine —
-/// including "what happens when you pause at 3 seconds left and resume an hour
-/// later" — is tested without waiting in real time.
+/// Pure state transitions with an injected clock, so the whole state machine
+/// (including "what happens when you pause at 3 seconds left and resume an
+/// hour later") is tested without waiting in real time.
 public struct FocusTimer: Equatable, Sendable {
     public private(set) var state: FocusTimerState
     /// Configured session length in seconds.

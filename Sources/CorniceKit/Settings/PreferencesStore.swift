@@ -40,9 +40,9 @@ public actor PreferencesStore: PreferencesPersisting {
     /// Reads preferences, falling back to defaults on any failure.
     ///
     /// Never throws. A user whose settings file was truncated by a bad shutdown
-    /// should get a working app with default settings, not a launch failure —
-    /// so a corrupt file is moved aside (preserved for debugging, and so the
-    /// next save does not immediately overwrite the evidence) and defaults are
+    /// should get a working app with default settings, not a launch failure, so
+    /// a corrupt file is moved aside (preserved for debugging, and so the next
+    /// save does not immediately overwrite the evidence), and defaults are
     /// returned.
     public func load() async -> Preferences {
         guard fileManager.fileExists(atPath: fileURL.path) else {
@@ -96,7 +96,7 @@ public actor PreferencesStore: PreferencesPersisting {
     ///
     /// Additive changes are handled by giving every `Preferences` property a
     /// default in its initialiser, so most releases need nothing here. This
-    /// exists for the changes `Codable` cannot absorb — a renamed key, or a
+    /// exists for the changes `Codable` cannot absorb. A renamed key, or a
     /// value whose meaning changed.
     static func migrate(_ preferences: Preferences) -> Preferences {
         var result = preferences

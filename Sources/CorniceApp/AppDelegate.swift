@@ -73,7 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.app.notice("Cornice terminating")
     }
 
-    /// The app keeps running with no windows open — that is its normal state.
+    /// The app keeps running with no windows open. That is its normal state.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }

@@ -3,7 +3,7 @@ import Foundation
 /// Controls Apple Music or Spotify through their scripting interfaces.
 ///
 /// One implementation for both, because the *shape* of the conversation is
-/// identical — read a handful of properties, send a handful of commands — and
+/// identical (read a handful of properties, send a handful of commands), and
 /// only the vocabulary differs. The differences are isolated in `Dialect`:
 ///
 /// - Spotify reports track duration in **milliseconds**, Music in seconds.
@@ -12,8 +12,8 @@ import Foundation
 ///   a boolean `repeating`.
 /// - Both report volume 0–100, not 0–1.
 ///
-/// Getting any one of those wrong produces a plausible-looking but wrong UI —
-/// a 272-second track showing as 272,394 seconds, for instance — which is why
+/// Getting any one of those wrong produces a plausible-looking but wrong UI
+/// (a 272-second track showing as 272,394 seconds, for instance), which is why
 /// each is parsed explicitly and covered by a test.
 public actor ScriptedMediaController: MediaControlling {
 
@@ -22,7 +22,7 @@ public actor ScriptedMediaController: MediaControlling {
 
     /// Field separator. A unit separator rather than anything printable,
     /// because track and album names contain every printable character there
-    /// is — including the pipes and tabs people reach for first.
+    /// is, including the pipes and tabs people reach for first.
     private static let separator = "\u{1f}"
 
     /// The last full metadata read, reused while the track has not changed.
@@ -40,14 +40,13 @@ public actor ScriptedMediaController: MediaControlling {
     /// Current state, or `nil` when nothing is loaded.
     ///
     /// Two tiers, because polling cost matters. Neither player supports reading
-    /// a track's properties as one record — Spotify raises on
-    /// `properties of current track` — so each property read is its own Apple
-    /// event to another process. Reading all ten every second was measurably
-    /// expensive.
+    /// a track's properties as one record (Spotify raises on `properties of
+    /// current track`), so each property read is its own Apple event to another
+    /// process. Reading all ten every second was measurably expensive.
     ///
-    /// So the frequent read fetches only what actually changes between polls —
-    /// playback state, playhead, volume, and the track title as a change
-    /// signal — and the full metadata read runs only when the title or length
+    /// So the frequent read fetches only what actually changes between polls
+    /// (playback state, playhead, volume, and the track title as a change
+    /// signal), and the full metadata read runs only when the title or length
     /// says the track moved on. Steady-state cost drops by more than half.
     public func snapshot() async throws -> MediaSnapshot? {
         guard await isRunning() else { return nil }
@@ -146,7 +145,7 @@ public actor ScriptedMediaController: MediaControlling {
     /// The two players' spellings for the properties the light read needs.
     ///
     /// Both are *statements*, not expressions. AppleScript has no conditional
-    /// expression — `set x to (if p then "a" else "b")` is a compile error, and a
+    /// expression. `set x to (if p then "a" else "b")` is a compile error, and a
     /// compile error fails the whole script, so a surrounding `try` does not
     /// contain it.
     nonisolated var dialect: (shuffleProperty: String, repeatStatement: String) {
@@ -198,7 +197,7 @@ public actor ScriptedMediaController: MediaControlling {
     /// context switches per poll.
     ///
     /// Wrapped in `try` blocks because a player that is open with nothing
-    /// loaded raises on `current track` rather than returning empty — so the
+    /// loaded raises on `current track` rather than returning empty, so the
     /// script degrades to a "stopped" answer instead of throwing.
     nonisolated var readScript: String {
         switch source {
@@ -351,7 +350,7 @@ public actor ScriptedMediaController: MediaControlling {
 
     /// Apple Music's artwork, as raw image data.
     ///
-    /// Music has no artwork URL — the image lives in the library — so it comes
+    /// Music has no artwork URL (the image lives in the library), so it comes
     /// back as an Apple event data descriptor rather than a string. Returns
     /// `nil` for tracks with no artwork, which is common for local files.
     public func artworkData() async throws -> Data? {

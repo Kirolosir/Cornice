@@ -7,7 +7,7 @@ import CorniceKit
 /// `SMAppService.mainApp` is the modern replacement for the deprecated
 /// `SMLoginItemSetEnabled` and the long-deprecated login-items AppleScript.
 /// It requires no helper bundle and no extra entitlement, and the user can
-/// revoke it from System Settings — where they will look for it — rather than
+/// revoke it from System Settings (where they will look for it), rather than
 /// only from inside this app.
 enum LoginItem {
 

@@ -2,13 +2,13 @@ import Foundation
 
 /// Every system notification the surface can show, and the size it takes.
 ///
-/// All eleven use the one construction — square top corners, convex bottom,
-/// concave cove — at whatever size the notification needs. Nothing here is a
+/// All eleven use the one construction (square top corners, convex bottom,
+/// concave cove) at whatever size the notification needs. Nothing here is a
 /// separate window or a separate shape; a HUD is the same object as the player,
 /// stopped at a different size.
 ///
-/// Widths are expressed as a *wing* — how far the surface grows past the notch
-/// on each side — rather than as an absolute, so a display whose notch measures
+/// Widths are expressed as a *wing* (how far the surface grows past the notch
+/// on each side), rather than as an absolute, so a display whose notch measures
 /// something other than the 209 pt the design was drawn against still gets a
 /// surface centred on its own cut-out. Heights are a drop below the 38 pt band
 /// for the same reason.

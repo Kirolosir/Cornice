@@ -18,8 +18,8 @@ public struct OutputVolumeReader: Sendable {
     public init() {}
 
     /// Output volume, 0...1, or `nil` when the device exposes no volume control
-    /// — some HDMI and aggregate devices do not — in which case the caller
-    /// should assume full rather than silent.
+    /// (some HDMI and aggregate devices do not) in which case the caller should
+    /// assume full rather than silent.
     public func current() -> Double? {
         guard let device = Self.defaultOutputDevice() else { return nil }
         if Self.isMuted(device: device) { return 0 }
@@ -44,7 +44,7 @@ public struct OutputVolumeReader: Sendable {
     /// Tries the main element, then averages the stereo pair.
     ///
     /// Plenty of devices expose per-channel volume and nothing on the main
-    /// element — AirPods among them — and reading only the main element reports
+    /// element (AirPods among them), and reading only the main element reports
     /// those as having no volume at all.
     static func scalarVolume(device: AudioDeviceID) -> Double? {
         if let main = scalar(device: device, element: kAudioObjectPropertyElementMain) {

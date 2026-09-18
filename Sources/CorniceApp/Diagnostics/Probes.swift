@@ -3,12 +3,12 @@ import CorniceKit
 
 /// Command-line diagnostics.
 ///
-/// Several of the harder bugs in this app lived where a debugger cannot
-/// follow: what the player reports between polls, what the audio tap delivers
-/// once the system fader has been applied, whether a repeat setting survives a
-/// track change. Each probe below drives the real code path, from inside the
-/// app bundle — which matters, because automation and audio-capture permission
-/// are granted to a bundle and not to a terminal — logs what it saw, and exits.
+/// Several of the harder bugs in this app lived where a debugger cannot follow:
+/// what the player reports between polls, what the audio tap delivers once the
+/// system fader has been applied, whether a repeat setting survives a track
+/// change. Each probe below drives the real code path, from inside the app
+/// bundle (which matters, because automation and audio-capture permission are
+/// granted to a bundle and not to a terminal), logs what it saw, and exits.
 ///
 /// Nothing here runs unless a `--probe-…` argument is passed.
 @MainActor
@@ -26,7 +26,7 @@ enum Probes {
 
         // The same for audio capture. macOS reports a tap it has denied as
         // running and simply feeds it silence, so "did it start" answers
-        // nothing — only measuring what arrives does.
+        // nothing. Only measuring what arrives does.
         if arguments.contains("--probe-audio") {
             Task { await probeAudio() }
             return true
@@ -128,7 +128,7 @@ enum Probes {
                     "skip probe: held=\(sameTrack, privacy: .public) at \(held.extrapolatedPosition(), format: .fixed(precision: 1), privacy: .public)s"
                 )
 
-                // Released, the same button has to move again — a skip that
+                // Released, the same button has to move again. A skip that
                 // never skips would be the worse bug of the two.
                 model.cycleRepeat()
                 try? await Task.sleep(for: .seconds(1))
@@ -337,7 +337,7 @@ enum Probes {
         guard let snapshot = await coordinator.snapshot() else {
             let denied = await coordinator.allSourcesUnavailable()
             print(denied
-                  ? "automation refused — grant Cornice in Privacy & Security › Automation"
+                  ? "automation refused. Grant Cornice in Privacy & Security › Automation"
                   : "no track loaded")
             exit(0)
         }

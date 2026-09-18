@@ -40,7 +40,7 @@ public struct Command: Sendable, Equatable {
         self.maxOutputBytes = maxOutputBytes
     }
 
-    /// Name used in errors and logs — the binary's basename, not the full path.
+    /// Name used in errors and logs. The binary's basename, not the full path.
     public var toolName: String {
         (executable as NSString).lastPathComponent
     }

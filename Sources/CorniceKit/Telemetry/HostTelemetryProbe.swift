@@ -106,8 +106,8 @@ public actor HostTelemetryProbe: TelemetryProbing {
     /// this machine, and drifted differently depending on how much file cache
     /// happened to be warm.
     ///
-    /// Counting inactive *file* pages instead — which is what `top` reports as
-    /// "used" — goes the other way and makes every Mac look permanently near
+    /// Counting inactive *file* pages instead (which is what `top` reports as
+    /// "used") goes the other way and makes every Mac look permanently near
     /// capacity, because macOS deliberately keeps that cache full and reclaims
     /// it on demand.
     private func memoryUsed() -> UInt64 {

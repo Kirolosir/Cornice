@@ -122,7 +122,7 @@ struct SurfaceShape: InsettableShape {
 /// The hole, as a shape: square on top, convex below, at the hardware's radius.
 ///
 /// Used to mask the notch back to black inside a light-mode panel. The panel is
-/// a light sheet, but the cut-out is still a hole in the display — so the sheet
+/// a light sheet, but the cut-out is still a hole in the display, so the sheet
 /// has to read as having a bite taken out of it rather than as a rectangle with
 /// a dark rectangle sitting on it.
 struct NotchHoleShape: Shape {

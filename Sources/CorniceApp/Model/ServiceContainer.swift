@@ -19,7 +19,7 @@ struct ServiceContainer: Sendable {
     let vpn: VPNMonitor
     let downloads: DownloadsMonitor
     /// Spotify's Web API, for the repeat state its scripting interface cannot
-    /// express. Idle — and asking for nothing — until a client ID is entered.
+    /// express. Idle (and asking for nothing) until a client ID is entered.
     let spotify: SpotifyWebRemote
 
     static func live() -> ServiceContainer {

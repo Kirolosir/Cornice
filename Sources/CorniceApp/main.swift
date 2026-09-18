@@ -4,8 +4,8 @@ import CorniceKit
 // Entry point.
 //
 // AppKit rather than a SwiftUI `App`: this application has no windows in the
-// ordinary sense — its entire interface is one borderless panel pinned to the
-// top of the screen — and `NSApplicationMain` gives direct control over
+// ordinary sense (its entire interface is one borderless panel pinned to the
+// top of the screen), and `NSApplicationMain` gives direct control over
 // activation policy, the status item, and termination. A SwiftUI `App` would
 // mean fighting its window management to end up in the same place.
 

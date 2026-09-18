@@ -2,8 +2,8 @@ import Foundation
 
 /// Watches the Downloads folder for a transfer in progress.
 ///
-/// Browsers write to a temporary file while a download runs — `.crdownload` for
-/// Chromium, `.download` for Safari, `.part` for Firefox — and rename it into
+/// Browsers write to a temporary file while a download runs (`.crdownload` for
+/// Chromium, `.download` for Safari, `.part` for Firefox), and rename it into
 /// place when it finishes. Watching for those is the only way to see a download
 /// without integrating with each browser individually, and it needs no
 /// extension, no helper, and nothing running inside the browser.
@@ -62,7 +62,7 @@ public final class DownloadsMonitor: @unchecked Sendable {
         // Polled rather than watched with a file-system event source, because
         // the interesting quantity is a *rate*, which needs two readings a known
         // interval apart. A change notification tells you the file grew, not how
-        // fast — and a growing file fires continuously.
+        // fast, and a growing file fires continuously.
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now(), repeating: 1.0)
         timer.setEventHandler { [weak self] in self?.sample() }
@@ -146,7 +146,7 @@ public final class DownloadsMonitor: @unchecked Sendable {
     }
 
     /// Bytes on disk, summing a package's contents when the temporary file is a
-    /// directory — which is what Safari's `.download` is.
+    /// directory, which is what Safari's `.download` is.
     private static func size(of url: URL) -> Int64 {
         let manager = FileManager.default
         var isDirectory: ObjCBool = false

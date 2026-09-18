@@ -5,10 +5,10 @@ import SystemConfiguration
 ///
 /// The test is deliberately "is the primary interface a tunnel", not "does a
 /// tunnel interface exist". Plenty of things create `utun` devices without being
-/// a VPN — iCloud Private Relay, Handoff, AirDrop — so counting interfaces
-/// reports a VPN connected on a machine that has none. What people mean by "the
-/// VPN is on" is that their traffic is going through it, and that is exactly
-/// what the primary interface says.
+/// a VPN (iCloud Private Relay, Handoff, AirDrop), so counting interfaces reports
+/// a VPN connected on a machine that has none. What people mean by "the VPN is
+/// on" is that their traffic is going through it, and that is exactly what the
+/// primary interface says.
 ///
 /// Event-driven through `SCDynamicStore` rather than polled: the networking
 /// stack already publishes this and notifies on change.

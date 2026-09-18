@@ -4,9 +4,9 @@ import CorniceKit
 /// The whole interface: one surface that changes size.
 ///
 /// There is exactly one object on screen. It is never a window that appears near
-/// the notch — it is the notch becoming larger and then smaller again. So the
-/// top edge never moves, the outline is interpolated rather than swapped, and
-/// the artwork travels rather than cross-fading between copies.
+/// the notch. It is the notch becoming larger and then smaller again. So the top
+/// edge never moves, the outline is interpolated rather than swapped, and the
+/// artwork travels rather than cross-fading between copies.
 struct RootView: View {
     @Bindable var model: AppModel
     let geometry: SurfaceGeometry
@@ -40,7 +40,7 @@ struct RootView: View {
                 // Built at all times and cross-faded. Switching with a `switch`
                 // tore down one tree and built another *during* the expand
                 // animation, which is exactly when there is no spare frame
-                // budget — and is what made opening feel like it hitched.
+                // budget, and is what made opening feel like it hitched.
                 //
                 // The artwork is the exception: it sits outside this stack so it
                 // survives the cross-fade and can travel.
@@ -127,8 +127,8 @@ struct RootView: View {
         }
     }
 
-    /// A HUD that waits to be dealt with — an alert with buttons, a ringing
-    /// timer — has to accept clicks. One that retracts on its own must not, or
+    /// A HUD that waits to be dealt with (an alert with buttons, a ringing
+    /// timer) has to accept clicks. One that retracts on its own must not, or
     /// it swallows a click meant for the desktop on its way out.
     private var isInteractiveHUD: Bool {
         guard let kind = state.hud else { return false }
@@ -191,7 +191,7 @@ struct RootView: View {
     /// Artwork colour, layered rather than blended.
     ///
     /// A vertical wash in the cover's strongest colour, then one soft pool per
-    /// accent in the corner that accent came from — so a sleeve that is amber at
+    /// accent in the corner that accent came from, so a sleeve that is amber at
     /// the top and green at the bottom paints a surface that is amber at the top
     /// and green at the bottom. Averaging the cover to a single colour is what
     /// made every album produce the same generic tint.
@@ -204,7 +204,7 @@ struct RootView: View {
         let accents = model.artworkAccents
         // Shared out across however many pools there are, so a detailed cover
         // paints more colours rather than more opacity. Six pools at the alpha
-        // one pool wants would stack straight back into a single flat wash —
+        // one pool wants would stack straight back into a single flat wash,
         // and take the text's contrast with them.
         let poolAlpha = 0.30 / max(1, Double(accents.count)).squareRoot()
 
@@ -261,7 +261,7 @@ struct RootView: View {
         // The analyser is live wherever its indicator is drawn. This used to
         // require a scriptable player to be reporting `playing`, which left the
         // bars frozen through anything the tap could hear but Spotify could not
-        // see — a browser tab, most obviously.
+        // see. A browser tab, most obviously.
         if model.isVisualizerLive {
             if state == .peek || state == .expanded { return true }
             // Only when there is a track to indicate. Without this the timer

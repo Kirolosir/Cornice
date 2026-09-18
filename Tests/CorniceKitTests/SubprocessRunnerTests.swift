@@ -1,8 +1,8 @@
 import XCTest
 @testable import CorniceKit
 
-/// These run real processes. The behaviours under test — timeout escalation,
-/// cancellation, pipe draining — only exist at the boundary with the OS, so a
+/// These run real processes. The behaviours under test (timeout escalation,
+/// cancellation, pipe draining) only exist at the boundary with the OS, so a
 /// mock would test nothing.
 final class SubprocessRunnerTests: XCTestCase {
 

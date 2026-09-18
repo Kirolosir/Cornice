@@ -313,7 +313,7 @@ struct HUDView: View {
                 DocumentGlyph()
 
                 VStack(alignment: .leading, spacing: 2) {
-                    // Truncated from the *head*, so the extension stays readable —
+                    // Truncated from the *head*, so the extension stays readable,
                     // which is the part of a long filename that tells you what
                     // just arrived.
                     Text(name)

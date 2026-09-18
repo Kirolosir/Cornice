@@ -45,7 +45,7 @@ extension AppModel {
 
     /// Flipped locally before the command is sent, like the other transport
     /// toggles. Without it the glyph did not change until the next poll came
-    /// back — up to a second after the click — so the symbol-replace animation
+    /// back (up to a second after the click), so the symbol-replace animation
     /// played long after the press it belonged to, which reads as no animation
     /// at all.
     func playPause() {
@@ -59,8 +59,8 @@ extension AppModel {
     /// Whether repeat-one is holding the player on this track.
     ///
     /// Reads the mode rather than the mechanism, so it is true whether the
-    /// player is repeating the track itself — Music always, Spotify once the
-    /// Web API is connected — or the app is imitating it.
+    /// player is repeating the track itself (Music always, Spotify once the
+    /// Web API is connected), or the app is imitating it.
     var holdsCurrentTrack: Bool {
         media?.repeatMode == .one
     }
@@ -121,7 +121,7 @@ extension AppModel {
     func setVolume(_ level: Double) { send(.setVolume(level)) }
 
     /// Flipped locally before the command is sent, then confirmed by the next
-    /// poll — the same trick the scrubber uses.
+    /// poll. The same trick the scrubber uses.
     ///
     /// Without it the glyph does not change for up to a second, which reads as
     /// the button having done nothing, so people press it again and toggle it
@@ -140,7 +140,7 @@ extension AppModel {
         let wanted = snapshot.repeatMode.next(on: snapshot.source)
 
         // Spotify, signed in to the Web API: it can be told to repeat one track
-        // outright, so tell it. This is the real setting — the `1` appears on
+        // outright, so tell it. This is the real setting. The `1` appears on
         // Spotify's own button, it survives skips and restarts, and no part of
         // the app has to watch for the end of the song.
         if snapshot.source == .spotify, spotifyCanSetRepeat {
@@ -166,7 +166,7 @@ extension AppModel {
         // lands on the playlist repeating rather than on playback stopping.
         //
         // This is safe now only because the mode is no longer inferred from what
-        // the player reports — that inference is what used to make the setting
+        // the player reports. That inference is what used to make the setting
         // switch itself off.
         send(.setRepeat(wanted))
         scheduleRepeatOneLoop()
@@ -229,8 +229,8 @@ extension AppModel {
     /// permission to the code signature: every rebuild is a different signature
     /// and therefore a different app as far as TCC is concerned, so the grant is
     /// dropped and a fresh prompt appears. A prompt that is missed or dismissed
-    /// leaves the tap running and fed silence — macOS reports no error for a
-    /// refused tap — and the visualiser simply stops working with no way back
+    /// leaves the tap running and fed silence (macOS reports no error for a
+    /// refused tap), and the visualiser simply stops working with no way back
     /// short of knowing the incantation.
     ///
     /// Only ever resets this app's own entry.
@@ -286,7 +286,7 @@ extension AppModel {
     }
 
     /// Advances the timers. Driven by the UI's display timer, which is a
-    /// repaint trigger — remaining time comes from the wall clock, so a missed
+    /// repaint trigger. Remaining time comes from the wall clock, so a missed
     /// tick changes nothing.
     func tickTimers() {
         guard timers.hasTimers else { return }

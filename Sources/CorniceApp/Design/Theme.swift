@@ -3,7 +3,7 @@ import SwiftUI
 /// The visual language.
 ///
 /// Two rules shape it. **The surface is true black wherever it touches the
-/// notch** — anything else shows a seam against the unlit cut-out — so only the
+/// notch** (anything else shows a seam against the unlit cut-out), so only the
 /// expanded panel follows the system appearance. And **colour is carried by a
 /// value or a glyph, never by a block of text**, which is what keeps a surface
 /// this small from turning into a dashboard.
@@ -130,7 +130,7 @@ enum Theme {
         static let hudTitle = Font.system(size: 14.5, weight: .semibold)
         /// Device name in an activity or HUD pill.
         static let deviceName = Font.system(size: 13.5, weight: .semibold)
-        /// Body emphasis and labels — the artist line, a timer's label.
+        /// Body emphasis and labels. The artist line, a timer's label.
         static let body = Font.system(size: 13, weight: .medium)
         static let bodyStrong = Font.system(size: 13, weight: .semibold)
         /// Inline label in a short HUD.
@@ -183,12 +183,12 @@ enum Theme {
     /// *downward*. The top edge is a fixed anchor: a surface attached to the top
     /// of the screen that overshoots upward looks like it has come unstuck.
     enum Motion {
-        /// Opening. A touch of overshoot so it arrives with weight. The whole
-        /// interaction is judged on this curve.
+        /// Opening. A touch of overshoot so it arrives with weight. This is
+        /// the curve people notice most, so it got the most fiddling.
         static let expand = SwiftUI.Animation.spring(response: 0.38, dampingFraction: 0.76)
 
-        /// Closing. Faster and more damped: a bouncy dismissal reads as
-        /// indecision.
+        /// Closing. Faster and more damped, because bounce on the way out
+        /// looks like the app can't make up its mind.
         static let collapse = SwiftUI.Animation.spring(response: 0.30, dampingFraction: 0.86)
 
         /// Hover peek. Very fast: this exists purely to acknowledge the pointer.
@@ -214,8 +214,7 @@ enum Theme {
 
         /// The playhead moving somewhere it did not get to by playing: a seek,
         /// a skip, a track starting over. Springy enough that you can see it
-        /// travel, which is the difference between a seek that registered and
-        /// one you have to check.
+        /// travel and know the press landed instead of having to check.
         static let scrubJump = SwiftUI.Animation.spring(response: 0.42, dampingFraction: 0.8)
 
         // Content arrives in two groups at fixed points along the opening

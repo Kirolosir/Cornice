@@ -13,7 +13,7 @@ import CorniceKit
 ///   the machine can wait.
 /// - **The first reading of anything is not an event.** Launching with the
 ///   charger in, or with a VPN already up, is not "the charger was just plugged
-///   in" — and announcing state at launch is how a notch app becomes something
+///   in", and announcing state at launch is how a notch app becomes something
 ///   people quit.
 @MainActor
 extension AppModel {
@@ -105,7 +105,7 @@ extension AppModel {
     }
 
     /// Watching Downloads is TCC-protected, so it is started only once the user
-    /// has asked for it — otherwise the app springs a folder-access dialog on
+    /// has asked for it. Otherwise the app springs a folder-access dialog on
     /// somebody who never wanted a download HUD.
     func startDownloadWatching() {
         serviceContainer.downloads.start { [weak self] progress in

@@ -128,10 +128,10 @@ enum DocsCapture {
     ) {
         let surfaceSize = geometry.size(for: model.surfaceState)
         // Enough room around the surface for its shadow, and enough above to
-        // show that it is attached to the top edge of the screen.
-        // A floor on the width because the resting state draws its thumbnail and
-        // title *outside* the surface, in the menu-bar margins — crop to the
-        // shape and the only two things it shows disappear.
+        // show that it is attached to the top edge of the screen. A floor on the
+        // width because the resting state draws its thumbnail and title
+        // *outside* the surface, in the menu-bar margins. Crop to the shape and
+        // the only two things it shows disappear.
         let canvas = CGSize(
             width: max(surfaceSize.width + 120, 520),
             height: surfaceSize.height + 56

@@ -6,8 +6,8 @@ import CorniceKit
 ///
 /// Uses Carbon's `RegisterEventHotKey` rather than
 /// `NSEvent.addGlobalMonitorForEvents`. The monitor approach requires
-/// Accessibility permission — the same permission that lets an app read every
-/// keystroke you type — which is a wildly disproportionate thing to ask for in
+/// Accessibility permission (the same permission that lets an app read every
+/// keystroke you type), which is a wildly disproportionate thing to ask for in
 /// order to open a panel. `RegisterEventHotKey` asks for nothing, because it
 /// registers one specific combination with the window server instead of
 /// observing all input.
@@ -17,7 +17,7 @@ import CorniceKit
 @MainActor
 final class GlobalHotKey {
 
-    /// ⌥⌘D — "developer". Chosen because it is unclaimed by macOS and by the
+    /// ⌥⌘D. "developer". Chosen because it is unclaimed by macOS and by the
     /// editors this app launches.
     static let defaultKeyCode = UInt32(kVK_ANSI_D)
     static let defaultModifiers = UInt32(optionKey | cmdKey)

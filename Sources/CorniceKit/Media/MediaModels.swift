@@ -25,8 +25,8 @@ public enum MediaSource: String, Sendable, Codable, CaseIterable, Identifiable {
     /// Whether the *player* can be asked to repeat a single track.
     ///
     /// Music can, through `song repeat`. Spotify's dictionary has only a boolean
-    /// `repeating`, so repeat-one there is the app's own doing — see
-    /// `RepeatOneLoop` — which is why the button offers it either way.
+    /// `repeating`, so repeat-one there is the app's own doing (see
+    /// `RepeatOneLoop`), which is why the button offers it either way.
     public var nativelyRepeatsOne: Bool {
         switch self {
         case .appleMusic: true
@@ -74,7 +74,7 @@ public enum RepeatMode: String, Sendable, Equatable, CaseIterable {
 ///
 /// Deliberately a value type with no reference to the source application, so the
 /// UI never has to branch on which player produced it. Everything that differs
-/// between Music and Spotify — units, key names, how shuffle is spelled — is
+/// between Music and Spotify (units, key names, how shuffle is spelled) is
 /// normalised in the provider.
 public struct MediaSnapshot: Sendable, Equatable {
     public let source: MediaSource
@@ -158,7 +158,7 @@ public struct MediaSnapshot: Sendable, Equatable {
     /// Identity of the *track*, ignoring playhead movement.
     ///
     /// Used to decide when artwork must be refetched and when the UI should
-    /// treat this as a new song rather than a progress update — without it,
+    /// treat this as a new song rather than a progress update. Without it,
     /// every one-second poll would look like a track change and the artwork
     /// would reload constantly.
     public var trackIdentity: String {
@@ -168,10 +168,10 @@ public struct MediaSnapshot: Sendable, Equatable {
     /// Position extrapolated to `now`.
     ///
     /// The provider is polled on the order of once a second, but the scrubber
-    /// updates every frame. Rather than poll faster — which means spawning an
-    /// AppleScript call per frame — the playhead is advanced locally from the
+    /// updates every frame. Rather than poll faster (which means spawning an
+    /// AppleScript call per frame) the playhead is advanced locally from the
     /// last known position and corrected whenever a real sample arrives. This
-    /// is the difference between a scrubber that glides and one that ticks.
+    /// keeps the scrubber gliding instead of ticking once a second.
     public func extrapolatedPosition(at now: Date = .now) -> TimeInterval {
         guard state.isPlaying else { return position }
         let elapsed = now.timeIntervalSince(capturedAt)

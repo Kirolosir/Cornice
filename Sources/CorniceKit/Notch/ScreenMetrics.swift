@@ -5,8 +5,8 @@ import CoreGraphics
 /// display.
 ///
 /// This exists so notch resolution is a pure function of values rather than a
-/// method on `NSScreen`. `NSScreen` cannot be constructed in a unit test — you
-/// get whatever displays the test machine happens to have — so all the
+/// method on `NSScreen`. `NSScreen` cannot be constructed in a unit test (you
+/// get whatever displays the test machine happens to have), so all the
 /// interesting logic (which is to say, all the ways a display can be weird)
 /// would otherwise be untestable. The app layer builds one of these from a real
 /// `NSScreen`; tests build them by hand.
@@ -20,10 +20,10 @@ public struct ScreenMetrics: Equatable, Sendable {
     /// `NSScreen.safeAreaInsets.top`. On a notched built-in display this is the
     /// notch height; it is 0 on every external display and on non-notched Macs.
     public var safeAreaTop: CGFloat
-    /// `NSScreen.auxiliaryTopLeftArea` — the usable menu-bar strip left of the
+    /// `NSScreen.auxiliaryTopLeftArea`. The usable menu-bar strip left of the
     /// notch. `nil` when the display has no notch.
     public var auxiliaryTopLeftArea: CGRect?
-    /// `NSScreen.auxiliaryTopRightArea` — the usable strip right of the notch.
+    /// `NSScreen.auxiliaryTopRightArea`. The usable strip right of the notch.
     public var auxiliaryTopRightArea: CGRect?
     /// Whether this is the machine's built-in panel rather than an external display.
     public var isBuiltIn: Bool

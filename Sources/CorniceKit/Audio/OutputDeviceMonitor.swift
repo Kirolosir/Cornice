@@ -38,7 +38,7 @@ public struct AudioOutputDevice: Equatable, Sendable {
     /// Whether this looks like a pair of Apple wireless earbuds.
     ///
     /// Matched on the name because Core Audio reports AirPods as an ordinary
-    /// Bluetooth output — there is no "these are AirPods" flag. The match is
+    /// Bluetooth output. There is no "these are AirPods" flag. The match is
     /// deliberately loose: the consequence of a false positive is showing a
     /// headphone glyph for a pair of Beats, which is fine.
     public var isAirPods: Bool {
@@ -56,7 +56,7 @@ public struct AudioOutputDevice: Equatable, Sendable {
 /// noticing when a wireless device connects so the surface can announce it.
 ///
 /// Core Audio posts a property-changed notification when the default output
-/// changes, so this is event-driven rather than polled — connecting AirPods
+/// changes, so this is event-driven rather than polled. Connecting AirPods
 /// switches the default output, which is exactly the moment worth reacting to.
 /// It needs no Bluetooth permission and no Bluetooth framework at all.
 public final class OutputDeviceMonitor: @unchecked Sendable {

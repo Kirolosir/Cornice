@@ -29,8 +29,8 @@ public enum AudioTapUnavailable: Error, Equatable, Sendable {
 /// The alternative approaches are worse in ways that matter: installing a
 /// virtual audio device requires an installer and a reboot and permanently
 /// alters the user's audio chain, and ScreenCaptureKit's audio capture demands
-/// full Screen Recording permission — the right to read the screen — to read
-/// a waveform.
+/// full Screen Recording permission (the right to read the screen) to read a
+/// waveform.
 ///
 /// The tap is created with `muteBehavior = .unmuted`, so audio continues to
 /// play normally while it is being observed, and `isPrivate = true`, so it does
@@ -67,7 +67,7 @@ public final class SystemAudioTap: @unchecked Sendable {
     /// Starts capturing. Throws `AudioTapUnavailable` if it cannot.
     ///
     /// The permission prompt appears on `AudioDeviceStart`, not on tap
-    /// creation — so a failure at that last step is the signal that the user
+    /// creation, so a failure at that last step is the signal that the user
     /// declined, and is reported as such rather than as an opaque status code.
     public func start(handler: @escaping SampleHandler) throws {
         guard #available(macOS 14.2, *) else { throw AudioTapUnavailable.unsupportedSystem }

@@ -45,7 +45,7 @@ final class RepeatOneLoopTests: XCTestCase {
 final class RepeatOneRecoveryTests: XCTestCase {
 
     /// Spotify can be set to crossfade, which starts the next track seconds
-    /// before the current one reaches the length it reports — and that setting
+    /// before the current one reaches the length it reports, and that setting
     /// lives on Spotify's servers, so it cannot be read. Measured here, a 230.5
     /// second track was abandoned at about 226.
     func testATrackChangeNearTheEndReadsAsThePlayerMovingOn() {

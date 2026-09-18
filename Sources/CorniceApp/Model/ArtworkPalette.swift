@@ -32,8 +32,8 @@ struct ArtworkAccent: Equatable {
 ///   Contrast is not negotiable for a decorative flourish.
 enum ArtworkPalette {
 
-    /// Downsample size. Small enough to cost a fraction of a millisecond — this
-    /// runs on every track change — and large enough that a region still holds
+    /// Downsample size. Small enough to cost a fraction of a millisecond (this
+    /// runs on every track change), and large enough that a region still holds
     /// enough pixels to have a dominant hue.
     private static let sampleSize = 30
 
@@ -98,8 +98,8 @@ enum ArtworkPalette {
     /// The colour a region is actually *made of*.
     ///
     /// A histogram over hue rather than the single highest-scoring pixel. One
-    /// pixel is noise — it picks up a specular highlight or a stray logo — and
-    /// it was why covers kept collapsing to the same few muddy tones. Binning by
+    /// pixel is noise (it picks up a specular highlight or a stray logo), and it
+    /// was why covers kept collapsing to the same few muddy tones. Binning by
     /// hue and averaging within the winning bin returns the colour a person
     /// would name if asked what that corner of the sleeve looks like.
     private static func dominantHSB(

@@ -4,7 +4,7 @@ import CorniceKit
 /// The announcement shown when a wireless output device connects.
 ///
 /// Built like the system HUDs rather than like the player: a glyph, then status
-/// over device name in the left margin, and a charge ring in the right — all
+/// over device name in the left margin, and a charge ring in the right. All
 /// outside the hole. No artwork tint, because this is not about the music.
 ///
 /// It is event-driven and self-dismissing. This is a notification, not a state

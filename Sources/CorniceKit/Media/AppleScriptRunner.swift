@@ -32,16 +32,16 @@ public actor AppleScriptRunner {
     /// Whether automation of this target was refused.
     public func isDenied(_ target: String) -> Bool { deniedTargets.contains(target) }
 
-    /// Clears a denial so the next call re-asks — used after the user says they
+    /// Clears a denial so the next call re-asks. Used after the user says they
     /// have granted permission in System Settings.
     public func clearDenial(_ target: String) { deniedTargets.remove(target) }
 
     /// What a script returned, reduced to `Sendable` values.
     ///
-    /// The raw `NSAppleEventDescriptor` never leaves the execution queue:
-    /// it is not `Sendable`, and it is a detail of how the answer was obtained
-    /// rather than part of the answer. Both possible shapes — a delimited
-    /// string, or raw artwork bytes — are extracted before returning.
+    /// The raw `NSAppleEventDescriptor` never leaves the execution queue: it
+    /// is not `Sendable`, and it is a detail of how the answer was obtained
+    /// rather than part of the answer. Both possible shapes (a delimited
+    /// string, or raw artwork bytes) are extracted before returning.
     public struct ScriptResult: Sendable {
         public let string: String?
         public let data: Data?

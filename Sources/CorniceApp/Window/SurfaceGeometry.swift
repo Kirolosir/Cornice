@@ -9,7 +9,7 @@ import CorniceKit
 enum SurfaceState: Equatable, Sendable {
     case collapsed
     case peek
-    /// A transient announcement — a wireless device connecting, for instance.
+    /// A transient announcement. A wireless device connecting, for instance.
     /// Sized like peek but a little taller, and driven by an event rather than
     /// by the pointer.
     case activity
@@ -123,7 +123,7 @@ struct SurfaceGeometry: Equatable {
 
     /// The concave cove where the surface is wider than the notch.
     ///
-    /// Zero when collapsed — at notch width there is nothing to grow out of,
+    /// Zero when collapsed, at notch width there is nothing to grow out of,
     /// and a cove would put a visible notch in the hardware notch.
     func flareRadius(for state: SurfaceState) -> CGFloat {
         switch state {
@@ -174,20 +174,20 @@ struct SurfaceGeometry: Equatable {
     /// Margin added around the surface for *hover* only.
     ///
     /// Aiming at a hole means aiming at nothing, so approaching from any
-    /// direction opens it — including from below, under the cut-out.
+    /// direction opens it, including from below, under the cut-out.
     static let hoverPadding = CGSize(width: 26, height: 14)
 
     /// How far the hover region extends *past* the top edge of the screen.
     ///
     /// The pointer can sit exactly on that edge, and `CGRect.contains` excludes a
-    /// rectangle's maximum edge — so with the panel open that one row of pixels
+    /// rectangle's maximum edge, so with the panel open that one row of pixels
     /// read as "not hovering", closing it, which made the padded resting region
     /// read as hovering again. The surface flickered for as long as the pointer
     /// stayed at the top of the notch.
     static let topBleed: CGFloat = 6
 
     /// The region that counts as hovering: padded while resting, exact once
-    /// open — a padded region around an open panel keeps it open while the
+    /// open. A padded region around an open panel keeps it open while the
     /// pointer is clearly elsewhere.
     func hoverRect(for state: SurfaceState, windowHeight: CGFloat) -> CGRect {
         let rect = appKitRect(for: state, windowHeight: windowHeight)

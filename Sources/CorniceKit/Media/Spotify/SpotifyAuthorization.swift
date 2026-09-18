@@ -5,8 +5,8 @@ import Security
 /// OAuth for a desktop app that cannot keep a secret.
 ///
 /// Spotify's scripting dictionary exposes repeat as one boolean, which cannot
-/// express "repeat this track". The Web API can — `PUT /me/player/repeat` takes
-/// `off`, `context` or `track` — so reaching real repeat-one means signing in.
+/// express "repeat this track". The Web API can: `PUT /me/player/repeat` takes
+/// `off`, `context` or `track`, so real repeat-one means signing in.
 ///
 /// The flow is authorization code with PKCE (RFC 7636), and it is PKCE rather
 /// than the classic exchange for a concrete reason: anything shipped inside an
@@ -29,8 +29,8 @@ public struct SpotifyPKCE: Sendable, Equatable {
 
     /// A fresh pair, from 64 bytes of `SecRandomCopyBytes`.
     ///
-    /// Encoded, that lands at 86 characters — inside the 43...128 the spec
-    /// allows, and well past the entropy it asks for.
+    /// Encoded that lands at 86 characters, inside the 43...128 the spec
+    /// allows and well past the entropy it asks for.
     public static func random() -> SpotifyPKCE {
         var bytes = [UInt8](repeating: 0, count: 64)
         let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
@@ -68,7 +68,7 @@ public struct SpotifyTokens: Sendable, Equatable, Codable {
     /// Whether the access token is good for another call.
     ///
     /// Thirty seconds of slack, because the token can expire between the check
-    /// and the request arriving — and a request refused for staleness costs a
+    /// and the request arriving, and a request refused for staleness costs a
     /// round trip to discover.
     public func isFresh(at now: Date = .now) -> Bool {
         expiresAt > now.addingTimeInterval(30)
@@ -164,7 +164,7 @@ public enum SpotifyAuthorization {
     /// Reads a token response.
     ///
     /// A refresh response may omit `refresh_token`, which means "keep using the
-    /// one you have" — dropping it there would sign the user out roughly every
+    /// one you have". Dropping it there would sign the user out roughly every
     /// hour, so the previous value is carried forward.
     public static func tokens(
         from data: Data,
@@ -226,7 +226,7 @@ public enum SpotifyAuthorization {
 }
 
 extension Data {
-    /// base64url, per RFC 4648 §5 — the URL-safe alphabet, no padding.
+    /// base64url, per RFC 4648 §5. The URL-safe alphabet, no padding.
     func base64URLEncoded() -> String {
         base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")

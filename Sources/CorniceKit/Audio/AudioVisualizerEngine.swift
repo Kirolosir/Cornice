@@ -49,7 +49,7 @@ public final class AudioVisualizerEngine: @unchecked Sendable {
 
     /// The most recent analysed frame.
     ///
-    /// Decays to silence when audio has stopped arriving — a paused track
+    /// Decays to silence when audio has stopped arriving. A paused track
     /// should let the bars settle, not leave them frozen at whatever the last
     /// block happened to contain.
     public func latestLevels() -> AudioLevels {

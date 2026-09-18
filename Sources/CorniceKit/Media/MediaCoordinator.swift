@@ -2,7 +2,7 @@ import Foundation
 
 /// Picks which player to show and fetches artwork.
 ///
-/// Several players can be open at once — Spotify paused in the background while
+/// Several players can be open at once. Spotify paused in the background while
 /// Music plays is ordinary. The selection rule is: whichever is *playing* wins;
 /// if none is playing, the one we last showed wins, so pausing does not make the
 /// panel jump to a different app's stale track; failing that, any player with a
@@ -69,9 +69,9 @@ public actor MediaCoordinator {
                 // returning empty; that is not worth surfacing.
             } catch {
                 // Everything else used to be dropped on the floor, which meant a
-                // script that failed for any reason at all — a syntax error, a
-                // player mid-launch — showed up as an empty surface and nothing
-                // else. Silence is the worst possible diagnosis.
+                // script that failed for any reason at all (a syntax error, a
+                // player mid-launch) showed up as an empty surface and nothing
+                // else, which left me with nothing at all to go on.
                 Log.media.error(
                     "\(source.displayName, privacy: .public) poll failed: \(String(describing: error), privacy: .public)"
                 )
@@ -116,7 +116,7 @@ public actor MediaCoordinator {
     ///
     /// Spotify hands over a URL, Music hands over raw bytes; both end up as
     /// `Data` so the UI never has to care. Failures return `nil` rather than
-    /// throwing — a missing cover is a cosmetic problem, not a reason to show
+    /// throwing. A missing cover is a cosmetic problem, not a reason to show
     /// an error where the album art goes.
     public func artwork(for snapshot: MediaSnapshot) async -> Data? {
         let key = snapshot.trackIdentity

@@ -15,7 +15,7 @@ import AppKit
 /// SwiftUI drawing inside a stable rectangle, which it can do at display rate.
 ///
 /// The cost is that the window is much larger than what is visible, so it would
-/// swallow clicks meant for the desktop — which is what `hitTest` solves.
+/// swallow clicks meant for the desktop, which is what `hitTest` solves.
 final class NotchPanel: NSPanel {
 
     init(contentRect: NSRect) {

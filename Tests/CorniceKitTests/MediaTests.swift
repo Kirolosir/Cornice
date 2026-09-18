@@ -162,7 +162,7 @@ final class MediaSnapshotTests: XCTestCase {
     }
 
     /// Artwork is refetched on identity change, so identity must ignore the
-    /// playhead — otherwise every poll looks like a new song and the cover
+    /// playhead. Otherwise every poll looks like a new song and the cover
     /// reloads continuously.
     func testTrackIdentityIgnoresPlayhead() {
         let early = snapshot(position: 10)
@@ -205,7 +205,7 @@ private actor StubController: MediaControlling {
 
 final class MediaCoordinatorTests: XCTestCase {
 
-    /// Several players open at once is ordinary — Spotify paused in the
+    /// Several players open at once is ordinary. Spotify paused in the
     /// background while Music plays. Whichever is playing wins.
     func testPlayingSourceWins() async {
         let coordinator = MediaCoordinator(controllers: [

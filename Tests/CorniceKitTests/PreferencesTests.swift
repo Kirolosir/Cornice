@@ -200,8 +200,8 @@ final class PreferencesMigrationTests: XCTestCase {
 /// Repeat-one has to be remembered.
 final class RepeatOnePersistenceTests: XCTestCase {
 
-    /// The player has nowhere to store "repeat this track" — that is the whole
-    /// reason the app provides it — so if the app does not remember it either,
+    /// The player has nowhere to store "repeat this track" (that is the whole
+    /// reason the app provides it), so if the app does not remember it either,
     /// the setting vanishes at every launch. From the outside that is
     /// indistinguishable from a button that does not work.
     func testRepeatOneSurvivesAWriteAndRead() throws {

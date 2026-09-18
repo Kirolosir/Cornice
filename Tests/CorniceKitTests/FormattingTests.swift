@@ -1,8 +1,8 @@
 import XCTest
 @testable import CorniceKit
 
-/// Formatting lives in the kit rather than in views so its edge cases — zero,
-/// negative, absurdly large — are testable without a running app. Each of these
+/// Formatting lives in the kit rather than in views so its edge cases (zero,
+/// negative, absurdly large) are testable without a running app. Each of these
 /// is a value that has shown up in a panel and looked wrong.
 final class FormattingTests: XCTestCase {
 
@@ -58,7 +58,7 @@ final class FormattingTests: XCTestCase {
     /// containing the credential.
     func testFingerprintHidesTheSecretButIsStable() {
         // Deliberately shaped so it cannot match the credential pattern the CI
-        // secret scan looks for — a realistic-looking fake in a test file would
+        // secret scan looks for. A realistic-looking fake in a test file would
         // fail that check, which is the check working correctly.
         let secret = "ghp_EXAMPLE-not-a-real-token-0000-0000"
 

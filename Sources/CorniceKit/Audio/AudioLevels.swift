@@ -66,7 +66,7 @@ public struct AudioLevels: Sendable, Equatable {
         let audible = min(1, min(1, max(0, level)) * volumeFactor)
 
         // A floor under the swing, so quiet-but-audible music still moves rather
-        // than sitting at rest and reading as broken — while loud music still
+        // than sitting at rest and reading as broken, while loud music still
         // plainly moves more.
         //
         // Both numbers were wrong before and in the same direction: a floor of
@@ -89,8 +89,8 @@ public struct AudioLevels: Sendable, Equatable {
 
         return (0..<count).map { index in
             // Expanded a little before it drives the bar. Band values sit in the
-            // middle of the range by design — pinning them would throw away the
-            // shape of the music — but mapped straight onto height that leaves
+            // middle of the range by design (pinning them would throw away the
+            // shape of the music), but mapped straight onto height that leaves
             // the row looking timid, so the curve is bent upwards here where it
             // costs nothing.
             let energy = pow(min(1, max(0, peak(of: index, of: count))), 0.75)
@@ -122,8 +122,8 @@ public struct AudioLevels: Sendable, Equatable {
 
 /// Turns a block of PCM samples into `AudioLevels`.
 ///
-/// Kept free of Core Audio so the whole signal chain — windowing, banding,
-/// smoothing, onset detection — can be driven from synthetic waveforms in
+/// Kept free of Core Audio so the whole signal chain (windowing, banding,
+/// smoothing, onset detection) can be driven from synthetic waveforms in
 /// tests. Feeding it a 60 Hz sine and asserting the energy lands in the lowest
 /// band is a far better check than squinting at bars while music plays.
 public struct SpectrumAnalyzer: Sendable {
@@ -131,7 +131,7 @@ public struct SpectrumAnalyzer: Sendable {
     /// Number of output bands. Eight reads clearly at notch size; more would be
     /// sub-pixel on a 200-point-wide surface.
     public let bandCount: Int
-    /// FFT window length. 1024 at 48 kHz is ~21 ms — fast enough to track a
+    /// FFT window length. 1024 at 48 kHz is ~21 ms. Fast enough to track a
     /// beat, long enough to resolve bass.
     public let fftSize: Int
 
@@ -190,7 +190,7 @@ public struct SpectrumAnalyzer: Sendable {
         // The gain is the part that took a measurement to get right. A single
         // FFT bin holds all of a pure tone's energy but only a fraction of
         // broadband material's, because music spreads itself across hundreds of
-        // bins — so a chain calibrated on a sine wave reads real music as almost
+        // bins, so a chain calibrated on a sine wave reads real music as almost
         // nothing. Measured here: a full-scale 1 kHz tone put its band at 0.89,
         // while noise at a normal listening level put its band at 0.09, and the
         // bars moved by a fraction of a point.
@@ -311,7 +311,7 @@ public struct SpectrumAnalyzer: Sendable {
     /// Recorded music approximates pink noise: equal energy per octave, which
     /// means the amplitude in any one FFT bin falls as `1/√f`. Reading the peak
     /// bin of each band therefore reports the bottom of the spectrum as loud and
-    /// the top as nearly silent — faithfully, and uselessly. Measured against
+    /// the top as nearly silent. That's accurate and useless. Measured against
     /// synthetic pink noise, the lowest band came back 15.0× the highest; `√f`
     /// predicts 15.5.
     ///

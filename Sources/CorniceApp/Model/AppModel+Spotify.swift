@@ -6,7 +6,7 @@ import CorniceKit
 ///
 /// Everything here is about one thing the scripting interface cannot do. Spotify
 /// exposes repeat as a single boolean, so "repeat this track" has to be either
-/// faked — watch for the end, seek to zero — or asked for properly over the Web
+/// faked (watch for the end, seek to zero), or asked for properly over the Web
 /// API. When a sign-in is present this asks; when it is not, the loop in
 /// `AppModel` still covers it, so the button behaves the same either way.
 extension AppModel {
@@ -86,7 +86,7 @@ extension AppModel {
 
     /// Asks Spotify for a repeat mode outright.
     ///
-    /// On success the app's own loop is stood down — there is nothing left for
+    /// On success the app's own loop is stood down. There is nothing left for
     /// it to do, and running both would mean seeking a track that Spotify was
     /// already going to repeat. On failure it is stood back up, so a refusal
     /// (no Premium, no active device) degrades to the behaviour that worked
@@ -125,7 +125,7 @@ extension AppModel {
     ///
     /// Slower than the media poll on purpose. The panel is redrawn about once a
     /// second, and this is a network round trip against a rate-limited API to
-    /// read a value that only changes when somebody presses a button — polling
+    /// read a value that only changes when somebody presses a button. Polling
     /// it at the panel's rate would spend a hundred requests a minute learning
     /// nothing.
     func refreshSpotifyRepeat(for snapshot: MediaSnapshot?) async {
@@ -137,7 +137,7 @@ extension AppModel {
             guard let state = try await serviceContainer.spotify.playbackState() else { return }
             spotifyRepeat = state.repeatMode
         } catch let error as ServiceError {
-            // A read failing is not worth a toast — it recovers on the next one.
+            // A read failing is not worth a toast. It recovers on the next one.
             if case .unauthorized = error {
                 Log.media.error("spotify: sign-in no longer accepted")
                 await configureSpotify()

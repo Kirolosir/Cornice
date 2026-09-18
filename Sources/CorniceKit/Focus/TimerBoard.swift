@@ -26,7 +26,7 @@ public struct TimerEntry: Identifiable, Equatable, Sendable {
 /// Each entry is an independent `FocusTimer`, so every one of them inherits the
 /// deadline-based model: remaining time is derived from the wall clock rather
 /// than decremented on a tick. Four timers running at once therefore cost
-/// exactly as much as zero timers — the UI repaints, but nothing is being
+/// exactly as much as zero timers. The UI repaints, but nothing is being
 /// counted down by anybody.
 public struct TimerBoard: Equatable, Sendable {
 
@@ -43,7 +43,7 @@ public struct TimerBoard: Equatable, Sendable {
 
     public var hasTimers: Bool { !entries.isEmpty }
 
-    /// The running timer closest to finishing — what the collapsed surface shows.
+    /// The running timer closest to finishing. What the collapsed surface shows.
     ///
     /// Takes the reference time rather than reading the clock, like every other
     /// time-dependent call here. Reading `.now` internally made the result

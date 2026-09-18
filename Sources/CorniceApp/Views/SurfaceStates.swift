@@ -3,7 +3,7 @@ import CorniceKit
 
 // MARK: - Resting
 
-/// What the resting surface shows — all of it *outside* the surface.
+/// What the resting surface shows. All of it *outside* the surface.
 ///
 /// At rest the surface is exactly the notch: pure black, no tint, seamless. The
 /// notch is a hole in the display, so anything drawn inside its rectangle does
@@ -11,7 +11,7 @@ import CorniceKit
 /// menu-bar margins either side of the hole, which is the only place they can
 /// be seen at all.
 ///
-/// With nothing playing there is nothing here — no pill, no placeholder.
+/// With nothing playing there is nothing here. No pill, no placeholder.
 struct RestingMarginView: View {
     @Bindable var model: AppModel
     let geometry: SurfaceGeometry
@@ -67,7 +67,7 @@ struct RestingMarginView: View {
 /// is; growing instantly and then opening reads as fast even though the total
 /// time is the same.
 ///
-/// The artwork is not drawn here — it belongs to the travelling layer in
+/// The artwork is not drawn here. It belongs to the travelling layer in
 /// `RootView`, which is what lets it arrive from the resting position rather
 /// than appearing.
 struct PeekContentView: View {
@@ -155,7 +155,7 @@ struct ExpandedContentView: View {
     /// the source name takes the left margin and the module switcher the right.
     ///
     /// The segmented control that used to live below the notch was moved up
-    /// here precisely because the band is otherwise dead space — and it was
+    /// here precisely because the band is otherwise dead space, and it was
     /// moved to the *right margin* because anything centred would fall inside
     /// the hole.
     private var band: some View {
@@ -167,9 +167,9 @@ struct ExpandedContentView: View {
                     .lineLimit(1)
 
                 // The live indicator. In the band rather than beside the artwork
-                // because the band is visible for as long as the panel is —
-                // peek, where it used to live, is skipped entirely when the
-                // hover dwell is zero, which is the default.
+                // because the band is visible for as long as the panel is. Peek,
+                // where it used to live, is skipped entirely when the hover
+                // dwell is zero, which is the default.
                 if model.activeModule == .media, model.showsIndicator {
                     EqualizerIndicator(
                         model: model,
@@ -264,7 +264,7 @@ struct ModuleButton: View {
 ///
 /// On pointer-down the glyph dips to 0.86–0.88; on release it springs back with
 /// a small overshoot rather than easing to a stop. The overshoot is the whole
-/// point — it is what makes a control on a surface with no window chrome feel
+/// point. It is what makes a control on a surface with no window chrome feel
 /// like it was pressed rather than merely clicked.
 struct PressScaleStyle: ButtonStyle {
     var pressedScale: CGFloat = 0.88
@@ -283,8 +283,8 @@ struct PressScaleStyle: ButtonStyle {
 /// Skip forward and back, which travel in their own direction when pressed.
 ///
 /// The travel is triggered by the *click* rather than being tied to how long the
-/// button is held. Driven by the press state alone, a quick tap — which is how
-/// anyone actually uses a skip button — released the glyph before it had moved
+/// button is held. Driven by the press state alone, a quick tap (which is how
+/// anyone actually uses a skip button), released the glyph before it had moved
 /// far enough to see, so the cue was there in the code and invisible in use.
 ///
 /// It goes out fast and springs back with a little overshoot, which is what

@@ -10,15 +10,15 @@ import Foundation
 /// So the app does it: while a track is playing with repeat-one set, it seeks
 /// back to the start a moment before the end, and the player never reaches the
 /// point where it would move on. Pre-empting the end rather than reacting to it
-/// is what keeps the loop seamless — waiting for the track to change means the
+/// is what keeps the loop seamless. Waiting for the track to change means the
 /// next one has already started playing, and correcting after the fact is both
 /// audible and slower.
 public enum RepeatOneLoop {
 
     /// How far before the end to seek back, before anything has been learned.
     ///
-    /// Long enough to beat the round trip to the player — a command is an Apple
-    /// event to another process, measured at roughly 100 ms — and short enough
+    /// Long enough to beat the round trip to the player (a command is an Apple
+    /// event to another process, measured at roughly 100 ms), and short enough
     /// that the clipped tail is not noticeable. Too late is much worse than too
     /// early: the player has already advanced and the loop is broken.
     public static let baseMargin: TimeInterval = 1.2
@@ -44,7 +44,7 @@ public enum RepeatOneLoop {
     /// The margin to use, given how early this player has been seen to move on.
     ///
     /// Spotify can be set to crossfade, which starts the next track seconds
-    /// before the current one reaches the length it reports — and that setting
+    /// before the current one reaches the length it reports, and that setting
     /// lives on Spotify's servers, so it cannot be asked for. Measured here, a
     /// 230.5 second track was abandoned at about 226. So the margin is learned:
     /// the first loop that gets away sets the distance for the next one, and

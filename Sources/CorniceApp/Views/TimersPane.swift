@@ -3,7 +3,7 @@ import CorniceKit
 
 /// The Timers module: presets on top, running timers beneath.
 ///
-/// Each running timer is the system timer HUD *wholesale* — the same orange
+/// Each running timer is the system timer HUD *wholesale*. The same orange
 /// pause, the same grey dismiss, the same oversized count. A timer should look
 /// the same whether it is announcing itself from the notch or sitting in a list,
 /// because it is the same timer.
@@ -104,7 +104,7 @@ struct TimerRow: View {
                     .font(Theme.Typeface.timerValue)
                     .tracking(-0.75)
                     // Colour is carried by the value, never by the label beside
-                    // it — and finishing is the one state worth a different hue.
+                    // it, and finishing is the one state worth a different hue.
                     .foregroundStyle(isFinished ? Theme.Palette.green : Theme.Palette.orange)
                     .contentTransition(.numericText(countsDown: true))
                     .animation(.easeOut(duration: 0.18), value: reading)

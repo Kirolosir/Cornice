@@ -11,8 +11,8 @@ import Foundation
 /// `NotchGeometryResolver`; this type only answers "what machine is this?" and
 /// "should I have expected a notch here?".
 ///
-/// The table is also incomplete by construction — new Macs ship faster than it
-/// is updated — so every lookup returns an optional and callers fall back to
+/// The table is also incomplete by construction (new Macs ship faster than it
+/// is updated), so every lookup returns an optional and callers fall back to
 /// the name the operating system reports for itself.
 public enum MacModelCatalog {
     public enum Family: String, Sendable, Equatable {
@@ -48,7 +48,7 @@ public enum MacModelCatalog {
 
     /// Whether this model is known to ship with a notch.
     ///
-    /// A `false` here never suppresses the notch surface — the runtime
+    /// A `false` here never suppresses the notch surface. The runtime
     /// measurement wins. It is used only to decide whether a *missing*
     /// measurement is worth logging as surprising.
     public static func expectsNotch(modelIdentifier: String) -> Bool {

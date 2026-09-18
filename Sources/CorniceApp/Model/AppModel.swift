@@ -37,7 +37,7 @@ final class AppModel {
     ///
     /// Players do not apply a command synchronously. Measured against Spotify, a
     /// shuffle change was still being reported the old way 154 ms after the
-    /// command and had landed by 320 ms — so a poll fired in between reads the
+    /// command and had landed by 320 ms, so a poll fired in between reads the
     /// stale value and overwrites the button's own state, which looks exactly
     /// like a button that does nothing.
     private struct PendingToggle {
@@ -53,7 +53,7 @@ final class AppModel {
     /// for it. Held here because the player has no way to report it back.
     ///
     /// Only used when Spotify's Web API is not signed in. With a sign-in the
-    /// player is asked for repeat-one directly and this stays false — see
+    /// player is asked for repeat-one directly and this stays false. See
     /// `AppModel+Spotify`.
     private(set) var appliesRepeatOne = false
 
@@ -156,7 +156,7 @@ final class AppModel {
     // MARK: - Visualiser
 
     /// Latest analysed audio. Pulled on the UI's own display timer rather than
-    /// pushed from the audio thread — see `AudioVisualizerEngine`.
+    /// pushed from the audio thread. See `AudioVisualizerEngine`.
     private(set) var levels: AudioLevels
     private(set) var visualizerStatus: AudioVisualizerEngine.Status = .stopped
     /// When the analyser last started, so "it has never heard anything" can be
@@ -198,8 +198,8 @@ final class AppModel {
         // Order matters here, and it has taken a stopwatch to see why more than
         // once. Nothing the app actually *does* may sit behind something slow.
         //
-        // Three offenders so far: the audio tap — building a process tap, an
-        // aggregate device and an IO proc, measured at 5.2 s — the machine's
+        // Three offenders so far: the audio tap (building a process tap, an
+        // aggregate device and an IO proc, measured at 5.2 s), the machine's
         // marketing name, which shells out to `system_profiler`, and reading the
         // Spotify token out of the Keychain, which can stop to ask the user for
         // permission and wait as long as it likes for an answer. Each of them,
@@ -218,8 +218,8 @@ final class AppModel {
             startVisualizer()
         }
 
-        // Reads the Keychain, which is allowed to take as long as it likes —
-        // after a rebuild macOS asks the user before handing the token over,
+        // Reads the Keychain, which is allowed to take as long as it likes.
+        // After a rebuild macOS asks the user before handing the token over,
         // and an ad-hoc signature is rebuilt often. Nothing else waits on it:
         // until it lands, the repeat button uses the fallback it always had.
         Task { [weak self] in await self?.configureSpotify() }
@@ -270,8 +270,8 @@ final class AppModel {
         outputDevice = device
 
         guard let device, device.isWireless else { return }
-        // Only on an actual change, so re-reading the same device — which
-        // happens on unrelated audio reconfiguration — does not re-announce it.
+        // Only on an actual change, so re-reading the same device (which
+        // happens on unrelated audio reconfiguration) does not re-announce it.
         guard previous?.deviceID != device.deviceID else { return }
 
         Log.audio.notice("output switched to \(device.name, privacy: .public)")
@@ -326,7 +326,7 @@ final class AppModel {
         onSurfaceStateChanged?()
 
         // Both loops poll faster while the panel is open, so they are rebuilt
-        // when that changes — and `restartLoop` reads immediately, so opening
+        // when that changes, and `restartLoop` reads immediately, so opening
         // already refreshes. Rebuilding on *every* transition instead, with a
         // separate forced read on top, meant one hover fired four Apple events
         // in a millisecond: peek and expanded, twice each. At roughly 100 ms of
@@ -358,8 +358,8 @@ final class AppModel {
 
     /// Whether the playing indicator has anything to report.
     ///
-    /// Either the analyser is live — in which case it draws real audio, whatever
-    /// is producing it — or a player says it is playing, in which case the bars
+    /// Either the analyser is live (in which case it draws real audio, whatever
+    /// is producing it), or a player says it is playing, in which case the bars
     /// report that and nothing more.
     var showsIndicator: Bool {
         isVisualizerLive || media?.state.isPlaying == true
@@ -385,7 +385,7 @@ final class AppModel {
     /// can be set to crossfade, which starts the next track seconds before the
     /// current one reaches the length it reports, and that setting lives on
     /// Spotify's servers where it cannot be read. So the app also watches for a
-    /// track changing on its own near the end and goes back — and remembers how
+    /// track changing on its own near the end and goes back, and remembers how
     /// early it happened, so the next loop lands ahead of the crossfade rather
     /// than behind it and no second recovery is needed.
     private func recoverFromAutomaticAdvance() {
@@ -455,7 +455,7 @@ final class AppModel {
     /// Whether the travelling artwork is on screen at all.
     ///
     /// It is one view across every state, so this is asked once rather than
-    /// being decided independently by each layout — which is how it ended up
+    /// being decided independently by each layout, which is how it ended up
     /// visible in one state and missing in the next.
     var showsArtwork: Bool {
         guard let media, media.hasTrack else { return false }
@@ -520,14 +520,14 @@ final class AppModel {
             return surfaceState.isOpen ? preferences.telemetryRefreshInterval : 30
         default:
             // Each media poll is several Apple events to another process, and
-            // profiling puts one Spotify round-trip at roughly 100 ms of CPU —
-            // its scripting handler is not cheap. That cost is unavoidable on
+            // profiling puts one Spotify round-trip at roughly 100 ms of CPU.
+            // Its scripting handler is not cheap. That cost is unavoidable on
             // the supported API, so the cadence follows what is on screen
             // rather than a fixed rate.
             //
             // Open: the scrubber and playhead are visible, so use the
             // configured rate. Collapsed: the surface shows album art and a
-            // title that only change between tracks, so poll lazily — and any
+            // title that only change between tracks, so poll lazily, and any
             // staleness is erased by the immediate refresh on hover, before
             // the user can see it.
             if surfaceState.isOpen { return preferences.mediaRefreshInterval }
@@ -567,12 +567,12 @@ final class AppModel {
         // app is providing is layered back on.
         //
         // Held purely locally, and never cleared from a reading. Deciding it was
-        // off whenever the player reported repeat off made the feature
-        // self-destructing: the app sets the player's own repeat *off* for this
-        // mode — the loop is what does the repeating — so an honest poll saying
-        // "repeat is off" is the normal case, not a reason to give up. Any
-        // dropped command or race did the same thing. It now ends only when the
-        // button is pressed again.
+        // off whenever the player reported repeat off made the feature self-
+        // destructing: the app sets the player's own repeat *off* for this mode
+        // (the loop is what does the repeating), so an honest poll saying "repeat
+        // is off" is the normal case, not a reason to give up. Any dropped
+        // command or race did the same thing. It now ends only when the button
+        // is pressed again.
         if appliesRepeatOne, let current = snapshot {
             snapshot = current.with(repeatMode: .one)
         }
@@ -636,12 +636,12 @@ final class AppModel {
     /// Called from the frame timer while the surface is visible *and* from the
     /// polling loop, which always runs. Reading it only from the frame timer
     /// meant the value stayed at its initial full-volume assumption until the
-    /// panel was first opened — and the bars are sized by it.
+    /// panel was first opened, and the bars are sized by it.
     func readOutputVolume(at now: Date = .now) {
         guard volumeReadAt.map({ now.timeIntervalSince($0) > 0.25 }) ?? true else { return }
         volumeReadAt = now
         // No control at all means the device has no fader, which is not the same
-        // as silent — assume it is playing at full.
+        // as silent. Assume it is playing at full.
         let reading = serviceContainer.outputVolume.current()
         let updated = Float(reading ?? 1)
         if abs(updated - outputVolume) > 0.001 {
@@ -654,7 +654,7 @@ final class AppModel {
 
     /// Whether the analyser has heard anything recently.
     ///
-    /// macOS hands a process tap silence — not an error — when audio capture has
+    /// macOS hands a process tap silence (not an error) when audio capture has
     /// not been granted, so "the tap is running" says nothing about whether it
     /// can hear. This is the question the interface actually needs answered.
     var hasLiveAudio: Bool {
@@ -665,8 +665,8 @@ final class AppModel {
     /// Whether the bars should follow the analyser rather than the standard bob.
     ///
     /// Deliberately slow to change, and separate from `hasLiveAudio` for that
-    /// reason. Driven by whether audio arrived in the *last second* — which is
-    /// what the indicator used to use — the bars swapped between two quite
+    /// reason. Driven by whether audio arrived in the *last second* (which is
+    /// what the indicator used to use), the bars swapped between two quite
     /// different motions at every gap between tracks and in any quiet passage.
     /// That swap is the glitch: one moment they are following the music, the
     /// next they are doing a synthetic wave, and back again a second later.
@@ -679,7 +679,7 @@ final class AppModel {
         guard let lastAudioAt else {
             // Nothing heard yet. macOS feeds a tap it has refused silence rather
             // than an error, so after long enough this is the shape of a denied
-            // permission — fall back to the bob rather than leaving a dead row.
+            // permission. Fall back to the bob rather than leaving a dead row.
             guard let since = visualizerRunningSince else { return true }
             return Date().timeIntervalSince(since) < 15
         }
@@ -700,8 +700,8 @@ final class AppModel {
     /// Starts audio capture off the main actor.
     ///
     /// `start()` builds a Core Audio process tap, an aggregate device and an IO
-    /// proc, and can additionally block on a TCC prompt. Run on the main actor —
-    /// which is where it used to run — that is five seconds in which the surface
+    /// proc, and can additionally block on a TCC prompt. Run on the main actor
+    /// (which is where it used to run), that is five seconds in which the surface
     /// does not respond to the pointer and no other event source has been
     /// attached yet. The engine is its own lock-guarded object, so there is no
     /// reason for any of it to happen here.

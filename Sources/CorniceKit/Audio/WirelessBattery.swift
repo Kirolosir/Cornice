@@ -5,8 +5,8 @@ import IOKit
 ///
 /// Apple exposes AirPods battery through `AppleDeviceManagementHIDEventService`
 /// in the IO registry. There is no public API for it, but this only *reads*
-/// registry properties — it calls nothing private, injects nothing, and needs
-/// no permission. If the keys are absent, which they are for most non-Apple
+/// registry properties. It calls nothing private, injects nothing, and needs no
+/// permission. If the keys are absent, which they are for most non-Apple
 /// devices and can be immediately after connecting, it returns `nil` and the UI
 /// simply omits the ring.
 public enum WirelessBattery {

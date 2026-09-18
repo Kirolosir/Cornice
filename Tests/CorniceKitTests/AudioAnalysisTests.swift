@@ -386,8 +386,8 @@ final class RepeatModeTests: XCTestCase {
 ///
 /// Pink noise is the standard stand-in for music's long-term average spectrum:
 /// equal energy per octave. A visualiser that is correctly compensated draws it
-/// as a roughly level row. Drawn as a staircase — pinned on the left, motionless
-/// on the right — the compensation is wrong, which is exactly what it was.
+/// as a roughly level row. Drawn as a staircase (pinned on the left, motionless
+/// on the right) the compensation is wrong, which is exactly what it was.
 final class SpectrumBalanceTests: XCTestCase {
 
     private let rate = 48_000.0
@@ -509,9 +509,9 @@ final class BarDistributionTests: XCTestCase {
 
 /// How the bars answer to the volume fader.
 ///
-/// A process tap captures the stream before the fader — measured on this
+/// A process tap captures the stream before the fader (measured on this
 /// machine, dropping the system volume from 70 to 25 moved the captured level
-/// only from 0.96 to 0.86 — so without the fader the bars cannot tell blasting
+/// only from 0.96 to 0.86), so without the fader the bars cannot tell blasting
 /// music from the same track at a whisper.
 final class OutputVolumeResponseTests: XCTestCase {
 
@@ -532,8 +532,8 @@ final class OutputVolumeResponseTests: XCTestCase {
         XCTAssertGreaterThan(loud - quiet, 0.1, "the difference has to be visible")
     }
 
-    /// Muted output is not the same as silence — the stream is still playing —
-    /// but nothing is reaching the room, so the bars must be *still*, not merely
+    /// Muted output is not the same as silence (the stream is still playing), but
+    /// nothing is reaching the room, so the bars must be *still*, not merely
     /// smaller. The floor that keeps quiet music moving used to survive a muted
     /// fader and leave a quarter of the travel in place.
     func testMutedOutputIsCompletelyStill() {
@@ -591,7 +591,7 @@ final class OutputVolumeResponseTests: XCTestCase {
     /// The response has to be *perceptible*, not merely present.
     ///
     /// Every ordering test below passed against a curve that put barely a fifth
-    /// of the bars' travel across a tenfold change in volume — technically a
+    /// of the bars' travel across a tenfold change in volume. Technically a
     /// response, and a flat line to look at. This asserts the size of it.
     func testTheFaderCoversAUsefulPartOfTheTravel() {
         let loudest = levels(0.5).barHeights(count: 3, outputVolume: 1.0)[0]

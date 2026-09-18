@@ -12,7 +12,7 @@ import CoreGraphics
 ///    path that runs in practice.
 ///
 /// 2. **Catalog fallback.** Some configurations report a top safe-area inset
-///    without the auxiliary areas — notably when a notched panel is mirrored,
+///    without the auxiliary areas, notably when a notched panel is mirrored,
 ///    and on some pre-release OS builds. The inset still gives us an exact
 ///    notch *height*, so we derive the width from it using a measured aspect
 ///    ratio rather than inventing a per-model point size.
@@ -62,7 +62,7 @@ public enum NotchGeometryResolver {
     /// Derives the notch from the gap between the two auxiliary menu-bar areas.
     ///
     /// Returns `nil` when either area is missing, when they are not separated
-    /// (no notch), or when the gap is implausible — a display could in principle
+    /// (no notch), or when the gap is implausible. A display could in principle
     /// report a degenerate or full-width gap, and placing a window across the
     /// whole menu bar would be considerably worse than falling through.
     static func measuredProfile(_ metrics: ScreenMetrics) -> NotchProfile? {
@@ -131,7 +131,7 @@ public enum NotchGeometryResolver {
     ///
     /// The height is clamped to the actual menu bar so the collapsed surface
     /// never overhangs it on a display whose menu bar is shorter than our
-    /// nominal size — otherwise the surface would cover the top of whatever
+    /// nominal size. Otherwise the surface would cover the top of whatever
     /// window is below it.
     static func syntheticProfile(_ metrics: ScreenMetrics) -> NotchProfile {
         let menuBar = metrics.menuBarHeight

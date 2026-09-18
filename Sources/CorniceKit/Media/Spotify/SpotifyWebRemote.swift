@@ -52,7 +52,7 @@ public struct URLSessionTransport: HTTPTransport {
 ///
 /// Narrower than `MediaSnapshot` on purpose: the scripting interface is faster
 /// and cheaper for everything the panel draws every frame, so this carries only
-/// what scripting cannot answer — the true three-state repeat, and which device
+/// what scripting cannot answer. The true three-state repeat, and which device
 /// the commands will land on.
 public struct SpotifyPlaybackState: Sendable, Equatable {
     public let repeatMode: RepeatMode
@@ -71,20 +71,20 @@ public struct SpotifyPlaybackState: Sendable, Equatable {
 /// Spotify's Web API, for the things AppleScript cannot say.
 ///
 /// The scripting dictionary has one boolean where repeat needs three states, so
-/// `repeat one` on Spotify was previously the app faking it — watching for the
+/// `repeat one` on Spotify was previously the app faking it. Watching for the
 /// end of a track and seeking back to zero. That works, but it is Cornice's
 /// state and not Spotify's: the player's own button never shows the `1`, and
 /// anything that happens outside Cornice's poll gets it wrong.
 ///
 /// This asks Spotify directly. `repeat_state` comes back as `off`, `context` or
-/// `track`, and setting `track` is real repeat-one — the badge appears in the
+/// `track`, and setting `track` is real repeat-one. The badge appears in the
 /// Spotify window, it survives skips, and it needs no timers at all.
 public actor SpotifyWebRemote {
 
     /// Whether the API can be called at all.
     ///
-    /// Deliberately only about credentials. A failed *command* — no active
-    /// device, a rate limit — is reported separately, because folding it in
+    /// Deliberately only about credentials. A failed *command* (no active
+    /// device, a rate limit) is reported separately, because folding it in
     /// here meant one transient refusal disabled the Web API path for the rest
     /// of the session and quietly reverted to imitating repeat-one.
     public enum Status: Sendable, Equatable {
@@ -145,7 +145,7 @@ public actor SpotifyWebRemote {
             // A redirect can arrive more than once: the browser re-sends it on a
             // reload, and macOS delivers it again if it had to launch the app to
             // do so. The first copy consumes the verifier, so the rest find
-            // nothing waiting — which is a replay of work already done, not a
+            // nothing waiting, which is a replay of work already done, not a
             // failure, and treating it as one used to tear down the sign-in that
             // had just succeeded.
             if store.loadRefreshToken() != nil {

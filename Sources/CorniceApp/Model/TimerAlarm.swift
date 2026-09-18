@@ -3,7 +3,7 @@ import CorniceKit
 
 /// The sound a finished timer makes.
 ///
-/// A timer that ends silently is not a timer — the whole reason to set one is to
+/// A timer that ends silently is not a timer. The whole reason to set one is to
 /// stop watching it. A single notification banner is not enough for something
 /// you deliberately looked away from, so this repeats, the way the Clock app's
 /// alarm does, until it is acknowledged.

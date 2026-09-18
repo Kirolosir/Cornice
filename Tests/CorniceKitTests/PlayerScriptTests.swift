@@ -5,7 +5,7 @@ import XCTest
 ///
 /// Reply parsing is tested elsewhere, but a parser can only be reached by a
 /// script that compiled. AppleScript is compiled as a whole, so one bad line
-/// fails the entire script — and a surrounding `try` does not contain a compile
+/// fails the entire script, and a surrounding `try` does not contain a compile
 /// error, it only catches runtime ones. A single malformed expression therefore
 /// takes out the whole poll and the app shows nothing at all, which is exactly
 /// what `set rep to (if repeating then "all" else "off")` did.
@@ -67,7 +67,7 @@ final class PlayerScriptTests: XCTestCase {
 
     /// AppleScript has no conditional *expression*. Asserted directly as well as
     /// through the compiler, because the compiler check is skipped on a machine
-    /// without the player installed — including CI.
+    /// without the player installed, including CI.
     func testRepeatIsWrittenAsAStatement() {
         for source in MediaSource.allCases {
             let controller = ScriptedMediaController(source: source, runner: AppleScriptRunner())

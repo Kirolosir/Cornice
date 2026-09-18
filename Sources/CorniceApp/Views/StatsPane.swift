@@ -4,7 +4,7 @@ import CorniceKit
 /// The System module: two cards, one series each.
 ///
 /// Deliberately charts rather than rows of numbers. A number alone answers "what
-/// is it now", which is the less useful question — the reason to glance at this
+/// is it now", which is the less useful question. The reason to glance at this
 /// is to see whether something has *changed*, and that only exists in the shape
 /// of the last minute. Rows of text here would be a failure state.
 struct StatsPane: View {
@@ -136,8 +136,8 @@ struct MetricCard: View {
 ///
 /// Drawn with `Canvas` rather than a stack of shapes: this repaints whenever a
 /// sample lands, and a view per point would have SwiftUI diffing a tree for what
-/// is ultimately two paths. The window *slides* — a new sample shifts the series
-/// left rather than rescaling the x-axis — so the chart reads as time passing
+/// is ultimately two paths. The window *slides* (a new sample shifts the series
+/// left rather than rescaling the x-axis), so the chart reads as time passing
 /// rather than as a graph being redrawn.
 struct Sparkline: View {
     let series: [Series]

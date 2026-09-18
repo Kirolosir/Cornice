@@ -4,8 +4,8 @@ import Foundation
 /// captured output.
 ///
 /// The awkward part of running a process from Swift concurrency is that three
-/// things finish independently — stdout reaching EOF, stderr reaching EOF, and
-/// the process exiting — and the continuation must be resumed exactly once
+/// things finish independently (stdout reaching EOF, stderr reaching EOF, and
+/// the process exiting), and the continuation must be resumed exactly once
 /// after all three, or after a timeout or cancellation pre-empts them. All of
 /// that bookkeeping lives in `RunState`, which is the only place a lock is
 /// taken.
@@ -199,8 +199,8 @@ public struct SubprocessRunner: ProcessRunning {
 
         /// Timeout fired. SIGTERM first so the child can clean up, SIGKILL after
         /// a grace period if it ignores that. The continuation is not resumed
-        /// here — it resumes through the normal path once the pipes close,
-        /// which guarantees we never resume while a read is still running.
+        /// here. It resumes through the normal path once the pipes close, which
+        /// guarantees we never resume while a read is still running.
         private func expire(killGrace: TimeInterval, queue: DispatchQueue) {
             lock.lock()
             let alreadyDone = continuation == nil || exited
@@ -231,9 +231,9 @@ public struct SubprocessRunner: ProcessRunning {
         }
 
         /// Resumes the continuation once stdout, stderr, and the process itself
-        /// have all finished — and exactly once, because taking the
-        /// continuation out of the field under the lock is what makes the
-        /// second caller a no-op.
+        /// have all finished, and exactly once, because taking the continuation
+        /// out of the field under the lock is what makes the second caller a
+        /// no-op.
         private func finishIfReady() {
             lock.lock()
             guard outputClosed, errorClosed, exited, let continuation else {

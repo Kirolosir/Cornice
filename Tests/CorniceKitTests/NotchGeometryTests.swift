@@ -2,9 +2,9 @@ import XCTest
 @testable import CorniceKit
 
 /// The display configurations here are the ones that actually break notch
-/// placement. They cannot be reproduced by running on a developer's machine —
-/// you would need four different MacBooks, an external monitor, and a mirrored
-/// display — which is exactly why the resolver takes a value type.
+/// placement. They cannot be reproduced by running on a developer's machine
+/// (you would need four different MacBooks, an external monitor, and a
+/// mirrored display), which is exactly why the resolver takes a value type.
 final class NotchGeometryTests: XCTestCase {
 
     /// Captured from a MacBook Air (Mac15,12) running a scaled 1710×1112 point

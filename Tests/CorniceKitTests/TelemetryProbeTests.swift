@@ -23,7 +23,7 @@ final class TelemetryProbeTests: XCTestCase {
     }
 
     /// App Memory is the anonymous pages an app owns, not the pages the kernel
-    /// happens to have marked active — that set includes file cache and excludes
+    /// happens to have marked active. That set includes file cache and excludes
     /// inactive pages the app still holds. Used memory must exclude the file
     /// cache, or every Mac reads as permanently near capacity.
     func testUsedMemoryExcludesFileCache() async {

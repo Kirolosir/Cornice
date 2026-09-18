@@ -5,9 +5,10 @@ import Security
 ///
 /// The refresh token is the only durable secret Cornice holds: it is worth more
 /// than an access token, because it mints them. It goes in the Keychain rather
-/// than in preferences, with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`
-/// — readable by a background app after the Mac has been unlocked once, and
-/// never carried to another machine by a backup or by iCloud.
+/// than in preferences, with
+/// `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`. Readable by a background
+/// app after the Mac has been unlocked once, and never carried to another
+/// machine by a backup or by iCloud.
 ///
 /// The client ID is *not* stored here. Under PKCE it is a public identifier,
 /// not a credential, so it lives in preferences where the user can see and

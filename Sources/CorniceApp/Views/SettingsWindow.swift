@@ -207,7 +207,7 @@ struct GeneralSettings: View {
 /// express.
 ///
 /// Worth the tab rather than a line in General, because it asks the user to do
-/// something — register an application — and an instruction with no explanation
+/// something (register an application), and an instruction with no explanation
 /// beside it reads as an imposition.
 struct SpotifySettings: View {
     @Bindable var model: AppModel
@@ -241,7 +241,7 @@ struct SpotifySettings: View {
                 }
 
                 // Shown beside the connection rather than in place of it: a
-                // command can be refused — nothing playing, a rate limit —
+                // command can be refused (nothing playing, a rate limit)
                 // while the sign-in itself is perfectly good.
                 if let problem = model.spotifyError {
                     Text(problem)
@@ -289,7 +289,7 @@ struct SpotifySettings: View {
                 Text("""
                 Create an app on the dashboard, add the redirect URI above to \
                 it, and paste its client ID here. The client ID is not a secret \
-                — sign-in uses PKCE, so Cornice never needs one. Controlling \
+                because sign-in uses PKCE. Controlling \
                 playback this way requires Spotify Premium; without it Cornice \
                 keeps imitating repeat-one as before.
                 """)
@@ -328,7 +328,7 @@ struct VisualizerSettings: View {
 
                 macOS will ask for permission to record system audio the first \
                 time you turn this on. Audio is analysed in memory and \
-                discarded — nothing is recorded, written to disk, or sent \
+                discarded. Nothing is recorded, written to disk, or sent \
                 anywhere.
                 """)
                 .font(.caption)
@@ -352,7 +352,7 @@ struct VisualizerSettings: View {
                                 }
                             }
                             .font(.caption)
-                            Text("Cornice is ad-hoc signed, and macOS ties a permission to the code signature — so rebuilding it looks like a different app and the grant is dropped.")
+                            Text("Cornice is ad-hoc signed, and macOS ties a permission to the code signature, so rebuilding it looks like a different app and the grant is dropped.")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -482,7 +482,7 @@ struct AboutSettings: View {
         switch source {
         case .measured: "Measured from this display"
         case .catalogFallback: "Derived from the safe-area inset"
-        case .syntheticCenter: "No notch — centred in the menu bar"
+        case .syntheticCenter: "No notch, centred in the menu bar"
         }
     }
 }

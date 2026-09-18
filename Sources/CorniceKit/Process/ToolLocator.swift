@@ -3,7 +3,7 @@ import Foundation
 /// Finds command-line tools by absolute path.
 ///
 /// A GUI app launched from Finder or as a login item inherits a bare
-/// environment — typically `PATH=/usr/bin:/bin:/usr/sbin:/sbin` — not the PATH
+/// environment (typically `PATH=/usr/bin:/bin:/usr/sbin:/sbin`) not the PATH
 /// from the user's shell profile. Tools installed by Homebrew therefore appear
 /// to be missing even though they work perfectly in Terminal, which is a
 /// classic and very confusing bug class for Mac developer tools. We search the
@@ -31,7 +31,7 @@ public actor ToolLocator {
 
     /// Absolute path for a tool name, or `nil` if it is not installed.
     ///
-    /// Results are cached, including misses — a tool that was absent at launch
+    /// Results are cached, including misses. A tool that was absent at launch
     /// is very unlikely to appear mid-session, and re-statting eight
     /// directories on every refresh tick is exactly the kind of idle cost this
     /// app is supposed to avoid. `forget(_:)` clears an entry when the user

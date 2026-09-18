@@ -84,7 +84,7 @@ private actor PreviewMediaController: MediaControlling {
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: representation)
 
         // Several colours in distinct places, because a flat two-tone gradient
-        // would not exercise the per-region palette at all — and the whole point
+        // would not exercise the per-region palette at all, and the whole point
         // of the documentation images is that they show what the code does.
         NSGradient(colors: [
             NSColor(calibratedHue: 0.95, saturation: 0.72, brightness: 0.85, alpha: 1),
