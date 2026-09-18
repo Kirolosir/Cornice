@@ -14,6 +14,7 @@ struct ServiceContainer: Sendable {
     let hardware: HardwareIdentityProvider
     let visualizer: AudioVisualizerEngine
     let outputDevices: OutputDeviceMonitor
+    let outputVolume: OutputVolumeReader
     let reachability: NetworkReachability
     let vpn: VPNMonitor
     let downloads: DownloadsMonitor
@@ -27,6 +28,7 @@ struct ServiceContainer: Sendable {
             hardware: HardwareIdentityProvider(runner: runner),
             visualizer: AudioVisualizerEngine(bandCount: 8),
             outputDevices: OutputDeviceMonitor(),
+            outputVolume: OutputVolumeReader(),
             reachability: NetworkReachability(),
             vpn: VPNMonitor(),
             downloads: DownloadsMonitor()

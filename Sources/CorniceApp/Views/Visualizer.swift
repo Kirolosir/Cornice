@@ -121,7 +121,11 @@ struct EqualizerIndicator: View {
     private func scale(at index: Int) -> CGFloat {
         guard isLive else { return resting }
         guard audioDriven else { return bobbing ? 1 : resting }
-        let heights = levels.barHeights(count: barCount, resting: Float(resting))
+        let heights = levels.barHeights(
+            count: barCount,
+            resting: Float(resting),
+            outputVolume: model.outputVolume
+        )
         guard index < heights.count else { return resting }
         return CGFloat(heights[index])
     }

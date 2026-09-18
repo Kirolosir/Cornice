@@ -35,15 +35,28 @@ enum ArtworkPalette {
     /// Downsample size. Small enough to cost a fraction of a millisecond — this
     /// runs on every track change — and large enough that a region still holds
     /// enough pixels to have a dominant hue.
-    private static let sampleSize = 24
+    private static let sampleSize = 30
 
-    /// The regions sampled, and where each one is painted.
-    private static let regions: [(rect: (x: Int, y: Int, width: Int, height: Int), position: UnitPoint)] = [
-        ((0, 0, 12, 12), .topLeading),
-        ((12, 0, 12, 12), .topTrailing),
-        ((0, 12, 12, 12), .bottomLeading),
-        ((12, 12, 12, 12), .bottomTrailing),
-    ]
+    /// A three-by-three grid over the cover. Four corners collapse a detailed
+    /// sleeve into four colours; nine regions keep enough of it that two albums
+    /// rarely produce the same surface.
+    private static let regions: [(rect: (x: Int, y: Int, width: Int, height: Int), position: UnitPoint)] = {
+        let step = sampleSize / 3
+        let positions: [[UnitPoint]] = [
+            [.topLeading, .top, .topTrailing],
+            [.leading, .center, .trailing],
+            [.bottomLeading, .bottom, .bottomTrailing],
+        ]
+        return (0..<3).flatMap { row in
+            (0..<3).map { column in
+                ((column * step, row * step, step, step), positions[row][column])
+            }
+        }
+    }()
+
+    /// How many pools the surface paints at most. Beyond this they overlap into
+    /// mud and cost more than they add.
+    private static let maximumAccents = 6
 
     /// Up to four colours with their positions, strongest first.
     static func accents(of image: NSImage) -> [ArtworkAccent] {
@@ -65,8 +78,9 @@ enum ArtworkPalette {
         // one flat colour should paint one wash rather than four.
         var distinct: [ArtworkAccent] = []
         for accent in accents.sorted(by: { $0.weight > $1.weight }) {
+            guard distinct.count < maximumAccents else { break }
             let isNew = distinct.allSatisfy { existing in
-                hueDistance(existing.color, accent.color) > 0.06
+                hueDistance(existing.color, accent.color) > 0.045
             }
             if isNew { distinct.append(accent) }
         }
@@ -81,12 +95,22 @@ enum ArtworkPalette {
 
     // MARK: - Sampling
 
+    /// The colour a region is actually *made of*.
+    ///
+    /// A histogram over hue rather than the single highest-scoring pixel. One
+    /// pixel is noise — it picks up a specular highlight or a stray logo — and
+    /// it was why covers kept collapsing to the same few muddy tones. Binning by
+    /// hue and averaging within the winning bin returns the colour a person
+    /// would name if asked what that corner of the sleeve looks like.
     private static func dominantHSB(
         in bitmap: NSBitmapImageRep,
         region: (x: Int, y: Int, width: Int, height: Int)
     ) -> (hue: CGFloat, saturation: CGFloat, brightness: CGFloat, share: Double)? {
-        var bestScore: CGFloat = -1
-        var best: (hue: CGFloat, saturation: CGFloat, brightness: CGFloat)?
+        let binCount = 24
+        var weights = [CGFloat](repeating: 0, count: binCount)
+        var saturations = [CGFloat](repeating: 0, count: binCount)
+        var brightnesses = [CGFloat](repeating: 0, count: binCount)
+        var counts = [Int](repeating: 0, count: binCount)
         var considered = 0
         var counted = 0
 
@@ -100,28 +124,34 @@ enum ArtworkPalette {
                 color.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
                 guard alpha > 0.5 else { continue }
 
-                // Near-black and near-white pixels carry no hue, and most covers
-                // have a lot of both — but *white* is the low-saturation case,
-                // which the saturation test already catches. A brightness
-                // ceiling low enough to matter throws away vivid colour instead:
-                // at 0.96 a fully saturated red or yellow was rejected outright,
-                // so the most characteristic pixels on a bright cover were the
-                // ones never sampled.
+                // Near-black and near-white carry no hue. White is the
+                // low-saturation case, which the saturation test catches, so
+                // there is no brightness ceiling here: a ceiling low enough to
+                // matter throws away exactly the vivid pixels worth having.
                 guard brightness > 0.10, saturation > 0.15 else { continue }
                 counted += 1
 
-                // Favour saturated, mid-bright pixels: the colour a person would
-                // name if asked what the cover looks like.
-                let score = saturation * (1 - abs(brightness - 0.6))
-                if score > bestScore {
-                    bestScore = score
-                    best = (hue, saturation, brightness)
-                }
+                let bin = min(binCount - 1, Int(hue * CGFloat(binCount)))
+                // Saturated pixels speak for the region; a faint tint does not.
+                let weight = saturation * saturation
+                weights[bin] += weight
+                saturations[bin] += saturation * weight
+                brightnesses[bin] += brightness * weight
+                counts[bin] += 1
             }
         }
 
-        guard let best, considered > 0 else { return nil }
-        return (best.hue, best.saturation, best.brightness, Double(counted) / Double(considered))
+        guard considered > 0, counted > 0 else { return nil }
+        guard let winner = weights.indices.max(by: { weights[$0] < weights[$1] }),
+              weights[winner] > 0 else { return nil }
+
+        let total = weights[winner]
+        return (
+            hue: (CGFloat(winner) + 0.5) / CGFloat(binCount),
+            saturation: saturations[winner] / total,
+            brightness: brightnesses[winner] / total,
+            share: Double(counted) / Double(considered)
+        )
     }
 
     /// Clamped so the colour reads as the cover's without putting the surface's
@@ -131,11 +161,13 @@ enum ArtworkPalette {
     ) -> Color {
         Color(
             hue: Double(hue),
-            // A little more headroom than a single flat wash could afford: these
-            // are painted at lower opacity and layered, so the saturation is
-            // what carries the cover's character.
-            saturation: Double(min(max(saturation, 0.35), 0.92)),
-            brightness: Double(min(max(brightness, 0.45), 0.72))
+            // The saturation *floor* is what stops covers coming out brown and
+            // tan: a washed-out sample is still a colour, and pushing it back up
+            // is what makes the surface look like the sleeve instead of like
+            // every other sleeve. Brightness stays bounded, because that is the
+            // axis white text has to survive.
+            saturation: Double(min(max(saturation, 0.58), 1.0)),
+            brightness: Double(min(max(brightness, 0.46), 0.76))
         )
     }
 

@@ -18,6 +18,7 @@ enum PreviewServices {
             hardware: HardwareIdentityProvider(runner: SubprocessRunner()),
             visualizer: AudioVisualizerEngine(bandCount: 8),
             outputDevices: OutputDeviceMonitor(),
+            outputVolume: OutputVolumeReader(),
             reachability: NetworkReachability(),
             vpn: VPNMonitor(),
             downloads: DownloadsMonitor()
@@ -79,14 +80,27 @@ private actor PreviewMediaController: MediaControlling {
 
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: representation)
-        let gradient = NSGradient(
-            colors: [
-                NSColor(calibratedRed: 0.86, green: 0.24, blue: 0.20, alpha: 1),
-                NSColor(calibratedRed: 0.36, green: 0.10, blue: 0.22, alpha: 1),
-                NSColor(calibratedRed: 0.09, green: 0.06, blue: 0.14, alpha: 1),
-            ]
-        )
-        gradient?.draw(in: NSRect(x: 0, y: 0, width: size, height: size), angle: -60)
+
+        // Several colours in distinct places, because a flat two-tone gradient
+        // would not exercise the per-region palette at all — and the whole point
+        // of the documentation images is that they show what the code does.
+        NSGradient(colors: [
+            NSColor(calibratedHue: 0.95, saturation: 0.72, brightness: 0.85, alpha: 1),
+            NSColor(calibratedHue: 0.72, saturation: 0.68, brightness: 0.45, alpha: 1),
+        ])?.draw(in: NSRect(x: 0, y: 0, width: size, height: size), angle: -60)
+
+        let blobs: [(NSColor, NSRect)] = [
+            (NSColor(calibratedHue: 0.13, saturation: 0.85, brightness: 0.95, alpha: 1),
+             NSRect(x: 150, y: 170, width: 150, height: 130)),
+            (NSColor(calibratedHue: 0.47, saturation: 0.75, brightness: 0.80, alpha: 1),
+             NSRect(x: -20, y: -10, width: 170, height: 150)),
+            (NSColor(calibratedHue: 0.58, saturation: 0.80, brightness: 0.75, alpha: 1),
+             NSRect(x: 170, y: -30, width: 160, height: 140)),
+        ]
+        for (color, rect) in blobs {
+            color.setFill()
+            NSBezierPath(ovalIn: rect).fill()
+        }
         NSGraphicsContext.restoreGraphicsState()
 
         return representation.representation(using: .png, properties: [:]) ?? Data()

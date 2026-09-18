@@ -511,3 +511,58 @@ final class BarDistributionTests: XCTestCase {
         XCTAssertTrue(levels([Float](repeating: 0.5, count: 8)).barHeights(count: 0).isEmpty)
     }
 }
+
+/// How the bars answer to the volume fader.
+///
+/// A process tap captures the stream before the fader — measured on this
+/// machine, dropping the system volume from 70 to 25 moved the captured level
+/// only from 0.96 to 0.86 — so without the fader the bars cannot tell blasting
+/// music from the same track at a whisper.
+final class OutputVolumeResponseTests: XCTestCase {
+
+    private func levels(_ value: Float) -> AudioLevels {
+        AudioLevels(
+            bands: [Float](repeating: 0.7, count: 8),
+            level: value, isBeat: false, beatIntensity: 0
+        )
+    }
+
+    func testTheSameAudioMovesLessAtLowerVolume() {
+        let loud = levels(0.8).barHeights(count: 3, outputVolume: 1.0)[0]
+        let middling = levels(0.8).barHeights(count: 3, outputVolume: 0.5)[0]
+        let quiet = levels(0.8).barHeights(count: 3, outputVolume: 0.15)[0]
+
+        XCTAssertGreaterThan(loud, middling)
+        XCTAssertGreaterThan(middling, quiet)
+        XCTAssertGreaterThan(loud - quiet, 0.1, "the difference has to be visible")
+    }
+
+    /// Muted output is not the same as silence — the stream is still there — but
+    /// the bars should reflect that nothing is reaching the room.
+    func testMutedOutputDrawsTheSmallestBars() {
+        let muted = levels(0.9).barHeights(count: 3, outputVolume: 0)[0]
+        let audible = levels(0.9).barHeights(count: 3, outputVolume: 1)[0]
+        XCTAssertLessThan(muted, audible)
+        XCTAssertGreaterThanOrEqual(muted, 0.3, "never below the resting height")
+    }
+
+    /// Quiet music must still visibly move. Scaling straight off the level left
+    /// it sitting at the resting height, which reads as a component that failed
+    /// rather than as quiet music.
+    func testQuietAudioStillMoves() {
+        let bars = levels(0.18).barHeights(count: 3, outputVolume: 0.6)
+        XCTAssertGreaterThan(bars[0], 0.42, "quiet audio should still lift the bars")
+    }
+
+    /// And loud music must still be plainly louder than quiet music.
+    func testLoudStillOutrunsQuiet() {
+        let quiet = levels(0.18).barHeights(count: 3, outputVolume: 1)[0]
+        let loud = levels(0.95).barHeights(count: 3, outputVolume: 1)[0]
+        XCTAssertGreaterThan(loud - quiet, 0.12)
+    }
+
+    func testSilenceStillRestsWhateverTheVolume() {
+        let silent = AudioLevels(bands: [Float](repeating: 0, count: 8), level: 0, isBeat: false, beatIntensity: 0)
+        XCTAssertEqual(silent.barHeights(count: 3, outputVolume: 1), [0.3, 0.3, 0.3])
+    }
+}

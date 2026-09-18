@@ -149,9 +149,12 @@ UI *pulls* the newest frame on its own timer. Pushing observable updates from th
 audio thread schedules main-actor work faster than it drains.
 
 The playing indicator is driven by both halves of the analysis: the spectrum
-decides the *shape* of the three bars and the overall level decides how much room
-that shape has to move in, so a quiet passage barely stirs and a loud one swings
-the full height.
+decides the *shape* of the bars and loudness decides how much room that shape has
+to move in. Loudness means what is actually reaching the room, so the volume
+fader is part of it — a tap captures the stream *before* the fader, and measured
+here dropping the system volume from 70 to 25 moved the captured level only from
+0.96 to 0.86. Without reading the fader the bars cannot tell blasting music from
+the same track at a whisper.
 
 Band magnitudes are compensated for music's natural downward slope. Recorded
 music approximates pink noise — equal energy per octave — so the amplitude in any
@@ -210,7 +213,7 @@ Swift 6 with strict concurrency · SwiftUI + AppKit · Core Audio · vDSP · IOK
 SystemConfiguration · Network.framework · Carbon hot keys · no third-party
 dependencies.
 
-**152 tests** across the pure logic: player reply parsing, playhead
+**157 tests** across the pure logic: player reply parsing, playhead
 extrapolation, FFT and beat detection, notch geometry for every display
 configuration, the HUD size table, the indicator's loudness mapping, band
 calibration and spectral tilt, per-player repeat support, the telemetry probe against the running machine, every AppleScript

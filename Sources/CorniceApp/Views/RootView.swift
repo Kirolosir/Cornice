@@ -201,6 +201,12 @@ struct RootView: View {
     private func tintLayers(tint: Color, size: CGSize) -> some View {
         let strength = model.preferences.tintStrength * (scheme == .light ? 0.55 : 1)
         let reach = max(size.width, size.height)
+        let accents = model.artworkAccents
+        // Shared out across however many pools there are, so a detailed cover
+        // paints more colours rather than more opacity. Six pools at the alpha
+        // one pool wants would stack straight back into a single flat wash —
+        // and take the text's contrast with them.
+        let poolAlpha = 0.30 / max(1, Double(accents.count)).squareRoot()
 
         return ZStack {
             LinearGradient(
@@ -214,16 +220,18 @@ struct RootView: View {
                 endPoint: .bottom
             )
 
-            ForEach(Array(model.artworkAccents.enumerated()), id: \.offset) { _, accent in
+            ForEach(Array(accents.enumerated()), id: \.offset) { _, accent in
                 RadialGradient(
                     stops: [
-                        .init(color: accent.color.opacity(0.26 * strength * accent.weight), location: 0),
-                        .init(color: accent.color.opacity(0.10 * strength * accent.weight), location: 0.45),
+                        .init(color: accent.color.opacity(poolAlpha * strength * accent.weight), location: 0),
+                        .init(color: accent.color.opacity(poolAlpha * 0.4 * strength * accent.weight), location: 0.45),
                         .init(color: accent.color.opacity(0), location: 1),
                     ],
                     center: accent.position,
                     startRadius: 0,
-                    endRadius: reach * 0.75
+                    // Tighter than the surface, so each pool stays where the
+                    // colour came from instead of washing over the whole panel.
+                    endRadius: reach * 0.55
                 )
             }
         }

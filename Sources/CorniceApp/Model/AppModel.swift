@@ -124,6 +124,11 @@ final class AppModel {
     private(set) var visualizerStatus: AudioVisualizerEngine.Status = .stopped
     /// When the analyser last reported something other than silence.
     private var lastAudioAt: Date?
+    /// How far the output fader is up, 0...1. Re-read a few times a second
+    /// rather than every frame: it is cheap, but it is not free, and nobody
+    /// moves a volume slider at sixty hertz.
+    private(set) var outputVolume: Float = 1
+    private var volumeReadAt: Date?
 
     // MARK: - Other modules
 
@@ -436,6 +441,14 @@ final class AppModel {
     /// Pulls the newest audio frame. Called from the UI's display timer.
     func sampleLevels() {
         guard preferences.audioVisualizerEnabled else { return }
+        let now = Date()
+        if volumeReadAt.map({ now.timeIntervalSince($0) > 0.25 }) ?? true {
+            volumeReadAt = now
+            // No control at all means the device has no fader, which is not the
+            // same as silent — assume it is playing at full.
+            outputVolume = Float(serviceContainer.outputVolume.current() ?? 1)
+        }
+
         let latest = serviceContainer.visualizer.latestLevels()
         levels = latest
         let wasHearing = hasLiveAudio

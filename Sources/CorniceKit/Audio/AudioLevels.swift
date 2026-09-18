@@ -43,13 +43,23 @@ public struct AudioLevels: Sendable, Equatable {
     ///   - count: how many bars to fill.
     ///   - resting: the height a bar holds in silence, so the row reads as a
     ///     control rather than as a glitch.
-    public func barHeights(count: Int, resting: Float = 0.3) -> [Float] {
+    /// - Parameter outputVolume: how loud the Mac is playing, 0...1. The tap
+    ///   captures the stream *before* the volume fader, so without this the bars
+    ///   cannot tell music blasting from the same track at a whisper.
+    public func barHeights(count: Int, resting: Float = 0.3, outputVolume: Float = 1) -> [Float] {
         guard count > 0 else { return [] }
         guard !bands.isEmpty else { return Array(repeating: resting, count: count) }
 
-        // Slightly concave, so ordinary listening levels already move properly
-        // rather than only the loudest choruses.
-        let headroom = pow(min(1, max(0, level)), 0.4)
+        // What is actually reaching the room: the stream's own level, scaled by
+        // how far the fader is up. The exponent softens it, because halving the
+        // volume does not halve how loud the music feels.
+        let audible = min(1, max(0, level)) * pow(min(1, max(0, outputVolume)), 0.6)
+
+        // A floor under the swing, so quiet-but-audible music still moves rather
+        // than sitting at rest and reading as broken — while loud music still
+        // plainly moves more. Silence is handled by the bands being zero, not by
+        // this, so nothing animates when nothing is playing.
+        let headroom = 0.25 + 0.75 * pow(audible, 0.45)
 
         return (0..<count).map { index in
             // Expanded a little before it drives the bar. Band values sit in the
