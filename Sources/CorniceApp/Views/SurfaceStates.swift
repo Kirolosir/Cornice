@@ -174,7 +174,8 @@ struct ExpandedContentView: View {
                     EqualizerIndicator(
                         model: model,
                         isLive: model.surfaceState == .expanded,
-                        tint: model.artworkTint ?? ink.secondary
+                        tint: model.artworkTint ?? ink.secondary,
+                        barCount: 5
                     )
                 }
             }

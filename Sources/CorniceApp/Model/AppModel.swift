@@ -30,6 +30,67 @@ final class AppModel {
     private(set) var artwork: NSImage?
     /// Dominant colour of the current artwork, used to tint the surface.
     private(set) var artworkTint: Color?
+    /// Several colours from the cover with the corner each belongs to, so the
+    /// surface is laid out like the artwork rather than averaged from it.
+    private(set) var artworkAccents: [ArtworkAccent] = []
+    /// A toggle the user has just pressed, held until the player confirms it.
+    ///
+    /// Players do not apply a command synchronously. Measured against Spotify, a
+    /// shuffle change was still being reported the old way 154 ms after the
+    /// command and had landed by 320 ms — so a poll fired in between reads the
+    /// stale value and overwrites the button's own state, which looks exactly
+    /// like a button that does nothing.
+    private struct PendingToggle {
+        var isShuffling: Bool?
+        var repeatMode: RepeatMode?
+        var until: Date
+    }
+
+    private var pendingToggle: PendingToggle?
+
+    /// Records what the user just asked for, so an in-flight poll cannot undo it.
+    func holdToggle(isShuffling: Bool? = nil, repeatMode: RepeatMode? = nil) {
+        pendingToggle = PendingToggle(
+            isShuffling: isShuffling,
+            repeatMode: repeatMode,
+            // Generous next to the measured 320 ms: the cost of being wrong is
+            // a stale glyph for a moment, and the cost of being too tight is the
+            // bug this exists to fix.
+            until: Date().addingTimeInterval(1.5)
+        )
+    }
+
+    /// Applies a freshly-polled snapshot, keeping any toggle the player has not
+    /// caught up with yet.
+    private func reconcile(_ snapshot: MediaSnapshot?) -> MediaSnapshot? {
+        guard var snapshot, let pending = pendingToggle else {
+            pendingToggle = nil
+            return snapshot
+        }
+        guard Date() < pending.until else {
+            pendingToggle = nil
+            return snapshot
+        }
+
+        var settled = true
+        if let wanted = pending.isShuffling {
+            if snapshot.isShuffling != wanted {
+                snapshot = snapshot.with(isShuffling: wanted)
+                settled = false
+            }
+        }
+        if let wanted = pending.repeatMode {
+            if snapshot.repeatMode != wanted {
+                snapshot = snapshot.with(repeatMode: wanted)
+                settled = false
+            }
+        }
+        // Once the player agrees, stop holding: a user who changes it in the
+        // player itself should see that immediately.
+        if settled { pendingToggle = nil }
+        return snapshot
+    }
+
     /// Set when every known player refused automation.
     private(set) var mediaPermissionDenied = false
     private(set) var runningPlayers: [MediaSource] = []
@@ -340,14 +401,16 @@ final class AppModel {
     private func refreshMedia() async {
         let coordinator = serviceContainer.media
         runningPlayers = await coordinator.runningSources()
-        let snapshot = await coordinator.snapshot()
+        let polled = await coordinator.snapshot()
         mediaPermissionDenied = await coordinator.allSourcesUnavailable()
 
+        let snapshot = reconcile(polled)
         media = snapshot
 
         guard let snapshot, snapshot.hasTrack else {
             artwork = nil
             artworkTint = nil
+            artworkAccents = []
             artworkTrackIdentity = nil
             return
         }
@@ -360,10 +423,14 @@ final class AppModel {
               let image = NSImage(data: data) else {
             artwork = nil
             artworkTint = nil
+            artworkAccents = []
             return
         }
         artwork = image
-        artworkTint = preferences.tintFromArtwork ? ArtworkPalette.dominantColor(of: image) : nil
+        // Extracted once per track, not once per poll: this walks the cover.
+        let accents = preferences.tintFromArtwork ? ArtworkPalette.accents(of: image) : []
+        artworkAccents = accents
+        artworkTint = accents.first?.color
     }
 
     /// Pulls the newest audio frame. Called from the UI's display timer.

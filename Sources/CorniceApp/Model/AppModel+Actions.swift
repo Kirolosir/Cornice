@@ -74,14 +74,18 @@ extension AppModel {
     /// straight back.
     func toggleShuffle() {
         if let snapshot = media {
-            applyMedia(snapshot.with(isShuffling: !snapshot.isShuffling))
+            let wanted = !snapshot.isShuffling
+            applyMedia(snapshot.with(isShuffling: wanted))
+            holdToggle(isShuffling: wanted)
         }
         send(.toggleShuffle)
     }
 
     func cycleRepeat() {
         if let snapshot = media {
-            applyMedia(snapshot.with(repeatMode: snapshot.repeatMode.next(on: snapshot.source)))
+            let wanted = snapshot.repeatMode.next(on: snapshot.source)
+            applyMedia(snapshot.with(repeatMode: wanted))
+            holdToggle(repeatMode: wanted)
         }
         send(.cycleRepeat)
     }
@@ -91,9 +95,10 @@ extension AppModel {
         Task { [services = self.serviceContainer] in
             do {
                 try await services.media.perform(command, on: source)
-                // Re-read promptly so the UI reflects the result rather than
-                // waiting out the poll interval.
-                try? await Task.sleep(for: .milliseconds(120))
+                // Long enough for the player to have applied it. Measured
+                // against Spotify, a change was reported by 320 ms; 120 ms read
+                // the old value about as often as the new one.
+                try? await Task.sleep(for: .milliseconds(400))
                 self.refreshNow("media")
             } catch let error as ServiceError {
                 Log.media.error("command failed: \(error.headline, privacy: .public)")

@@ -469,3 +469,45 @@ final class SpectrumBalanceTests: XCTestCase {
         XCTAssertGreaterThan(tallest(0.15), tallest(0.05) + 0.1)
     }
 }
+
+/// Bars at counts other than three.
+final class BarDistributionTests: XCTestCase {
+
+    private func levels(_ bands: [Float], level: Float = 1) -> AudioLevels {
+        AudioLevels(bands: bands, level: level, isBeat: false, beatIntensity: 0)
+    }
+
+    /// Every band must reach some bar. Fixed-width slices with a remainder gave
+    /// five bars across eight bands one band each and the last one four, so the
+    /// right-hand bar answered to half the spectrum.
+    func testEveryBandReachesABarAtEveryCount() {
+        for count in 2...6 {
+            for band in 0..<8 {
+                var bands = [Float](repeating: 0, count: 8)
+                bands[band] = 1
+                let heights = levels(bands).barHeights(count: count)
+                XCTAssertGreaterThan(
+                    heights.max() ?? 0, 0.5,
+                    "band \(band) is invisible at \(count) bars"
+                )
+            }
+        }
+    }
+
+    func testBarCountIsHonoured() {
+        for count in 1...8 {
+            XCTAssertEqual(levels([Float](repeating: 0.5, count: 8)).barHeights(count: count).count, count)
+        }
+    }
+
+    /// A flat spectrum should draw a flat row at any resolution.
+    func testAFlatSpectrumDrawsALevelRowAtFiveBars() {
+        let heights = levels([Float](repeating: 0.6, count: 8)).barHeights(count: 5)
+        let spread = (heights.max() ?? 0) - (heights.min() ?? 0)
+        XCTAssertLessThan(spread, 0.01)
+    }
+
+    func testZeroBarsIsHandled() {
+        XCTAssertTrue(levels([Float](repeating: 0.5, count: 8)).barHeights(count: 0).isEmpty)
+    }
+}

@@ -188,12 +188,20 @@ struct RootView: View {
             .frame(width: size.width, height: size.height)
     }
 
-    /// Two washes, layered rather than blended, and deliberately restrained: the
-    /// surface should read as black picking up colour from the cover, not as a
-    /// coloured panel. The accent is clamped before it arrives, which keeps white
-    /// text above 4.5:1 at every tint level.
+    /// Artwork colour, layered rather than blended.
+    ///
+    /// A vertical wash in the cover's strongest colour, then one soft pool per
+    /// accent in the corner that accent came from — so a sleeve that is amber at
+    /// the top and green at the bottom paints a surface that is amber at the top
+    /// and green at the bottom. Averaging the cover to a single colour is what
+    /// made every album produce the same generic tint.
+    ///
+    /// The accents are clamped before they get here, which is what keeps white
+    /// text above 4.5:1 however lurid the cover.
     private func tintLayers(tint: Color, size: CGSize) -> some View {
         let strength = model.preferences.tintStrength * (scheme == .light ? 0.55 : 1)
+        let reach = max(size.width, size.height)
+
         return ZStack {
             LinearGradient(
                 stops: [
@@ -205,17 +213,22 @@ struct RootView: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-            RadialGradient(
-                stops: [
-                    .init(color: tint.opacity(0.16 * strength), location: 0),
-                    .init(color: tint.opacity(0), location: 1),
-                ],
-                center: .topLeading,
-                startRadius: 0,
-                endRadius: size.width * 0.64
-            )
+
+            ForEach(Array(model.artworkAccents.enumerated()), id: \.offset) { _, accent in
+                RadialGradient(
+                    stops: [
+                        .init(color: accent.color.opacity(0.26 * strength * accent.weight), location: 0),
+                        .init(color: accent.color.opacity(0.10 * strength * accent.weight), location: 0.45),
+                        .init(color: accent.color.opacity(0), location: 1),
+                    ],
+                    center: accent.position,
+                    startRadius: 0,
+                    endRadius: reach * 0.75
+                )
+            }
         }
         .allowsHitTesting(false)
+        .animation(Theme.Motion.telemetry, value: model.artworkAccents)
     }
 
     private func animation(for state: SurfaceState) -> Animation {

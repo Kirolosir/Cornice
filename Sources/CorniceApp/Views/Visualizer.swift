@@ -71,6 +71,9 @@ struct EqualizerIndicator: View {
     /// Whether the track is actually playing. A paused track stands still.
     let isLive: Bool
     let tint: Color
+    /// How many bars to draw. The panel has room for more resolution than the
+    /// resting strip beside the menu bar clock does.
+    var barCount: Int = 3
 
     @State private var bobbing = false
 
@@ -87,8 +90,8 @@ struct EqualizerIndicator: View {
 
     /// Deliberately co-prime-ish, so the three bars never fall into step and
     /// start reading as one block moving up and down.
-    private static let durations: [Double] = [0.80, 0.93, 1.06]
-    private static let phases: [Double] = [0, 0.17, 0.34]
+    private static let durations: [Double] = [0.80, 0.93, 1.06, 0.87, 1.00]
+    private static let phases: [Double] = [0, 0.17, 0.34, 0.09, 0.26]
 
     private let barWidth: CGFloat = 2
     private let barHeight: CGFloat = 13
@@ -96,7 +99,7 @@ struct EqualizerIndicator: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 2) {
-            ForEach(0..<3, id: \.self) { index in
+            ForEach(0..<barCount, id: \.self) { index in
                 Capsule(style: .continuous)
                     .fill(tint)
                     .frame(width: barWidth, height: barHeight)
@@ -104,7 +107,11 @@ struct EqualizerIndicator: View {
                     .animation(animation(at: index), value: animationKey(at: index))
             }
         }
-        .frame(width: barWidth * 3 + 4, height: barHeight, alignment: .bottom)
+        .frame(
+            width: barWidth * CGFloat(barCount) + 2 * CGFloat(barCount - 1),
+            height: barHeight,
+            alignment: .bottom
+        )
         .onAppear { bobbing = true }
         .accessibilityHidden(true)
     }
@@ -114,7 +121,7 @@ struct EqualizerIndicator: View {
     private func scale(at index: Int) -> CGFloat {
         guard isLive else { return resting }
         guard audioDriven else { return bobbing ? 1 : resting }
-        let heights = levels.barHeights(count: 3, resting: Float(resting))
+        let heights = levels.barHeights(count: barCount, resting: Float(resting))
         guard index < heights.count else { return resting }
         return CGFloat(heights[index])
     }
@@ -127,9 +134,10 @@ struct EqualizerIndicator: View {
     private func animation(at index: Int) -> Animation? {
         guard isLive else { return .easeOut(duration: 0.18) }
         if audioDriven { return .easeOut(duration: 0.09) }
-        return .easeInOut(duration: Self.durations[index])
+        let slot = index % Self.durations.count
+        return .easeInOut(duration: Self.durations[slot])
             .repeatForever(autoreverses: true)
-            .delay(Self.phases[index])
+            .delay(Self.phases[slot])
     }
 
 }

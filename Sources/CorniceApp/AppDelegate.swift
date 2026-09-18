@@ -98,9 +98,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var peakLevel: Float = 0
         var peakBands = [Float](repeating: 0, count: 8)
         var samples = 0
+        var barTrace: [[Float]] = []
         for _ in 0..<160 {
             try? await Task.sleep(for: .milliseconds(50))
             let levels = engine.latestLevels()
+            if !levels.isSilent { barTrace.append(levels.barHeights(count: 3)) }
             peakLevel = max(peakLevel, levels.level)
             for (index, value) in levels.bands.enumerated() where index < peakBands.count {
                 peakBands[index] = max(peakBands[index], value)
@@ -113,6 +115,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.audio.notice(
             "probe: peakLevel=\(peakLevel, format: .fixed(precision: 4), privacy: .public) nonSilent=\(samples, privacy: .public)/160 bands=[\(perBand, privacy: .public)]"
         )
+
+        // How much each drawn bar actually moves, which is what "lively" means.
+        let summary = (0..<3).map { bar -> String in
+            let series = barTrace.map { $0[bar] }
+            let lowest = series.min() ?? 0
+            let highest = series.max() ?? 0
+            let mean = series.reduce(0, +) / Float(max(1, series.count))
+            let variance = series.reduce(0) { $0 + pow($1 - mean, 2) } / Float(max(1, series.count))
+            return String(format: "bar%d %.2f-%.2f mean %.2f sd %.3f", bar, lowest, highest, mean, variance.squareRoot())
+        }
+        Log.audio.notice("probe: \(summary.joined(separator: "  "), privacy: .public)")
         exit(0)
     }
 
@@ -126,13 +139,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "transport probe: \(before.source.rawValue, privacy: .public) shuffle=\(before.isShuffling, privacy: .public) repeat=\(before.repeatMode.rawValue, privacy: .public)"
         )
 
-        for command in [MediaCommand.cycleRepeat, .cycleRepeat, .toggleShuffle] {
+        for command in [MediaCommand.cycleRepeat, .toggleShuffle] {
             do {
+                let started = Date()
                 try await coordinator.perform(command, on: before.source)
-                try? await Task.sleep(for: .milliseconds(400))
-                let after = await coordinator.snapshot()
+                // Poll hard, to find how long the player takes to report the
+                // change it has just been told to make.
+                var trace: [String] = []
+                for _ in 0..<12 {
+                    let after = await coordinator.snapshot()
+                    let elapsed = Int(Date().timeIntervalSince(started) * 1000)
+                    trace.append("\(elapsed)ms:\(after?.repeatMode.rawValue ?? "?")/\(after?.isShuffling == true ? "shuf" : "-")")
+                    try? await Task.sleep(for: .milliseconds(60))
+                }
                 Log.media.notice(
-                    "transport probe: after \(String(describing: command), privacy: .public) shuffle=\(after?.isShuffling ?? false, privacy: .public) repeat=\(after?.repeatMode.rawValue ?? "?", privacy: .public)"
+                    "transport probe \(String(describing: command), privacy: .public): \(trace.joined(separator: " "), privacy: .public)"
                 )
             } catch {
                 Log.media.error(

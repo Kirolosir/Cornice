@@ -72,11 +72,12 @@ public struct AudioLevels: Sendable, Equatable {
     /// way: a narrow tone should move its bar fully instead of being averaged
     /// into nothing by the quiet bins beside it.
     private func peak(of index: Int, of count: Int) -> Float {
-        let perBar = max(1, bands.count / count)
-        let start = min(index * perBar, bands.count - 1)
-        // The last bar takes whatever is left, so no band goes unrepresented.
-        let end = index == count - 1 ? bands.count : min(start + perBar, bands.count)
-        return bands[start..<end].max() ?? 0
+        // Spread evenly rather than fixed-width-with-a-remainder: at five bars
+        // across eight bands the old split gave four bars one band each and the
+        // last one four, so the right-hand bar answered to half the spectrum.
+        let start = index * bands.count / count
+        let end = max(start + 1, (index + 1) * bands.count / count)
+        return bands[start..<min(end, bands.count)].max() ?? 0
     }
 }
 
