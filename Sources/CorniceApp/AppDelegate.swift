@@ -165,36 +165,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private static func probeTransport() async {
-        let coordinator = MediaCoordinator.live()
-        guard let before = await coordinator.snapshot() else {
+        // Driven through AppModel, because that is what the buttons call: the
+        // optimistic flip, the hold that stops a stale poll undoing it, and the
+        // refresh afterwards. Probing the coordinator underneath it answers a
+        // different question from "does the button work".
+        let model = await AppModel(services: ServiceContainer.live())
+        await model.start()
+        try? await Task.sleep(for: .seconds(2))
+
+        guard let before = await model.media else {
             Log.media.notice("transport probe: no player with a track")
             exit(0)
         }
         Log.media.notice(
-            "transport probe: \(before.source.rawValue, privacy: .public) shuffle=\(before.isShuffling, privacy: .public) repeat=\(before.repeatMode.rawValue, privacy: .public)"
+            "transport probe: \(before.source.rawValue, privacy: .public) repeat=\(before.repeatMode.rawValue, privacy: .public) shuffle=\(before.isShuffling, privacy: .public) state=\(before.state.rawValue, privacy: .public)"
         )
 
-        for command in [MediaCommand.cycleRepeat, .toggleShuffle] {
-            do {
-                let started = Date()
-                try await coordinator.perform(command, on: before.source)
-                // Poll hard, to find how long the player takes to report the
-                // change it has just been told to make.
-                var trace: [String] = []
-                for _ in 0..<12 {
-                    let after = await coordinator.snapshot()
-                    let elapsed = Int(Date().timeIntervalSince(started) * 1000)
-                    trace.append("\(elapsed)ms:\(after?.repeatMode.rawValue ?? "?")/\(after?.isShuffling == true ? "shuf" : "-")")
-                    try? await Task.sleep(for: .milliseconds(60))
-                }
-                Log.media.notice(
-                    "transport probe \(String(describing: command), privacy: .public): \(trace.joined(separator: " "), privacy: .public)"
-                )
-            } catch {
-                Log.media.error(
-                    "transport probe: \(String(describing: command), privacy: .public) FAILED \(String(describing: error), privacy: .public)"
-                )
+        for round in 1...3 {
+            await model.cycleRepeat()
+            var trace: [String] = []
+            for _ in 0..<10 {
+                try? await Task.sleep(for: .milliseconds(200))
+                let mode = await model.media?.repeatMode.rawValue ?? "?"
+                trace.append(mode)
             }
+            Log.media.notice(
+                "transport probe: cycleRepeat \(round, privacy: .public) → \(trace.joined(separator: " "), privacy: .public)"
+            )
         }
         exit(0)
     }

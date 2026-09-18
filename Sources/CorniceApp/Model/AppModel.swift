@@ -43,16 +43,22 @@ final class AppModel {
     private struct PendingToggle {
         var isShuffling: Bool?
         var repeatMode: RepeatMode?
+        var state: PlaybackState?
         var until: Date
     }
 
     private var pendingToggle: PendingToggle?
 
     /// Records what the user just asked for, so an in-flight poll cannot undo it.
-    func holdToggle(isShuffling: Bool? = nil, repeatMode: RepeatMode? = nil) {
+    func holdToggle(
+        isShuffling: Bool? = nil,
+        repeatMode: RepeatMode? = nil,
+        state: PlaybackState? = nil
+    ) {
         pendingToggle = PendingToggle(
             isShuffling: isShuffling,
             repeatMode: repeatMode,
+            state: state,
             // Generous next to the measured 320 ms: the cost of being wrong is
             // a stale glyph for a moment, and the cost of being too tight is the
             // bug this exists to fix.
@@ -82,6 +88,12 @@ final class AppModel {
         if let wanted = pending.repeatMode {
             if snapshot.repeatMode != wanted {
                 snapshot = snapshot.with(repeatMode: wanted)
+                settled = false
+            }
+        }
+        if let wanted = pending.state {
+            if snapshot.state != wanted {
+                snapshot = snapshot.with(state: wanted)
                 settled = false
             }
         }
@@ -122,6 +134,9 @@ final class AppModel {
     /// pushed from the audio thread — see `AudioVisualizerEngine`.
     private(set) var levels: AudioLevels
     private(set) var visualizerStatus: AudioVisualizerEngine.Status = .stopped
+    /// When the analyser last started, so "it has never heard anything" can be
+    /// told from "it has not been running long enough to say".
+    private var visualizerRunningSince: Date?
     /// When the analyser last reported something other than silence.
     private var lastAudioAt: Date?
     /// How far the output fader is up, 0...1. Re-read a few times a second
@@ -488,6 +503,31 @@ final class AppModel {
         return Date().timeIntervalSince(lastAudioAt) < 1.0
     }
 
+    /// Whether the bars should follow the analyser rather than the standard bob.
+    ///
+    /// Deliberately slow to change, and separate from `hasLiveAudio` for that
+    /// reason. Driven by whether audio arrived in the *last second* — which is
+    /// what the indicator used to use — the bars swapped between two quite
+    /// different motions at every gap between tracks and in any quiet passage.
+    /// That swap is the glitch: one moment they are following the music, the
+    /// next they are doing a synthetic wave, and back again a second later.
+    ///
+    /// Whether there is sound right now is already carried by the band values,
+    /// which fall to zero on their own. This answers only whether the analyser
+    /// can hear *at all*, which changes about once a session.
+    var barsFollowAudio: Bool {
+        guard preferences.audioVisualizerEnabled, visualizerStatus == .running else { return false }
+        guard let lastAudioAt else {
+            // Nothing heard yet. macOS feeds a tap it has refused silence rather
+            // than an error, so after long enough this is the shape of a denied
+            // permission — fall back to the bob rather than leaving a dead row.
+            guard let since = visualizerRunningSince else { return true }
+            return Date().timeIntervalSince(since) < 15
+        }
+        // Long enough to cover a gap between tracks, a quiet intro, or a pause.
+        return Date().timeIntervalSince(lastAudioAt) < 8
+    }
+
     /// The tap is running, the music is playing, and it has heard nothing.
     ///
     /// The one combination that means the permission is missing rather than the
@@ -521,6 +561,7 @@ final class AppModel {
 
     func applyVisualizerStatus(_ status: AudioVisualizerEngine.Status) {
         visualizerStatus = status
+        visualizerRunningSince = status == .running ? Date() : nil
         if case .failed(let reason) = status {
             Log.audio.notice("visualiser disabled: \(reason.message, privacy: .public)")
         }

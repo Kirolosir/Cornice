@@ -79,14 +79,12 @@ struct EqualizerIndicator: View {
 
     private var levels: AudioLevels { model.levels }
 
-    /// Whether there is real audio to draw.
+    /// Whether the bars follow the analyser or fall back to the standard bob.
     ///
-    /// Not simply "is the tap running": macOS hands a tap silence rather than an
-    /// error when audio capture has not been granted, so a running tap that has
-    /// heard nothing for a second is indistinguishable from a denied one. Either
-    /// way the honest fallback is the standard playing bob, which reports that
-    /// something is playing without claiming to know what it sounds like.
-    private var audioDriven: Bool { model.hasLiveAudio }
+    /// A *stable* answer, not a per-second one: switching between the two
+    /// motions is jarring, and the band values already go to zero on their own
+    /// when there is nothing to show.
+    private var audioDriven: Bool { model.barsFollowAudio }
 
     /// Deliberately co-prime-ish, so the three bars never fall into step and
     /// start reading as one block moving up and down.

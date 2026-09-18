@@ -268,13 +268,20 @@ struct TransportGlyph: View {
     /// skips — are simply primary.
     var body: some View {
         ZStack(alignment: .bottom) {
+            // The glyph goes to full-strength ink when engaged, and the album's
+            // colour lives in the dot.
+            //
+            // Colouring the *glyph* with the accent was the bug: the accent's
+            // brightness is clamped to 0.46-0.76 while the disengaged state is
+            // white at 52%, so a darker cover made "on" render dimmer than
+            // "off". The button worked and looked as though it had not.
             Image(systemName: name)
-                .font(.system(size: size, weight: .medium))
-                .foregroundStyle(isOn ? (onColor ?? ink.primary) : ink.tertiary)
-            if isOn, onColor != nil {
+                .font(.system(size: size, weight: isOn ? .semibold : .medium))
+                .foregroundStyle(isOn ? ink.primary : ink.tertiary)
+            if isOn, let onColor {
                 Circle()
-                    .fill(onColor ?? ink.primary)
-                    .frame(width: 3.5, height: 3.5)
+                    .fill(onColor)
+                    .frame(width: 4, height: 4)
                     .transition(.scale(scale: 0).combined(with: .opacity))
             }
         }

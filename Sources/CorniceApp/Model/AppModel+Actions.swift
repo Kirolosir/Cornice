@@ -43,7 +43,19 @@ extension AppModel {
 
     // MARK: - Playback
 
-    func playPause() { send(.playPause) }
+    /// Flipped locally before the command is sent, like the other transport
+    /// toggles. Without it the glyph did not change until the next poll came
+    /// back — up to a second after the click — so the symbol-replace animation
+    /// played long after the press it belonged to, which reads as no animation
+    /// at all.
+    func playPause() {
+        if let snapshot = media {
+            let wanted: PlaybackState = snapshot.state.isPlaying ? .paused : .playing
+            applyMedia(snapshot.with(state: wanted))
+            holdToggle(state: wanted)
+        }
+        send(.playPause)
+    }
     func nextTrack() { send(.next) }
     func previousTrack() { send(.previous) }
 
