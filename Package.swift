@@ -21,7 +21,6 @@ let package = Package(
         .testTarget(
             name: "CorniceKitTests",
             dependencies: ["CorniceKit"],
-            resources: [.copy("Fixtures")],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
     ]

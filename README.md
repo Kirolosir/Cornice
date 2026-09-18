@@ -55,6 +55,8 @@ Spotify Premium, because that is what the Web API's playback controls require.
 1. At [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard),
    create an app. Any name will do.
 2. Add `cornice://spotify-callback` as a Redirect URI, and tick **Web API**.
+   The app stays in Spotify's development mode, which is fine — its owner is
+   always allowed to authorize it, and the owner is you.
 3. Copy the app's Client ID into Cornice's **Settings → Spotify**, and press
    **Connect Spotify**.
 
@@ -287,6 +289,10 @@ make test
 - Spotify's repeat-one is imitated unless you connect the Web API in Settings,
   which needs a free app registration and a Premium account. Without it the
   fallback still replays the track; Spotify's own button just won't show the `1`.
+- Ad-hoc signing also means macOS re-asks before handing the stored Spotify
+  token back after a rebuild, because the new binary is a different code
+  identity. Answer **Always Allow**. It no longer blocks startup — the app polls
+  normally while the prompt waits.
 - The hot key is fixed at ⌥⌘D.
 - Do Not Disturb, AirDrop and Handoff HUDs are drawn but not wired: macOS does
   not publish that state without Full Disk Access or an API that does not exist.
