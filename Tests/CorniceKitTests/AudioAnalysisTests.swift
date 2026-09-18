@@ -386,3 +386,86 @@ final class RepeatModeTests: XCTestCase {
         }
     }
 }
+
+/// Balance across the spectrum, checked against pink noise.
+///
+/// Pink noise is the standard stand-in for music's long-term average spectrum:
+/// equal energy per octave. A visualiser that is correctly compensated draws it
+/// as a roughly level row. Drawn as a staircase — pinned on the left, motionless
+/// on the right — the compensation is wrong, which is exactly what it was.
+final class SpectrumBalanceTests: XCTestCase {
+
+    private let rate = 48_000.0
+    private let size = 1024
+
+    /// Voss-McCartney pink noise, seeded so the test is deterministic.
+    private func pinkNoise(count: Int, amplitude: Float) -> [Float] {
+        var state: UInt64 = 12345
+        func random() -> Float {
+            state ^= state << 13; state ^= state >> 7; state ^= state << 17
+            return Float(state % 20001) / 10000 - 1
+        }
+        var rows = [Float](repeating: 0, count: 16)
+        var out = [Float](repeating: 0, count: count)
+        for index in 0..<count {
+            var counter = index + 1
+            var row = 0
+            while counter & 1 == 0 && row < rows.count - 1 { counter >>= 1; row += 1 }
+            rows[row] = random()
+            out[index] = rows.reduce(0, +) / Float(rows.count)
+        }
+        let peak = out.map { abs($0) }.max() ?? 1
+        return out.map { $0 / max(peak, 0.0001) * amplitude }
+    }
+
+    private func profile(amplitude: Float) -> (bands: [Float], level: Float) {
+        let noise = pinkNoise(count: size * 8, amplitude: amplitude)
+        let analyzer = SpectrumAnalyzer(bandCount: 8, fftSize: size, sampleRate: rate)
+        var state = SpectrumAnalyzer.State(bandCount: 8)
+        var peaks = [Float](repeating: 0, count: 8)
+        var level: Float = 0
+        for start in stride(from: 0, to: noise.count - size, by: size / 2) {
+            let levels = analyzer.analyze(Array(noise[start..<(start + size)]), state: &state)
+            for (index, value) in levels.bands.enumerated() { peaks[index] = max(peaks[index], value) }
+            level = max(level, levels.level)
+        }
+        return (peaks, level)
+    }
+
+    func testPinkNoiseDrawsALevelRow() {
+        let bands = profile(amplitude: 0.35).bands
+        let highest = bands.max() ?? 0
+        let lowest = bands.min() ?? 0
+        XCTAssertGreaterThan(lowest, 0.4, "no band may sit at the floor")
+        XCTAssertLessThan(highest, 0.95, "no band may pin")
+        XCTAssertLessThan(highest - lowest, 0.25, "the row should read level, not as a staircase")
+    }
+
+    /// The three bars the interface actually draws, rather than the eight bands
+    /// behind them: none may be dead and none may be permanently full.
+    func testAllThreeBarsAreAliveAtEveryLevel() {
+        for amplitude in [Float(0.35), 0.15, 0.05] {
+            let measured = profile(amplitude: amplitude)
+            let levels = AudioLevels(
+                bands: measured.bands, level: measured.level, isBeat: false, beatIntensity: 0
+            )
+            let bars = levels.barHeights(count: 3)
+            let spread = (bars.max() ?? 0) - (bars.min() ?? 0)
+            XCTAssertLessThan(spread, 0.2, "bars unbalanced at amplitude \(amplitude): \(bars)")
+            XCTAssertGreaterThan(bars.min() ?? 0, 0.33, "a dead bar at amplitude \(amplitude)")
+        }
+    }
+
+    /// Balance must not come at the cost of the loudness response.
+    func testQuieterMaterialStillDrawsShorterBars() {
+        func tallest(_ amplitude: Float) -> Float {
+            let measured = profile(amplitude: amplitude)
+            let levels = AudioLevels(
+                bands: measured.bands, level: measured.level, isBeat: false, beatIntensity: 0
+            )
+            return levels.barHeights(count: 3).max() ?? 0
+        }
+        XCTAssertGreaterThan(tallest(0.35), tallest(0.15) + 0.1)
+        XCTAssertGreaterThan(tallest(0.15), tallest(0.05) + 0.1)
+    }
+}

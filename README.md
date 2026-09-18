@@ -153,11 +153,14 @@ decides the *shape* of the three bars and the overall level decides how much roo
 that shape has to move in, so a quiet passage barely stirs and a loud one swings
 the full height.
 
-Band magnitudes are scaled against material the app actually meets, and tilted to
-compensate for music's natural downward slope — measured here, real audio came
-back as `0.996 0.996 0.782 0.563 0.367 0.341 0.265 0.177`, which is a pinned bar
-on the left and a motionless one on the right. Both took a measurement to get
-right. A pure tone puts all of its energy in one FFT bin,
+Band magnitudes are compensated for music's natural downward slope. Recorded
+music approximates pink noise — equal energy per octave — so the amplitude in any
+one FFT bin falls as `1/√f`, and reading the peak bin per band reports the bottom
+of the spectrum as loud and the top as nearly silent: faithfully, and uselessly.
+Measured against synthetic pink noise the lowest band came back 15.0× the
+highest, where `√f` predicts 15.5, so the compensation is `√(centre frequency)` —
+a property of the signal rather than a curve fitted to one song. Pink noise now
+draws as a level row, which is the test that guards it. A pure tone puts all of its energy in one FFT bin,
 while music spreads itself across hundreds — so a chain calibrated on a sine wave
 reads a song as almost nothing. Measured on this machine: a full-scale 1 kHz tone
 put its band at 0.89 and real audio put it at 0.06, moving a 13 pt bar by a fifth
@@ -207,7 +210,7 @@ Swift 6 with strict concurrency · SwiftUI + AppKit · Core Audio · vDSP · IOK
 SystemConfiguration · Network.framework · Carbon hot keys · no third-party
 dependencies.
 
-**145 tests** across the pure logic: player reply parsing, playhead
+**148 tests** across the pure logic: player reply parsing, playhead
 extrapolation, FFT and beat detection, notch geometry for every display
 configuration, the HUD size table, the indicator's loudness mapping, band
 calibration and spectral tilt, per-player repeat support, the telemetry probe against the running machine, every AppleScript

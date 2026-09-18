@@ -39,6 +39,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // Sends the transport commands and reads the player back, so "the
+        // button does nothing" can be told apart from "the player refused" and
+        // from "the player has no such setting".
+        if arguments.contains("--probe-transport") {
+            Task { await Self.probeTransport() }
+            return
+        }
+
         Log.app.notice("Cornice starting")
 
         let services = ServiceContainer.live()
@@ -105,6 +113,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.audio.notice(
             "probe: peakLevel=\(peakLevel, format: .fixed(precision: 4), privacy: .public) nonSilent=\(samples, privacy: .public)/160 bands=[\(perBand, privacy: .public)]"
         )
+        exit(0)
+    }
+
+    private static func probeTransport() async {
+        let coordinator = MediaCoordinator.live()
+        guard let before = await coordinator.snapshot() else {
+            Log.media.notice("transport probe: no player with a track")
+            exit(0)
+        }
+        Log.media.notice(
+            "transport probe: \(before.source.rawValue, privacy: .public) shuffle=\(before.isShuffling, privacy: .public) repeat=\(before.repeatMode.rawValue, privacy: .public)"
+        )
+
+        for command in [MediaCommand.cycleRepeat, .cycleRepeat, .toggleShuffle] {
+            do {
+                try await coordinator.perform(command, on: before.source)
+                try? await Task.sleep(for: .milliseconds(400))
+                let after = await coordinator.snapshot()
+                Log.media.notice(
+                    "transport probe: after \(String(describing: command), privacy: .public) shuffle=\(after?.isShuffling ?? false, privacy: .public) repeat=\(after?.repeatMode.rawValue ?? "?", privacy: .public)"
+                )
+            } catch {
+                Log.media.error(
+                    "transport probe: \(String(describing: command), privacy: .public) FAILED \(String(describing: error), privacy: .public)"
+                )
+            }
+        }
         exit(0)
     }
 

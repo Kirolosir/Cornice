@@ -52,7 +52,12 @@ public struct AudioLevels: Sendable, Equatable {
         let headroom = pow(min(1, max(0, level)), 0.4)
 
         return (0..<count).map { index in
-            let energy = min(1, max(0, peak(of: index, of: count)))
+            // Expanded a little before it drives the bar. Band values sit in the
+            // middle of the range by design — pinning them would throw away the
+            // shape of the music — but mapped straight onto height that leaves
+            // the row looking timid, so the curve is bent upwards here where it
+            // costs nothing.
+            let energy = pow(min(1, max(0, peak(of: index, of: count))), 0.75)
             // A little extra punch on the lowest bar when an onset lands, so the
             // row reads as locked to the beat rather than merely busy.
             let kick = index == 0 ? beatIntensity * 0.14 : 0
@@ -226,8 +231,8 @@ public struct SpectrumAnalyzer: Sendable {
             return Array(repeating: 0, count: bandCount)
         }
 
-        let minimumFrequency: Double = 40
-        let maximumFrequency = min(16_000, sampleRate / 2)
+        let minimumFrequency = minimumBandFrequency
+        let maximumFrequency = min(minimumBandFrequency * bandFrequencySpan, sampleRate / 2)
         let binWidth = sampleRate / Double(fftSize)
 
         var bands = [Float](repeating: 0, count: bandCount)
@@ -251,28 +256,35 @@ public struct SpectrumAnalyzer: Sendable {
         return bands
     }
 
-    /// Calibration for band magnitudes, chosen against measured material rather
-    /// than derived: it puts broadband audio at a normal listening level near
-    /// the middle of the range and saturates a full-scale pure tone.
-    static let bandGain: Float = 26
+    /// Overall band gain, set so that loud material sits high in the range
+    /// without pinning. Measured against pink noise at a normal listening level,
+    /// this puts every band around three-quarters height with room to move.
+    static let bandGain: Float = 13
+
+    /// The bottom of the analysed range. Below this is rumble, not music.
+    static let minimumBandFrequency: Double = 40
+    /// How many times that the top of the range is: 40 Hz to 16 kHz.
+    static let bandFrequencySpan: Double = 400
 
     /// Per-band compensation for music's natural downward spectral slope.
     ///
-    /// Recorded music carries most of its energy at the bottom. Measured on this
-    /// machine, real audio produced bands of
+    /// Recorded music approximates pink noise: equal energy per octave, which
+    /// means the amplitude in any one FFT bin falls as `1/√f`. Reading the peak
+    /// bin of each band therefore reports the bottom of the spectrum as loud and
+    /// the top as nearly silent — faithfully, and uselessly. Measured against
+    /// synthetic pink noise, the lowest band came back 15.0× the highest; `√f`
+    /// predicts 15.5.
     ///
-    ///     0.996  0.996  0.782  0.563  0.367  0.341  0.265  0.177
-    ///
-    /// which is a pinned bar on the left and an almost motionless one on the
-    /// right — the spectrum was being reported faithfully and reading as broken.
-    /// This tilts roughly +16 dB from the bottom of the range to the top, and
-    /// trims the very bottom so it is not permanently saturated, which leaves
-    /// all three bars with room to move while still showing the shape of the
-    /// music rather than a flat row.
+    /// So the compensation is `√(centre frequency)`, normalised at the middle
+    /// band. That is a property of the signal rather than a curve fitted to one
+    /// song, and it generalises to any band count.
     static func spectralTilt(_ index: Int, of count: Int) -> Float {
         guard count > 1 else { return 1 }
-        let position = Float(index) / Float(count - 1)
-        return 0.75 * pow(6.3, position)
+        func centre(_ i: Int) -> Float {
+            let position = (Float(i) + 0.5) / Float(count)
+            return Float(minimumBandFrequency) * pow(Float(bandFrequencySpan), position)
+        }
+        return (centre(index) / centre((count - 1) / 2)).squareRoot()
     }
 
     /// Maps a magnitude to 0...1 with a perceptual curve.
