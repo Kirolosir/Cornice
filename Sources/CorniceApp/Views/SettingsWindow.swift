@@ -120,7 +120,7 @@ struct GeneralSettings: View {
                                     get: { model.preferences.tintStrength },
                                     set: { value in model.updatePreferences { $0.tintStrength = value } }
                                 ),
-                                in: 0...1.4
+                                in: 0...2.5
                             )
                             Text(verbatim: "\(Int((model.preferences.tintStrength * 100).rounded()))%")
                                 .font(.system(size: 11).monospacedDigit())

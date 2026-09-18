@@ -154,3 +154,45 @@ final class PreferencesTests: XCTestCase {
         XCTAssertFalse(loaded.tintFromArtwork, "good fields survive")
     }
 }
+
+/// Schema migrations.
+final class PreferencesMigrationTests: XCTestCase {
+
+    /// Someone sitting on the old tint ceiling had asked for as much colour as
+    /// the app would give and been refused, so raising the ceiling should carry
+    /// them up with it.
+    func testATintSettingOnTheOldCeilingRisesWithIt() {
+        var stored = Preferences()
+        stored.schemaVersion = 2
+        stored.tintStrength = Preferences.previousMaximumTintStrength
+
+        let migrated = PreferencesStore.migrate(stored)
+
+        XCTAssertEqual(migrated.tintStrength, Preferences().tintStrength)
+        XCTAssertEqual(migrated.schemaVersion, Preferences.currentSchemaVersion)
+    }
+
+    /// A value chosen below the ceiling was chosen deliberately.
+    func testADeliberateTintSettingIsLeftAlone() {
+        var stored = Preferences()
+        stored.schemaVersion = 2
+        stored.tintStrength = 0.5
+
+        XCTAssertEqual(PreferencesStore.migrate(stored).tintStrength, 0.5)
+    }
+
+    func testMigrationIsIdempotent() {
+        var stored = Preferences()
+        stored.schemaVersion = 2
+        stored.tintStrength = Preferences.previousMaximumTintStrength
+
+        let once = PreferencesStore.migrate(stored)
+        XCTAssertEqual(PreferencesStore.migrate(once), once)
+    }
+
+    func testTintIsClampedToTheCeiling() {
+        var wild = Preferences()
+        wild.tintStrength = 99
+        XCTAssertEqual(wild.sanitized().tintStrength, Preferences.maximumTintStrength)
+    }
+}

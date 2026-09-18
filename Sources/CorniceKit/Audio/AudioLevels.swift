@@ -49,7 +49,7 @@ public struct AudioLevels: Sendable, Equatable {
 
         // Slightly concave, so ordinary listening levels already move properly
         // rather than only the loudest choruses.
-        let headroom = pow(min(1, max(0, level)), 0.5)
+        let headroom = pow(min(1, max(0, level)), 0.4)
 
         return (0..<count).map { index in
             let energy = min(1, max(0, peak(of: index, of: count)))
@@ -254,7 +254,7 @@ public struct SpectrumAnalyzer: Sendable {
     /// Calibration for band magnitudes, chosen against measured material rather
     /// than derived: it puts broadband audio at a normal listening level near
     /// the middle of the range and saturates a full-scale pure tone.
-    static let bandGain: Float = 16
+    static let bandGain: Float = 26
 
     /// Maps a magnitude to 0...1 with a perceptual curve.
     static func compress(_ value: Float) -> Float {

@@ -64,7 +64,14 @@ public enum IdleDisplay: String, Codable, Sendable, CaseIterable, Identifiable {
 
 /// Everything the user can configure.
 public struct Preferences: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 2
+    public static let currentSchemaVersion = 3
+
+    /// The point past which the accent stops being a tint and starts competing
+    /// with the album art it came from.
+    public static let maximumTintStrength = 2.5
+    /// What the ceiling used to be, so a preference that was sitting on it can
+    /// be recognised when the ceiling moves.
+    static let previousMaximumTintStrength = 1.4
     public var schemaVersion: Int
 
     // Presentation
@@ -88,12 +95,12 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var audioVisualizerEnabled: Bool
     /// Tint the surface with the album artwork's dominant colour.
     public var tintFromArtwork: Bool
-    /// How strongly, as a multiplier on the design's own tint alphas.
+    /// How strongly the album's colour spills onto the surface, as a multiplier
+    /// on the base tint.
     ///
-    /// The design specifies a deliberately restrained 22/8/0% wash, so that the
-    /// surface reads as black picking up colour from the cover rather than as a
-    /// coloured panel. This exists because "a little more noticeable" is a
-    /// legitimate taste, and it is the one place the spec invites a dial.
+    /// The clamp is what keeps white text readable: the accent is already capped
+    /// at 0.75 saturation and 0.72 brightness before it gets here, so even at the
+    /// top of this range the surface stays dark enough behind its own text.
     public var tintStrength: Double
 
     // System HUDs
@@ -122,7 +129,7 @@ public struct Preferences: Codable, Equatable, Sendable {
         hideWhenNothingPlaying: Bool = false,
         audioVisualizerEnabled: Bool = false,
         tintFromArtwork: Bool = true,
-        tintStrength: Double = 1.0,
+        tintStrength: Double = 1.8,
         downloadHUDEnabled: Bool = false,
         timerPresetsMinutes: [Int] = [5, 10, 15, 25],
         notifyOnTimerComplete: Bool = true,
@@ -189,7 +196,7 @@ public struct Preferences: Codable, Equatable, Sendable {
         copy.telemetryRefreshInterval = telemetryRefreshInterval.clamped(to: 1...60)
         // The upper bound is the point past which the accent stops being a tint
         // and starts competing with the album art it came from.
-        copy.tintStrength = tintStrength.clamped(to: 0...1.4)
+        copy.tintStrength = tintStrength.clamped(to: 0...Preferences.maximumTintStrength)
         copy.timerPresetsMinutes = timerPresetsMinutes
             .filter { (1...600).contains($0) }
             .reduplicated(by: \.self)

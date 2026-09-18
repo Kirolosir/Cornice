@@ -104,9 +104,18 @@ public actor PreferencesStore: PreferencesPersisting {
         // Version 2 dropped the repository, servers, GitHub, container and
         // command modules when the app became media-first. Their keys simply
         // stop being decoded, and `enabledModules` values that no longer exist
-        // are discarded by the tolerant decoder — so nothing needs doing here
-        // beyond stamping the version. Future steps go here as
-        // `if result.schemaVersion < N { ... }` in ascending order.
+        // are discarded by the tolerant decoder, so nothing was needed there.
+
+        // Version 3 raised the tint ceiling. Someone whose setting was sitting
+        // *on* the old maximum had asked for as much colour as the app would
+        // give them and been refused, so they are moved up with it. Anyone who
+        // chose a value below the old ceiling chose it deliberately and is left
+        // exactly where they are.
+        if result.schemaVersion < 3,
+           result.tintStrength >= Preferences.previousMaximumTintStrength {
+            result.tintStrength = Preferences().tintStrength
+        }
+
         result.schemaVersion = Preferences.currentSchemaVersion
         return result
     }

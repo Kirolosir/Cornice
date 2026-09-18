@@ -102,8 +102,6 @@ private struct PreviewTelemetryProbe: TelemetryProbing {
             memoryUsage: 0.58 + 0.04 * sin(phase * 0.3),
             memoryUsedBytes: UInt64(18.6 * 1024 * 1024 * 1024),
             memoryTotalBytes: UInt64(32.0 * 1024 * 1024 * 1024),
-            networkInBytesPerSecond: max(0, 820_000 + 640_000 * sin(phase * 1.3)),
-            networkOutBytesPerSecond: max(0, 150_000 + 120_000 * sin(phase * 0.9)),
             battery: BatteryState(level: 0.72, isCharging: false, isPluggedIn: false, minutesRemaining: 214),
             capturedAt: .now
         )

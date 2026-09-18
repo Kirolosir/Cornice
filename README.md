@@ -21,7 +21,7 @@ Native Swift 6 and SwiftUI. No Electron, no private APIs, no helper daemon.
 | | |
 |---|---|
 | **Now Playing** | Apple Music and Spotify: artwork, title, artist, a draggable scrubber, shuffle, repeat, and output device. |
-| **System** | CPU, memory and network as filled sparklines over the last 48 samples. |
+| **System** | CPU and memory as filled sparklines over the last 48 samples. |
 | **Timers** | Up to four at once, with presets and an alarm. |
 | **AirPods** | A live activity when a wireless device connects, with its charge. |
 | **System HUDs** | Charging, battery low, full battery, no internet, VPN, downloads — each at its own size. |
@@ -94,6 +94,25 @@ Cornice measures it from `NSScreen.auxiliaryTopLeftArea` and
 `auxiliaryTopRightArea` — the gap between them *is* the notch — and re-measures
 on display change, resolution change, rotation and wake.
 
+### Measuring the machine
+
+CPU load is `1 − Δidle/Δtotal` across two `host_statistics` readings, which lands
+within a few tenths of a percent of `top` over the same window.
+
+Memory is the part worth getting right, because the obvious page classes are the
+wrong ones:
+
+    Memory Used = App Memory + Wired + Compressed
+    App Memory  = internal pages − purgeable pages
+
+`active` is *not* App Memory — it includes file-backed pages the kernel is
+caching and excludes inactive pages an app still owns, which read about 250 MB
+light here and drifted with however much file cache happened to be warm. Counting
+inactive file pages instead, which is what `top` calls "used", goes the other way
+and makes every Mac look permanently near capacity, because macOS deliberately
+keeps that cache full and reclaims it on demand. Checked against the kernel's own
+figures, the probe now agrees with Activity Monitor to the megabyte.
+
 ### Reading what's playing
 
 Cornice talks to Apple Music and Spotify through macOS's own scripting
@@ -139,7 +158,7 @@ measurement to get right. A pure tone puts all of its energy in one FFT bin,
 while music spreads itself across hundreds — so a chain calibrated on a sine wave
 reads a song as almost nothing. Measured on this machine: a full-scale 1 kHz tone
 put its band at 0.89 and real audio put it at 0.06, moving a 13 pt bar by a fifth
-of a point. Corrected, the same audio reads 0.54.
+of a point. Corrected and tuned, the same audio reads 0.70.
 
 macOS hands a tap silence rather than an error when the permission is missing, so
 the app checks whether it is hearing anything while music plays and says so
@@ -185,10 +204,11 @@ Swift 6 with strict concurrency · SwiftUI + AppKit · Core Audio · vDSP · IOK
 SystemConfiguration · Network.framework · Carbon hot keys · no third-party
 dependencies.
 
-**131 tests** across the pure logic: player reply parsing, playhead
+**137 tests** across the pure logic: player reply parsing, playhead
 extrapolation, FFT and beat detection, notch geometry for every display
 configuration, the HUD size table, the indicator's loudness mapping and band
-calibration, every AppleScript the app sends (compiled, not just parsed), preference migration, and
+calibration, the telemetry probe against the running machine, every AppleScript
+the app sends (compiled, not just parsed), preference migration, and
 subprocess timeout and cancellation against real processes. No test needs a running music player or
 audio permission.
 

@@ -15,9 +15,6 @@ public struct TelemetrySample: Equatable, Sendable {
     /// Monitor's "Memory Used" uses.
     public let memoryUsedBytes: UInt64
     public let memoryTotalBytes: UInt64
-    /// Bytes per second across all non-loopback interfaces since the last sample.
-    public let networkInBytesPerSecond: Double
-    public let networkOutBytesPerSecond: Double
     public let battery: BatteryState?
     public let capturedAt: Date
 
@@ -26,8 +23,6 @@ public struct TelemetrySample: Equatable, Sendable {
         memoryUsage: Double,
         memoryUsedBytes: UInt64,
         memoryTotalBytes: UInt64,
-        networkInBytesPerSecond: Double,
-        networkOutBytesPerSecond: Double,
         battery: BatteryState?,
         capturedAt: Date
     ) {
@@ -35,17 +30,14 @@ public struct TelemetrySample: Equatable, Sendable {
         self.memoryUsage = memoryUsage
         self.memoryUsedBytes = memoryUsedBytes
         self.memoryTotalBytes = memoryTotalBytes
-        self.networkInBytesPerSecond = networkInBytesPerSecond
-        self.networkOutBytesPerSecond = networkOutBytesPerSecond
         self.battery = battery
         self.capturedAt = capturedAt
     }
 
-    /// The zero sample, shown before the first delta is available. CPU and
-    /// network rates are meaningless until there are two readings to subtract.
+    /// The zero sample, shown before the first delta is available. CPU load is
+    /// meaningless until there are two readings to subtract.
     public static let empty = TelemetrySample(
         cpuUsage: 0, memoryUsage: 0, memoryUsedBytes: 0, memoryTotalBytes: 0,
-        networkInBytesPerSecond: 0, networkOutBytesPerSecond: 0,
         battery: nil, capturedAt: .distantPast
     )
 }
@@ -94,26 +86,5 @@ public struct TelemetryHistory: Equatable, Sendable {
     /// Normalised 0...1 series for a metric, ready to feed a sparkline.
     public func series(_ metric: (TelemetrySample) -> Double) -> [Double] {
         samples.map(metric)
-    }
-
-    /// Network series scaled against the window's own peak, since there is no
-    /// meaningful absolute ceiling for throughput.
-    public func normalisedNetworkSeries(_ metric: (TelemetrySample) -> Double) -> [Double] {
-        let values = samples.map(metric)
-        guard let peak = values.max(), peak > 0 else { return values.map { _ in 0 } }
-        return values.map { $0 / peak }
-    }
-
-    /// Both network directions on **one** scale.
-    ///
-    /// Normalising each direction against its own peak is what makes a 60 KB/s
-    /// upload draw as tall as a 6 MB/s download, which is worse than not
-    /// charting it at all. They share a chart, so they have to share a ceiling.
-    public func normalisedNetworkPair() -> (down: [Double], up: [Double]) {
-        let down = samples.map(\.networkInBytesPerSecond)
-        let up = samples.map(\.networkOutBytesPerSecond)
-        let peak = max(down.max() ?? 0, up.max() ?? 0)
-        guard peak > 0 else { return (down.map { _ in 0 }, up.map { _ in 0 }) }
-        return (down.map { $0 / peak }, up.map { $0 / peak })
     }
 }

@@ -1,7 +1,7 @@
 import SwiftUI
 import CorniceKit
 
-/// The System module: three cards, three series, one chart each.
+/// The System module: two cards, one series each.
 ///
 /// Deliberately charts rather than rows of numbers. A number alone answers "what
 /// is it now", which is the less useful question — the reason to glance at this
@@ -30,23 +30,6 @@ struct StatsPane: View {
                 series: [Series(values: model.telemetry.series(\.memoryUsage), color: Theme.Palette.memory)]
             )
 
-            let network = model.telemetry.normalisedNetworkPair()
-            MetricCard(
-                name: "Network",
-                // The probe sums every non-loopback interface rather than
-                // picking one, so the label says so instead of claiming Wi-Fi.
-                sub: "combined",
-                value: megabytesPerSecond(latest.networkInBytesPerSecond),
-                unit: "MB/s",
-                series: [
-                    Series(values: network.down, color: Theme.Palette.networkIn),
-                    Series(values: network.up, color: Theme.Palette.networkOut),
-                ],
-                legend: [
-                    Legend(text: "↓ \(megabytesPerSecond(latest.networkInBytesPerSecond))", color: Theme.Palette.networkIn),
-                    Legend(text: "↑ \(megabytesPerSecond(latest.networkOutBytesPerSecond))", color: Theme.Palette.networkOut),
-                ]
-            )
         }
         .frame(maxWidth: .infinity, alignment: .top)
     }
@@ -55,9 +38,6 @@ struct StatsPane: View {
         String(format: "%.1f", Double(bytes) / 1_073_741_824)
     }
 
-    private func megabytesPerSecond(_ bytesPerSecond: Double) -> String {
-        String(format: "%.1f", bytesPerSecond / 1_048_576)
-    }
 }
 
 /// One charted series.
