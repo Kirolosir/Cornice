@@ -60,6 +60,13 @@ struct SurfaceGeometry: Equatable {
 
     /// How far peek and activity grow on each side: 425 − 209, halved.
     static let wing: CGFloat = 108
+
+    /// The activity band is wider than peek because its content has to live
+    /// entirely in the two margins. At peek's width the margin is 70 pt, and a
+    /// device name plus a glyph does not fit in 70 pt, so the name ran under the
+    /// notch where nothing can be seen. Margin width is `wing - flare - padding`,
+    /// so this gives 132 pt a side.
+    static let activityWing: CGFloat = 170
     /// How much taller peek is than the notch: 48 − 38.
     static let peekDrop: CGFloat = 10
     /// How much taller an activity pill is than the notch: 54 − 38.
@@ -92,7 +99,10 @@ struct SurfaceGeometry: Equatable {
         case .peek:
             CGSize(width: notchSize.width + Self.wing * 2, height: notchSize.height + Self.peekDrop)
         case .activity:
-            CGSize(width: notchSize.width + Self.wing * 2, height: notchSize.height + Self.activityDrop)
+            CGSize(
+                width: min(notchSize.width + Self.activityWing * 2, windowWidth),
+                height: notchSize.height + Self.activityDrop
+            )
         case .expanded:
             CGSize(
                 width: min(Self.expandedWidth, windowWidth),

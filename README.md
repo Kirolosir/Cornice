@@ -162,7 +162,7 @@ growing instead of a panel appearing next to it.
 |---|---|---|---|
 | Resting | 209 × 38 | 10 | 0 |
 | Peek | 425 × 48 | 16 | 14 |
-| Activity | 425 × 54 | 20 | 16 |
+| Activity | 549 × 54 | 20 | 16 |
 | Expanded | 604 × 226 | 28 | 24 |
 
 Three rules do most of the work. The top corners have no radius, since the top
