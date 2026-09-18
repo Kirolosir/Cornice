@@ -537,13 +537,24 @@ final class OutputVolumeResponseTests: XCTestCase {
         XCTAssertGreaterThan(loud - quiet, 0.1, "the difference has to be visible")
     }
 
-    /// Muted output is not the same as silence — the stream is still there — but
-    /// the bars should reflect that nothing is reaching the room.
-    func testMutedOutputDrawsTheSmallestBars() {
-        let muted = levels(0.9).barHeights(count: 3, outputVolume: 0)[0]
-        let audible = levels(0.9).barHeights(count: 3, outputVolume: 1)[0]
-        XCTAssertLessThan(muted, audible)
-        XCTAssertGreaterThanOrEqual(muted, 0.3, "never below the resting height")
+    /// Muted output is not the same as silence — the stream is still playing —
+    /// but nothing is reaching the room, so the bars must be *still*, not merely
+    /// smaller. The floor that keeps quiet music moving used to survive a muted
+    /// fader and leave a quarter of the travel in place.
+    func testMutedOutputIsCompletelyStill() {
+        XCTAssertEqual(levels(0.9).barHeights(count: 3, outputVolume: 0), [0.3, 0.3, 0.3])
+    }
+
+    /// And it settles out smoothly on the way down rather than snapping off at
+    /// some threshold.
+    func testBarsSettleAsTheVolumeFalls() {
+        let heights = [0.3, 0.1, 0.02, 0.005, 0].map {
+            levels(0.9).barHeights(count: 3, outputVolume: Float($0))[0]
+        }
+        for index in 1..<heights.count {
+            XCTAssertLessThanOrEqual(heights[index], heights[index - 1], "step \(index)")
+        }
+        XCTAssertEqual(heights.last, 0.3)
     }
 
     /// Quiet music must still visibly move. Scaling straight off the level left
@@ -559,6 +570,27 @@ final class OutputVolumeResponseTests: XCTestCase {
         let quiet = levels(0.18).barHeights(count: 3, outputVolume: 1)[0]
         let loud = levels(0.95).barHeights(count: 3, outputVolume: 1)[0]
         XCTAssertGreaterThan(loud - quiet, 0.12)
+    }
+
+    /// Including the beat punch, which is added to the first bar and was the
+    /// one thing still moving when everything else had gone still.
+    func testABeatDoesNotPunchThroughAMutedFader() {
+        let beating = AudioLevels(
+            bands: [Float](repeating: 0.8, count: 8),
+            level: 0.9, isBeat: true, beatIntensity: 1
+        )
+        XCTAssertEqual(beating.barHeights(count: 3, outputVolume: 0), [0.3, 0.3, 0.3])
+    }
+
+    /// And it still lands when the audio is audible.
+    func testABeatPunchesTheFirstBarWhenAudible() {
+        let bands = [Float](repeating: 0.5, count: 8)
+        let calm = AudioLevels(bands: bands, level: 0.7, isBeat: false, beatIntensity: 0)
+        let beating = AudioLevels(bands: bands, level: 0.7, isBeat: true, beatIntensity: 1)
+        XCTAssertGreaterThan(
+            beating.barHeights(count: 3, outputVolume: 1)[0],
+            calm.barHeights(count: 3, outputVolume: 1)[0]
+        )
     }
 
     func testSilenceStillRestsWhateverTheVolume() {

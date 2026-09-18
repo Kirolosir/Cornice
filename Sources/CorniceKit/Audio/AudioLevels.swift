@@ -57,9 +57,16 @@ public struct AudioLevels: Sendable, Equatable {
 
         // A floor under the swing, so quiet-but-audible music still moves rather
         // than sitting at rest and reading as broken — while loud music still
-        // plainly moves more. Silence is handled by the bands being zero, not by
-        // this, so nothing animates when nothing is playing.
-        let headroom = 0.25 + 0.75 * pow(audible, 0.45)
+        // plainly moves more.
+        //
+        // The gate is what stops that floor outliving the audio. Applied
+        // unconditionally it left a quarter of the travel in place at zero
+        // volume, so muting the Mac still produced bars that moved: the floor
+        // was doing its job and doing it when there was nothing to report. It
+        // closes smoothly rather than snapping, so the bars settle out as the
+        // volume comes down instead of vanishing at a threshold.
+        let gate = min(1, audible / 0.02)
+        let headroom = gate * (0.25 + 0.75 * pow(audible, 0.45))
 
         return (0..<count).map { index in
             // Expanded a little before it drives the bar. Band values sit in the
@@ -69,8 +76,11 @@ public struct AudioLevels: Sendable, Equatable {
             // costs nothing.
             let energy = pow(min(1, max(0, peak(of: index, of: count))), 0.75)
             // A little extra punch on the lowest bar when an onset lands, so the
-            // row reads as locked to the beat rather than merely busy.
-            let kick = index == 0 ? beatIntensity * 0.14 : 0
+            // row reads as locked to the beat rather than merely busy. Gated
+            // like the rest: added outside the gate it kept punching the first
+            // bar on every beat while the Mac was muted, which is how a row that
+            // was otherwise perfectly still still looked alive.
+            let kick = index == 0 ? beatIntensity * 0.14 * gate : 0
             let swing = (1 - resting) * energy * headroom + kick
             return min(1, max(resting, resting + swing))
         }

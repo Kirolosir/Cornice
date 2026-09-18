@@ -86,6 +86,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Prints live player state, for verifying the scripting path.
     private static func probeAudio() async {
+        let reader = OutputVolumeReader()
+        Log.audio.notice(
+            "probe: outputVolume=\(reader.current().map { String(format: "%.3f", $0) } ?? "nil", privacy: .public)"
+        )
+
         let engine = AudioVisualizerEngine(bandCount: 8)
         let status = engine.start()
         Log.audio.notice("probe: status \(String(describing: status), privacy: .public)")
@@ -102,7 +107,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for _ in 0..<160 {
             try? await Task.sleep(for: .milliseconds(50))
             let levels = engine.latestLevels()
-            if !levels.isSilent { barTrace.append(levels.barHeights(count: 3)) }
+            // Through the same path the interface uses, fader and all.
+            if !levels.isSilent {
+                barTrace.append(levels.barHeights(
+                    count: 3, outputVolume: Float(reader.current() ?? 1)
+                ))
+            }
             peakLevel = max(peakLevel, levels.level)
             for (index, value) in levels.bands.enumerated() where index < peakBands.count {
                 peakBands[index] = max(peakBands[index], value)
