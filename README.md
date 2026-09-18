@@ -39,9 +39,35 @@ detours below.
 
 ---
 
-## Install
+## Download
 
-You need macOS 14 or later and a Mac with a notch.
+[**Download the latest DMG**](https://github.com/Kirolosir/Cornice/releases/latest),
+open it, and drag Cornice to Applications.
+
+The first time you open it, macOS will refuse and say the app is damaged. It
+isn't. Cornice is signed ad-hoc rather than with a paid Apple Developer
+certificate, and macOS treats anything it can't trace to a registered developer
+that way once it has been downloaded. To get past it, run this once:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Cornice.app
+```
+
+Then open it normally. If you would rather not run that, build it from source
+instead, which skips the problem entirely because apps you build yourself are
+never quarantined.
+
+---
+
+## Build from source
+
+You need macOS 14 or later. A Mac with a notch is what it's designed around, but
+it isn't required: without one, the surface reserves a notch-shaped region in the
+middle of the menu bar and behaves the same.
+
+Building needs Xcode or the Command Line Tools. Command Line Tools are enough for
+the app itself; `make test` needs full Xcode, because XCTest doesn't ship with
+the CLT.
 
 ```bash
 git clone https://github.com/Kirolosir/Cornice.git
@@ -366,6 +392,9 @@ make test
 
 - Apple Music and Spotify only. Browser audio is invisible, for the reason above.
 - Built-in display only, not every screen in a multi-monitor setup.
+- There's no download. Clone and build it. The app is ad-hoc signed, so a
+  prebuilt copy passed around would be stopped by Gatekeeper; building it
+  yourself avoids that, because locally built apps aren't quarantined.
 - Ad-hoc signed, so it isn't notarized. macOS ties permissions to the code
   signature, so **rebuilding invalidates the audio-capture grant**. If the
   visualiser goes quiet after a rebuild, reset it and relaunch:
