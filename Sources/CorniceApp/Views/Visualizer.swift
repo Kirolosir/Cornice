@@ -135,7 +135,9 @@ struct EqualizerIndicator: View {
 
     private func animation(at index: Int) -> Animation? {
         guard isLive else { return .easeOut(duration: 0.18) }
-        if audioDriven { return .easeOut(duration: 0.09) }
+        // The analyzer already smooths attack and release. A short linear
+        // interpolation avoids easing toward a target that changes every frame.
+        if audioDriven { return .linear(duration: 1.0 / 30) }
         let slot = index % Self.durations.count
         return .easeInOut(duration: Self.durations[slot])
             .repeatForever(autoreverses: true)

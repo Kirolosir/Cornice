@@ -40,13 +40,13 @@ public enum AudioTapUnavailable: Error, Equatable, Sendable {
 /// own buffer and discarded.
 public final class SystemAudioTap: @unchecked Sendable {
 
-    /// Called on the audio IO queue with a block of mono samples.
+    /// Called on the audio IO queue with a block of separate channel samples.
     ///
     /// Deliberately not hopping to another actor first: this fires at the audio
     /// device's cadence and hopping per block would queue work faster than it
     /// drains. The callback does the analysis and hands on only the finished
     /// levels.
-    public typealias SampleHandler = @Sendable ([Float], Double) -> Void
+    public typealias SampleHandler = @Sendable ([[Float]], Double) -> Void
 
     private let lock = NSLock()
     private var tapID: AudioObjectID = AudioObjectID(kAudioObjectUnknown)
@@ -197,11 +197,7 @@ public final class SystemAudioTap: @unchecked Sendable {
 
     // MARK: - Sample extraction
 
-    /// Mixes the incoming buffers down to mono and hands them to the analyser.
-    ///
-    /// Mono because the visualiser shows one spectrum: summing the channels
-    /// costs one add per frame and avoids running the FFT twice for a display
-    /// that cannot show the difference.
+    /// Preserve stereo channels until their spectra have been measured.
     private static func deliver(
         _ bufferList: UnsafePointer<AudioBufferList>,
         sampleRate: Double,
@@ -212,37 +208,21 @@ public final class SystemAudioTap: @unchecked Sendable {
         )
         guard buffers.count > 0 else { return }
 
-        // Non-interleaved float is what a tap produces in practice, but
-        // interleaved stereo is legal, so both are handled rather than assumed.
-        let first = buffers[0]
-        guard let rawData = first.mData else { return }
-        let channelCount = Int(first.mNumberChannels)
-        let frameCount = Int(first.mDataByteSize) / MemoryLayout<Float>.size / max(1, channelCount)
-        guard frameCount > 0 else { return }
-
-        let pointer = rawData.assumingMemoryBound(to: Float.self)
-        var mono = [Float](repeating: 0, count: frameCount)
-
-        if buffers.count > 1 {
-            // Non-interleaved: one buffer per channel.
-            for frame in 0..<frameCount { mono[frame] = pointer[frame] }
-            for bufferIndex in 1..<min(buffers.count, 2) {
-                guard let otherData = buffers[bufferIndex].mData else { continue }
-                let other = otherData.assumingMemoryBound(to: Float.self)
-                for frame in 0..<frameCount { mono[frame] = (mono[frame] + other[frame]) * 0.5 }
+        var channels: [[Float]] = []
+        for buffer in buffers {
+            guard let rawData = buffer.mData else { continue }
+            let count = Int(buffer.mNumberChannels)
+            guard count > 0 else { continue }
+            let frames = Int(buffer.mDataByteSize) / MemoryLayout<Float>.size / count
+            guard frames > 0 else { continue }
+            let samples = rawData.assumingMemoryBound(to: Float.self)
+            for channel in 0..<min(count, 2 - channels.count) {
+                channels.append((0..<frames).map { samples[$0 * count + channel] })
             }
-        } else if channelCount > 1 {
-            // Interleaved: stride across channels.
-            for frame in 0..<frameCount {
-                var sum: Float = 0
-                for channel in 0..<channelCount { sum += pointer[frame * channelCount + channel] }
-                mono[frame] = sum / Float(channelCount)
-            }
-        } else {
-            for frame in 0..<frameCount { mono[frame] = pointer[frame] }
+            if channels.count == 2 { break }
         }
-
-        handler(mono, sampleRate)
+        guard !channels.isEmpty else { return }
+        handler(channels, sampleRate)
     }
 
     // MARK: - Core Audio queries

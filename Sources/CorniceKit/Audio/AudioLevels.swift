@@ -148,7 +148,7 @@ public struct SpectrumAnalyzer: Sendable {
 
     public init(bandCount: Int = 8, fftSize: Int = 1024, sampleRate: Double = 48_000) {
         self.bandCount = max(1, bandCount)
-        self.fftSize = max(64, fftSize)
+        self.fftSize = max(64, FFT.nextPowerOfTwo(fftSize))
         self.sampleRate = sampleRate
     }
 
@@ -158,13 +158,15 @@ public struct SpectrumAnalyzer: Sendable {
         /// Rolling mean of low-band energy, for onset detection.
         var energyHistory: [Float]
         var beatIntensity: Float
-        var framesSinceBeat: Int
+        var framesSinceBeat: Float
+        var smoothedLevel: Float
 
         public init(bandCount: Int) {
             smoothedBands = Array(repeating: 0, count: bandCount)
             energyHistory = []
             beatIntensity = 0
-            framesSinceBeat = .max
+            framesSinceBeat = .greatestFiniteMagnitude
+            smoothedLevel = 0
         }
     }
 
@@ -174,15 +176,23 @@ public struct SpectrumAnalyzer: Sendable {
     ///   - samples: interleaved-to-mono PCM, nominally -1...1.
     ///   - state: carried between calls; updated in place.
     public func analyze(_ samples: [Float], state: inout State) -> AudioLevels {
-        guard !samples.isEmpty else {
-            decay(&state)
-            return AudioLevels(
-                bands: state.smoothedBands, level: 0,
-                isBeat: false, beatIntensity: state.beatIntensity
-            )
-        }
+        analyze(channels: [samples], state: &state)
+    }
 
-        let magnitudes = FFT.magnitudes(of: samples, size: fftSize)
+    /// Combine channel power after the FFT so stereo phase cannot cancel it.
+    public func analyze(channels: [[Float]], state: inout State, frameDuration: Double = 1.0 / 90) -> AudioLevels {
+        let step = Float(frameDuration * 90)
+        let channels = channels.filter { !$0.isEmpty }
+        var magnitudes = [Float](repeating: 0, count: fftSize / 2)
+        var power: Float = 0
+        for samples in channels {
+            let spectrum = FFT.magnitudes(of: samples, size: fftSize)
+            for index in magnitudes.indices { magnitudes[index] += spectrum[index] * spectrum[index] }
+            let rms = Self.rms(samples)
+            power += rms * rms
+        }
+        let divisor = Float(max(1, channels.count))
+        for index in magnitudes.indices { magnitudes[index] = sqrt(magnitudes[index] / divisor) }
         var raw = Self.fold(magnitudes, into: bandCount, sampleRate: sampleRate, fftSize: fftSize)
 
         // Gain, then perceptual scaling.
@@ -204,19 +214,22 @@ public struct SpectrumAnalyzer: Sendable {
 
         for index in state.smoothedBands.indices where index < raw.count {
             let target = raw[index]
-            let coefficient = target > state.smoothedBands[index] ? attack : release
+            let base = target > state.smoothedBands[index] ? attack : release
+            let coefficient = 1 - pow(1 - base, step)
             state.smoothedBands[index] += (target - state.smoothedBands[index]) * coefficient
         }
 
-        let rms = Self.rms(samples)
-        let level = Self.compress(rms * 4)
+        let targetLevel = Self.compress(sqrt(power / divisor) * 4)
+        let levelCoefficient = 1 - pow(1 - (targetLevel > state.smoothedLevel ? attack : release), step)
+        state.smoothedLevel += (targetLevel - state.smoothedLevel) * levelCoefficient
+        let level = state.smoothedLevel
 
         let isBeat = detectBeat(bands: raw, state: &state)
         if isBeat {
             state.beatIntensity = 1
             state.framesSinceBeat = 0
         } else {
-            decay(&state)
+            decay(&state, step: step)
         }
 
         return AudioLevels(
@@ -227,9 +240,9 @@ public struct SpectrumAnalyzer: Sendable {
         )
     }
 
-    private func decay(_ state: inout State) {
-        state.beatIntensity = max(0, state.beatIntensity - 0.08)
-        if state.framesSinceBeat < .max { state.framesSinceBeat += 1 }
+    private func decay(_ state: inout State, step: Float) {
+        state.beatIntensity = max(0, state.beatIntensity - 0.08 * step)
+        state.framesSinceBeat += step
     }
 
     /// Energy-based onset detection on the low bands.
@@ -282,8 +295,8 @@ public struct SpectrumAnalyzer: Sendable {
             let lowFrequency = minimumFrequency * pow(maximumFrequency / minimumFrequency, lowRatio)
             let highFrequency = minimumFrequency * pow(maximumFrequency / minimumFrequency, highRatio)
 
-            let lowBin = max(1, Int(lowFrequency / binWidth))
-            let highBin = min(magnitudes.count - 1, max(lowBin, Int(highFrequency / binWidth)))
+            let lowBin = max(1, Int(ceil(lowFrequency / binWidth)))
+            let highBin = min(magnitudes.count - 1, Int(ceil(highFrequency / binWidth)) - 1)
             guard lowBin <= highBin else { continue }
 
             // Peak rather than mean within the band: a narrow tone should move

@@ -95,6 +95,16 @@ The app lives in the menu bar.
 The visualiser asks for System Audio Recording permission the first time you turn
 it on. Nothing else needs a permission.
 
+### Visualizer
+
+The visualizer uses overlapping audio windows and measures stereo channels
+separately before combining their energy. This keeps wide stereo mixes from
+cancelling out and makes the readings consistent across audio buffer sizes.
+Loudness rises quickly and settles gradually when the music gets quieter.
+
+Run `./Scripts/check-audio.sh` to check buffer sizes, stereo phase, sample rates,
+and silence using generated test tones. This check works with Command Line Tools.
+
 ### Timers and controls
 
 A finished timer has a repeat button that restarts the same duration and stops

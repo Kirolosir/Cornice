@@ -20,21 +20,19 @@ public final class AudioVisualizerEngine: @unchecked Sendable {
 
     private let lock = NSLock()
     private var levels: AudioLevels
-    private var analyzerState: SpectrumAnalyzer.State
-    private var analyzer: SpectrumAnalyzer
+    private var analyzer: StreamingSpectrumAnalyzer
     private var status: Status = .stopped
     /// Set when audio stops arriving, so the bars fall to rest instead of
     /// freezing mid-spectrum when playback pauses.
-    private var lastSampleAt: Date = .distantPast
+    private var lastSampleAt: TimeInterval = -.infinity
 
     private let tap = SystemAudioTap()
     public let bandCount: Int
 
     public init(bandCount: Int = 8) {
-        self.bandCount = bandCount
-        self.analyzer = SpectrumAnalyzer(bandCount: bandCount)
-        self.analyzerState = SpectrumAnalyzer.State(bandCount: bandCount)
-        self.levels = .silent(bandCount: bandCount)
+        self.bandCount = max(1, bandCount)
+        self.analyzer = StreamingSpectrumAnalyzer(bandCount: self.bandCount)
+        self.levels = .silent(bandCount: self.bandCount)
     }
 
     public var currentStatus: Status {
@@ -56,15 +54,13 @@ public final class AudioVisualizerEngine: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
 
-        if Date().timeIntervalSince(lastSampleAt) > 0.25, !levels.isSilent {
-            for index in levels.bands.indices {
-                levels.bands[index] *= 0.82
-            }
-            levels.level *= 0.82
-            levels.beatIntensity = max(0, levels.beatIntensity - 0.1)
-            levels.isBeat = false
-        }
-        return levels
+        let age = ProcessInfo.processInfo.systemUptime - lastSampleAt
+        guard age > 0.1 else { return levels }
+        if age > 1.5 { return .silent(bandCount: bandCount) }
+        let fade = Float(exp(-(age - 0.1) / 0.12))
+        return AudioLevels(bands: levels.bands.map { $0 * fade },
+                           level: levels.level * fade, isBeat: false,
+                           beatIntensity: levels.beatIntensity * fade)
     }
 
     /// Starts capture. Returns the resulting status rather than throwing,
@@ -107,25 +103,24 @@ public final class AudioVisualizerEngine: @unchecked Sendable {
         lock.lock()
         status = .stopped
         levels = .silent(bandCount: bandCount)
-        analyzerState = SpectrumAnalyzer.State(bandCount: bandCount)
+        analyzer = StreamingSpectrumAnalyzer(bandCount: bandCount)
+        lastSampleAt = -.infinity
         lock.unlock()
     }
 
     /// Analyses one block. Runs on Core Audio's IO queue.
-    private func consume(_ samples: [Float], sampleRate: Double) {
+    private func consume(_ channels: [[Float]], sampleRate: Double) {
         lock.lock()
-        // The tap reports its real sample rate, which can change if the user
-        // switches output device mid-session; rebuild the analyser when it does
-        // so the frequency bands stay where they should be.
-        if analyzer.bandCount != bandCount || abs(sampleRateOfAnalyzer - sampleRate) > 1 {
-            analyzer = SpectrumAnalyzer(bandCount: bandCount, sampleRate: sampleRate)
-            sampleRateOfAnalyzer = sampleRate
+        defer { lock.unlock() }
+        let now = ProcessInfo.processInfo.systemUptime
+        if now - lastSampleAt > 0.25 {
+            analyzer = StreamingSpectrumAnalyzer(bandCount: bandCount)
+            levels = .silent(bandCount: bandCount)
+            lastSampleAt = now
         }
-        let analyzed = analyzer.analyze(samples, state: &analyzerState)
-        levels = analyzed
-        lastSampleAt = Date()
-        lock.unlock()
+        if let analyzed = analyzer.consume(channels, sampleRate: sampleRate) {
+            levels = analyzed
+            lastSampleAt = now
+        }
     }
-
-    private var sampleRateOfAnalyzer: Double = 0
 }
