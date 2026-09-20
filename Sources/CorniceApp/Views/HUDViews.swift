@@ -160,13 +160,14 @@ struct HUDView: View {
             HStack(spacing: 0) {
                 HStack(spacing: 10) {
                     Button { model.toggleTimer(id) } label: {
-                        Image(systemName: isRunning ? "pause.fill" : "play.fill")
+                        Image(systemName: isFinished ? "arrow.clockwise" : (isRunning ? "pause.fill" : "play.fill"))
                             .font(.system(size: 12, weight: .bold))
                     }
                     .buttonStyle(FilledCircleButtonStyle(
                         fill: Theme.Palette.orangeDark, hoverFill: Theme.Palette.orangeDeep
                     ))
-                    .disabled(isFinished)
+                    .help(isFinished ? "Repeat timer" : (isRunning ? "Pause" : "Resume"))
+                    .accessibilityLabel(isFinished ? "Repeat timer" : (isRunning ? "Pause timer" : "Resume timer"))
 
                     Button { model.removeTimer(id) } label: {
                         Image(systemName: "xmark")

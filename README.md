@@ -1,5 +1,7 @@
 # Cornice
 
+<img src="Resources/AppIcon.png" width="128" alt="Cornice app icon">
+
 A media surface that lives in the MacBook notch.
 
 Cornice turns the camera notch into something like a Dynamic Island. At rest you
@@ -95,7 +97,8 @@ it on. Nothing else needs a permission.
 
 ### Timers and controls
 
-A finished timer keeps ringing until you dismiss it with its × button or press
+A finished timer has a repeat button that restarts the same duration and stops
+its alarm. It keeps ringing until you repeat it, dismiss it with ×, or press
 Escape while its alert is open. If two timers finish together, dismissing one
 leaves the other ringing. The alert closes when the last timer is dismissed,
 and the panel can be opened again without restarting the app.

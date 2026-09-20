@@ -84,6 +84,22 @@ extension Probes {
         check(TimerAlarm.shared.isRinging, "dismissing a charging HUD leaves the alarm alone")
         model.removeTimer(fourth.id)
         check(!TimerAlarm.shared.isRinging, "timer row stops its alarm")
+        model.present(.collapsed)
+        let repeated = expiredTimer("Repeat")
+        model.applyTimers(TimerBoard(entries: [repeated]))
+        model.tickTimers()
+        model.toggleTimer(repeated.id)
+        check(!TimerAlarm.shared.isRinging, "repeating a finished timer stops its alarm")
+        check(model.timers.entries.count == 1, "repeat reuses the existing timer")
+        check(model.timers.entries.first?.id == repeated.id, "repeat keeps the timer identity")
+        check(model.timers.entries.first?.isRunning == true, "repeat starts counting down")
+        check((model.timers.entries.first?.remaining() ?? 0) > 59, "repeat uses the original duration")
+        if case .timerRunning(let id, _, let running, let finished) = model.hudContent {
+            check(id == repeated.id && running && !finished, "repeat updates the alert controls")
+        } else {
+            check(false, "repeated timer HUD is present")
+        }
+        model.removeTimer(repeated.id)
         print("Timer probe passed")
         NSApp.terminate(nil)
     }
