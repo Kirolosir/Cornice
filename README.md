@@ -100,7 +100,9 @@ Escape while its alert is open. If two timers finish together, dismissing one
 leaves the other ringing. The alert closes when the last timer is dismissed,
 and the panel can be opened again without restarting the app.
 
-Hover opens with a single spring when the dwell setting is zero. Buttons have
+Hover starts only inside the notch bounds reported by macOS, with no extra
+activation area beside or below it. The bounds update when the display or its
+scaling changes. Hover opens with a single spring when the dwell setting is zero. Buttons have
 a small press dip and a hover highlight. Reduce Motion turns off the button
 scaling and skip movement.
 

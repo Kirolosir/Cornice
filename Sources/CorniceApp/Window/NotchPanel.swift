@@ -80,9 +80,7 @@ final class NotchContentView: NSView {
     /// what is drawn, so clicks never land on invisible space.
     var interactiveRect: CGRect = .zero
 
-    /// The region that counts as hovering. Larger than `interactiveRect` while
-    /// resting, because the notch is a hole and aiming exactly at it is
-    /// needlessly precise.
+    /// The measured notch while resting, or the visible panel while open.
     var hoverRect: CGRect = .zero {
         didSet {
             guard hoverRect != oldValue else { return }

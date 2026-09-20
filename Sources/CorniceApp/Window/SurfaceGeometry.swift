@@ -181,38 +181,18 @@ struct SurfaceGeometry: Equatable {
         return CGRect(x: rect.minX, y: windowHeight - rect.maxY, width: rect.width, height: rect.height)
     }
 
-    /// Margin added around the surface for *hover* only.
-    ///
-    /// Aiming at a hole means aiming at nothing, so approaching from any
-    /// direction opens it, including from below, under the cut-out.
-    static let hoverPadding = CGSize(width: 26, height: 14)
-
-    /// How far the hover region extends *past* the top edge of the screen.
-    ///
-    /// The pointer can sit exactly on that edge, and `CGRect.contains` excludes a
-    /// rectangle's maximum edge, so with the panel open that one row of pixels
-    /// read as "not hovering", closing it, which made the padded resting region
-    /// read as hovering again. The surface flickered for as long as the pointer
-    /// stayed at the top of the notch.
-    static let topBleed: CGFloat = 6
-
-    /// The region that counts as hovering: padded while resting, exact once
-    /// open. A padded region around an open panel keeps it open while the
-    /// pointer is clearly elsewhere.
+    /// Starting a hover requires the measured notch bounds. Peek keeps the same
+    /// target so moving into its wings does not complete the opening gesture.
     func hoverRect(for state: SurfaceState, windowHeight: CGFloat) -> CGRect {
-        let rect = appKitRect(for: state, windowHeight: windowHeight)
-        let padded: CGRect = switch state {
-        case .collapsed, .peek, .activity:
-            rect.insetBy(dx: -Self.hoverPadding.width, dy: -Self.hoverPadding.height)
-        case .expanded, .hud:
-            rect
-        }
-        // Grown upward in AppKit's coordinates, which is past the screen edge.
+        let target: SurfaceState = state == .peek ? .collapsed : state
+        let rect = appKitRect(for: target, windowHeight: windowHeight)
+        // CGRect excludes its maximum edge. Extend only above the screen so
+        // resting on the top edge still counts, without widening the target.
         return CGRect(
-            x: padded.minX,
-            y: padded.minY,
-            width: padded.width,
-            height: padded.height + Self.topBleed
+            x: rect.minX,
+            y: rect.minY,
+            width: rect.width,
+            height: rect.height + 1
         )
     }
 
