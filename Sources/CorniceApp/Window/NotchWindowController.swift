@@ -193,6 +193,10 @@ final class NotchWindowController {
             guard model.preferences.activationStyle == .hover else { return }
             guard model.surfaceState == .collapsed else { return }
 
+            if model.preferences.hoverDwell <= 0 {
+                present(.expanded)
+                return
+            }
             present(.peek)
 
             openTask?.cancel()
@@ -244,6 +248,9 @@ final class NotchWindowController {
     func close() {
         openTask?.cancel()
         closeTask?.cancel()
+        if model.surfaceState.hud != nil {
+            model.dismissHUD()
+        }
         present(.collapsed)
     }
 

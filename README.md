@@ -93,6 +93,27 @@ The app lives in the menu bar.
 The visualiser asks for System Audio Recording permission the first time you turn
 it on. Nothing else needs a permission.
 
+### Timers and controls
+
+A finished timer keeps ringing until you dismiss it with its × button or press
+Escape while its alert is open. If two timers finish together, dismissing one
+leaves the other ringing. The alert closes when the last timer is dismissed,
+and the panel can be opened again without restarting the app.
+
+Hover opens with a single spring when the dwell setting is zero. Buttons have
+a small press dip and a hover highlight. Reduce Motion turns off the button
+scaling and skip movement.
+
+To check timer completion and dismissal in a development build:
+
+```bash
+make app-debug
+dist/Cornice.app/Contents/MacOS/Cornice --probe-timers
+```
+
+The probe plays the alarm for eight seconds, checks overlapping timers and
+Escape, then exits. It needs an audio output and a logged-in macOS session.
+
 ### Connecting Spotify (optional)
 
 You only need this for real repeat-one. Everything else works without it. It also

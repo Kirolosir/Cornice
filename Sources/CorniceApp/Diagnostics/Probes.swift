@@ -17,6 +17,11 @@ enum Probes {
     /// Probes that need no interface. Returns `true` when one has started, in
     /// which case launch should go no further.
     static func runDetached(_ arguments: [String]) -> Bool {
+        if arguments.contains("--probe-timers") {
+            Task { await probeTimers() }
+            return true
+        }
+
         // What the media layer can actually see: which players are running,
         // and what each one reports.
         if arguments.contains("--probe-media") {

@@ -215,6 +215,8 @@ struct ExpandedContentView: View {
 /// Three round buttons, 26 pt across and 2 pt apart, in the band's right margin.
 struct ModuleSwitcher: View {
     @Bindable var model: AppModel
+    @Namespace private var selection
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var modules: [ModuleKind] {
         ModuleKind.allCases.filter { model.preferences.enabledModules.contains($0) }
@@ -223,8 +225,10 @@ struct ModuleSwitcher: View {
     var body: some View {
         HStack(spacing: 2) {
             ForEach(modules) { module in
-                ModuleButton(module: module, isActive: model.activeModule == module) {
-                    model.select(module: module)
+                ModuleButton(module: module, isActive: model.activeModule == module, selection: selection) {
+                    withAnimation(reduceMotion ? nil : Theme.Motion.release) {
+                        model.select(module: module)
+                    }
                 }
             }
         }
@@ -234,6 +238,7 @@ struct ModuleSwitcher: View {
 struct ModuleButton: View {
     let module: ModuleKind
     let isActive: Bool
+    let selection: Namespace.ID
     let action: () -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -247,10 +252,15 @@ struct ModuleButton: View {
                     width: Theme.Metrics.switcherButton,
                     height: Theme.Metrics.switcherButton
                 )
-                .background(Circle().fill(isActive ? ink.chip : .clear))
+                .background {
+                    if isActive {
+                        Circle().fill(ink.chip)
+                            .matchedGeometryEffect(id: "module", in: selection)
+                    }
+                }
                 .foregroundStyle(isActive ? ink.primary : ink.tertiary)
         }
-        .buttonStyle(PressScaleStyle(pressedScale: 0.88))
+        .buttonStyle(PressScaleStyle(pressedScale: 0.94))
         .animation(Theme.Motion.contentSwap, value: isActive)
         .help(module.title)
         .accessibilityLabel(module.title)
@@ -260,74 +270,58 @@ struct ModuleButton: View {
 
 // MARK: - Button behaviour
 
-/// The press behaviour every control on the surface shares.
-///
-/// On pointer-down the glyph dips to 0.86–0.88; on release it springs back with
-/// a small overshoot rather than easing to a stop. The overshoot is the whole
-/// point. It is what makes a control on a surface with no window chrome feel
-/// like it was pressed rather than merely clicked.
+/// A small press dip and a quiet hover highlight.
 struct PressScaleStyle: ButtonStyle {
-    var pressedScale: CGFloat = 0.88
+    var pressedScale: CGFloat = 0.94
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovering = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .background(.primary.opacity(isHovering && isEnabled ? 0.07 : 0), in: Capsule())
             .contentShape(Rectangle())
-            .scaleEffect(configuration.isPressed ? pressedScale : 1)
-            .animation(
-                configuration.isPressed ? .easeOut(duration: 0.06) : Theme.Motion.release,
-                value: configuration.isPressed
-            )
+            .scaleEffect(configuration.isPressed && !reduceMotion ? pressedScale : 1)
+            .opacity(isEnabled ? (configuration.isPressed ? 0.75 : 1) : 0.4)
+            .animation(configuration.isPressed ? .easeOut(duration: 0.08) : Theme.Motion.release,
+                       value: configuration.isPressed)
+            .animation(.easeOut(duration: 0.14), value: isHovering)
+            .onHover { isHovering = $0 }
     }
 }
 
-/// Skip forward and back, which travel in their own direction when pressed.
-///
-/// The travel is triggered by the *click* rather than being tied to how long the
-/// button is held. Driven by the press state alone, a quick tap (which is how
-/// anyone actually uses a skip button), released the glyph before it had moved
-/// far enough to see, so the cue was there in the code and invisible in use.
-///
-/// It goes out fast and springs back with a little overshoot, which is what
-/// makes it read as the track being thrown forward rather than as a button
-/// merely acknowledging a click.
+/// A short directional nudge after a skip.
 struct SkipButton<Label: View>: View {
-    /// −1 for backward, +1 for forward.
     let direction: CGFloat
     let action: () -> Void
     @ViewBuilder let label: () -> Label
 
-    @State private var travel: CGFloat = 0
-    @State private var squeeze: CGFloat = 1
-
-    /// How far the glyph throws. Larger than the 3.5 pt dip a held press gives,
-    /// because this one has to register in about a tenth of a second.
-    private let distance: CGFloat = 6
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var clicks = 0
 
     var body: some View {
-        Button {
+        let travel: CGFloat = reduceMotion ? 0 : direction
+        return Button {
             action()
-            kick()
+            clicks += 1
         } label: {
             label()
-                .offset(x: travel)
-                .scaleEffect(squeeze)
-                .contentShape(Rectangle())
+                .modifier(SkipFeedback(clicks: clicks, travel: travel))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressScaleStyle())
     }
+}
 
-    private func kick() {
-        withAnimation(.easeOut(duration: 0.09)) {
-            travel = direction * distance
-            squeeze = 0.88
-        }
-        // Released on its own timer rather than on the button's press state, so
-        // the full gesture plays out however briefly the button was held.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.09) {
-            withAnimation(Theme.Motion.release) {
-                travel = 0
-                squeeze = 1
-            }
+private struct SkipFeedback: ViewModifier {
+    let clicks: Int
+    let travel: CGFloat
+
+    func body(content: Content) -> some View {
+        content.keyframeAnimator(initialValue: CGFloat.zero, trigger: clicks) { view, offset in
+            view.offset(x: offset * travel)
+        } keyframes: { _ in
+            CubicKeyframe(3, duration: 0.08)
+            SpringKeyframe(0, duration: 0.22, spring: .smooth)
         }
     }
 }
@@ -338,18 +332,23 @@ struct FilledCircleButtonStyle: ButtonStyle {
     var hoverFill: Color
     var diameter: CGFloat = 30
 
+    @Environment(\.isEnabled) private var enabled
+    @Environment(\.accessibilityReduceMotion) private var reducedMotion
     @State private var isHovering = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(.white)
             .frame(width: diameter, height: diameter)
-            .background(Circle().fill(isHovering ? hoverFill : fill))
-            .scaleEffect(configuration.isPressed ? 0.88 : 1)
+            .background(Circle().fill((isHovering || configuration.isPressed) && enabled ? hoverFill : fill))
+            .contentShape(Circle())
+            .opacity(enabled ? 1 : 0.4)
+            .scaleEffect(configuration.isPressed && !reducedMotion ? 0.94 : 1)
             .animation(
                 configuration.isPressed ? .easeOut(duration: 0.06) : Theme.Motion.release,
                 value: configuration.isPressed
             )
+            .animation(.easeOut(duration: 0.14), value: isHovering)
             .onHover { isHovering = $0 }
     }
 }
@@ -362,6 +361,8 @@ struct SoftButtonStyle: ButtonStyle {
     var pressedScale: CGFloat = 0.94
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.isEnabled) private var enabled
+    @Environment(\.accessibilityReduceMotion) private var reducedMotion
     @State private var isHovering = false
 
     func makeBody(configuration: Configuration) -> some View {
@@ -383,11 +384,14 @@ struct SoftButtonStyle: ButtonStyle {
                     }
                     .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             )
-            .scaleEffect(configuration.isPressed ? pressedScale : 1)
+            .contentShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .opacity(enabled ? 1 : 0.4)
+            .scaleEffect(configuration.isPressed && !reducedMotion ? pressedScale : 1)
             .animation(
                 configuration.isPressed ? .easeOut(duration: 0.06) : Theme.Motion.release,
                 value: configuration.isPressed
             )
+            .animation(.easeOut(duration: 0.14), value: isHovering)
             .onHover { isHovering = $0 }
     }
 }

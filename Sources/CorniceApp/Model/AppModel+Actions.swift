@@ -276,13 +276,24 @@ extension AppModel {
     }
 
     func toggleTimer(_ id: UUID) {
-        TimerAlarm.shared.stop()
+        TimerAlarm.shared.acknowledge(id)
         mutateTimers { $0.toggle(id) }
+        if case .timerRunning(let shownID, _, _, _) = hudContent, shownID == id,
+           let entry = timers.entries.first(where: { $0.id == id }) {
+            presentTimerHUD(for: entry)
+        }
     }
 
     func removeTimer(_ id: UUID) {
-        TimerAlarm.shared.stop()
+        TimerAlarm.shared.acknowledge(id)
         mutateTimers { $0.remove(id) }
+        if case .timerRunning(let shownID, _, _, _) = hudContent, shownID == id {
+            if let next = timers.entries.first(where: { TimerAlarm.shared.pendingIDs.contains($0.id) }) {
+                presentTimerHUD(for: next)
+            } else {
+                dismissHUD()
+            }
+        }
     }
 
     /// Advances the timers. Driven by the UI's display timer, which is a
@@ -292,12 +303,12 @@ extension AppModel {
         guard timers.hasTimers else { return }
         var board = timers
         let completed = board.tick()
-        applyTimers(board)
         guard !completed.isEmpty else { return }
+        applyTimers(board)
         guard preferences.notifyOnTimerComplete else { return }
         // The sound is the point: a banner alone is no use for something you set
         // a timer precisely so you could stop watching.
-        TimerAlarm.shared.start()
+        TimerAlarm.shared.start(for: completed.map(\.id))
         for entry in completed {
             NotificationPresenter.shared.timerComplete(label: entry.label)
         }

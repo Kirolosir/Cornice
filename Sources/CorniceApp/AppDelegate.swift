@@ -68,6 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        TimerAlarm.shared.stop()
         model?.stopRefreshLoops()
         windowController?.tearDown()
         Log.app.notice("Cornice terminating")

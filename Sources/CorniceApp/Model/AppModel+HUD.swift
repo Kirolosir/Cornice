@@ -49,10 +49,12 @@ extension AppModel {
         hudDismissTask?.cancel()
         hudDismissTask = nil
         guard hudContent != nil else { return }
-        TimerAlarm.shared.stop()
+        if case .timerRunning(let id, _, _, _) = hudContent {
+            TimerAlarm.shared.acknowledge(id)
+        }
 
         if surfaceState.hud != nil {
-            present(isHovering ? .peek : .collapsed)
+            present(isHovering ? .expanded : .collapsed)
         }
 
         // Cleared after the retraction rather than with it: dropping the content

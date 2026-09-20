@@ -36,11 +36,15 @@ struct TimersPane: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.top, 22)
             } else {
-                VStack(spacing: 10) {
-                    ForEach(model.timers.entries) { entry in
-                        TimerRow(entry: entry, clock: clock, model: model)
+                ScrollView {
+                    VStack(spacing: 10) {
+                        ForEach(model.timers.entries) { entry in
+                            TimerRow(entry: entry, clock: clock, model: model)
+                        }
                     }
+                    .padding(.vertical, 3)
                 }
+                .scrollIndicators(.hidden)
             }
 
             Spacer(minLength: 0)

@@ -94,7 +94,7 @@ struct MediaPane: View {
                     onColor: accent
                 )
             }
-            .buttonStyle(PressScaleStyle(pressedScale: 0.84))
+            .buttonStyle(PressScaleStyle(pressedScale: 0.94))
             .help("Shuffle")
 
             Spacer(minLength: 0)
@@ -136,7 +136,7 @@ struct MediaPane: View {
                         onColor: accent
                     )
                 }
-                .buttonStyle(PressScaleStyle(pressedScale: 0.84))
+                .buttonStyle(PressScaleStyle(pressedScale: 0.94))
                 // Spells out the state, because Spotify's is a two-way where
                 // Music's is a three-way and nothing on the glyph says so.
                 .help(Self.repeatHelp(snapshot))
@@ -153,7 +153,7 @@ struct MediaPane: View {
                         ink: ink
                     )
                 }
-                .buttonStyle(PressScaleStyle(pressedScale: 0.84))
+                .buttonStyle(PressScaleStyle(pressedScale: 0.94))
                 .help(model.outputDevice.map { "Output: \($0.name)" } ?? "Output device")
             }
         }

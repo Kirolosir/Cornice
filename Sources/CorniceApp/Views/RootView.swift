@@ -19,6 +19,7 @@ struct RootView: View {
     /// whole surface.
     @State private var clock = FrameClock()
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var systemScheme
 
     private var state: SurfaceState { model.surfaceState }
@@ -54,8 +55,11 @@ struct RootView: View {
                         .opacity(state == .activity ? 1 : 0)
 
                     ExpandedContentView(model: model, geometry: geometry, clock: clock)
-                        .frame(width: size.width, height: size.height, alignment: .top)
+                        .frame(width: geometry.size(for: .expanded).width,
+                               height: geometry.size(for: .expanded).height, alignment: .top)
                         .opacity(state == .expanded ? 1 : 0)
+                        .allowsHitTesting(state == .expanded)
+                        .accessibilityHidden(state != .expanded)
 
                     // Built on demand rather than kept alive: a HUD is not part
                     // of the morph, and most of the time there is nothing to draw.
@@ -63,6 +67,8 @@ struct RootView: View {
                         HUDView(content: hud, geometry: geometry, model: model, clock: clock)
                             .frame(width: size.width, height: size.height, alignment: .topLeading)
                             .opacity(state.hud != nil ? 1 : 0)
+                            .allowsHitTesting(isInteractiveHUD)
+                            .accessibilityHidden(state.hud == nil)
                             .id(hud.kind)
                     }
                 }
@@ -240,7 +246,8 @@ struct RootView: View {
     }
 
     private func animation(for state: SurfaceState) -> Animation {
-        switch state {
+        if reduceMotion { return .easeOut(duration: 0.12) }
+        return switch state {
         case .collapsed: Theme.Motion.collapse
         case .peek, .activity: Theme.Motion.peek
         case .expanded: Theme.Motion.expand

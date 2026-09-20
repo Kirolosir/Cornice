@@ -183,13 +183,12 @@ enum Theme {
     /// *downward*. The top edge is a fixed anchor: a surface attached to the top
     /// of the screen that overshoots upward looks like it has come unstuck.
     enum Motion {
-        /// Opening. A touch of overshoot so it arrives with weight. This is
-        /// the curve people notice most, so it got the most fiddling.
-        static let expand = SwiftUI.Animation.spring(response: 0.38, dampingFraction: 0.76)
+        /// Opening stays close to its final size, with just a little give.
+        static let expand = SwiftUI.Animation.spring(response: 0.36, dampingFraction: 0.88)
 
         /// Closing. Faster and more damped, because bounce on the way out
         /// looks like the app can't make up its mind.
-        static let collapse = SwiftUI.Animation.spring(response: 0.30, dampingFraction: 0.86)
+        static let collapse = SwiftUI.Animation.spring(response: 0.28, dampingFraction: 0.94)
 
         /// Hover peek. Very fast: this exists purely to acknowledge the pointer.
         static let peek = SwiftUI.Animation.spring(response: 0.22, dampingFraction: 0.82)
@@ -202,8 +201,8 @@ enum Theme {
         /// enough to finish before the next sample arrives.
         static let telemetry = SwiftUI.Animation.easeOut(duration: 0.45)
 
-        /// A button springing back after a press, with a small rebound past 1.
-        static let release = SwiftUI.Animation.spring(response: 0.15, dampingFraction: 0.52)
+        /// Button release and the module selection highlight.
+        static let release = SwiftUI.Animation.spring(response: 0.22, dampingFraction: 0.82)
 
         /// A symbol replace: the outgoing glyph is removed and the incoming one
         /// pops in. Never a cross-fade of two glyphs.

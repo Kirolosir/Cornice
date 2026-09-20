@@ -89,10 +89,14 @@ final class NotchContentView: NSView {
             // A state change can move the surface out from under a stationary
             // pointer, which must register as a hover change even though the
             // mouse has not moved.
-            reevaluateHover()
+            hoverUpdate?.cancel()
+            let update = DispatchWorkItem { [weak self] in self?.reevaluateHover() }
+            hoverUpdate = update
+            DispatchQueue.main.async(execute: update)
         }
     }
 
+    private var hoverUpdate: DispatchWorkItem?
     var onHoverChanged: ((Bool) -> Void)?
 
     private var trackingArea: NSTrackingArea?
