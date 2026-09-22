@@ -1,7 +1,7 @@
 import SwiftUI
 import CorniceKit
 
-/// The System module: two cards, one series each.
+/// The System module: two live cards, one exact series each.
 ///
 /// Deliberately charts rather than rows of numbers. A number alone answers "what
 /// is it now", which is the less useful question. The reason to glance at this
@@ -16,9 +16,10 @@ struct StatsPane: View {
         HStack(alignment: .top, spacing: Theme.Metrics.cardGap) {
             MetricCard(
                 name: "CPU",
-                sub: "\(ProcessInfo.processInfo.activeProcessorCount) cores",
+                sub: "\(ProcessInfo.processInfo.activeProcessorCount) logical CPUs",
                 value: String(Int((latest.cpuUsage * 100).rounded())),
                 unit: "%",
+                detail: "system load",
                 series: [Series(values: model.telemetry.series(\.cpuUsage), color: Theme.Palette.cpu)]
             )
 
@@ -27,6 +28,7 @@ struct StatsPane: View {
                 sub: Format.bytes(latest.memoryTotalBytes),
                 value: gigabytes(latest.memoryUsedBytes),
                 unit: "GB",
+                detail: "\(Int((latest.memoryUsage * 100).rounded()))% used",
                 series: [Series(values: model.telemetry.series(\.memoryUsage), color: Theme.Palette.memory)]
             )
 
@@ -58,6 +60,7 @@ struct MetricCard: View {
     let sub: String
     let value: String
     let unit: String
+    let detail: String
     let series: [Series]
     var legend: [Legend] = []
 
@@ -88,6 +91,13 @@ struct MetricCard: View {
                 Text(unit)
                     .font(Theme.Typeface.status)
                     .foregroundStyle(ink.at(0.45))
+                Spacer(minLength: 4)
+                Text(detail)
+                    .font(Theme.Typeface.cardSub.weight(.medium))
+                    .foregroundStyle(ink.at(0.50))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(ink.at(0.055), in: Capsule())
             }
             .monospacedDigit()
             .padding(.top, 6)
@@ -96,6 +106,7 @@ struct MetricCard: View {
 
             Sparkline(series: series)
                 .frame(height: 52)
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
 
             if !legend.isEmpty {
                 HStack(spacing: 10) {
@@ -145,6 +156,7 @@ struct Sparkline: View {
 
     var body: some View {
         Canvas { context, size in
+            drawGuides(in: &context, size: size)
             for entry in series {
                 draw(entry, in: &context, size: size)
             }
@@ -153,9 +165,23 @@ struct Sparkline: View {
         .accessibilityHidden(true)
     }
 
+    private func drawGuides(in context: inout GraphicsContext, size: CGSize) {
+        for fraction in [0.25, 0.5, 0.75] {
+            let y = size.height * fraction
+            var guide = Path()
+            guide.move(to: CGPoint(x: 0, y: y))
+            guide.addLine(to: CGPoint(x: size.width, y: y))
+            context.stroke(
+                guide,
+                with: .color(Color.primary.opacity(fraction == 0.5 ? 0.08 : 0.045)),
+                style: StrokeStyle(lineWidth: 0.5, dash: [2, 3])
+            )
+        }
+    }
+
     private func draw(_ entry: Series, in context: inout GraphicsContext, size: CGSize) {
-        let values = entry.values
-        guard values.count >= 2 else { return }
+        let values = entry.values.map { $0.isFinite ? $0.clamped(to: 0...1) : 0 }
+        guard !values.isEmpty else { return }
 
         let step = size.width / CGFloat(max(capacity - 1, 1))
         // Right-aligned, so the newest sample is always against the right edge
@@ -163,7 +189,7 @@ struct Sparkline: View {
         let offset = size.width - step * CGFloat(values.count - 1)
 
         func point(_ index: Int) -> CGPoint {
-            let value = values[index].clamped(to: 0...1)
+            let value = values[index]
             return CGPoint(
                 x: offset + step * CGFloat(index),
                 // Inset by a point so a value pinned at 0 or 1 still shows a
@@ -190,5 +216,15 @@ struct Sparkline: View {
             )
         )
         context.stroke(line, with: .color(entry.color), lineWidth: 1.5)
+
+        let latest = point(values.count - 1)
+        context.fill(
+            Path(ellipseIn: CGRect(x: latest.x - 3, y: latest.y - 3, width: 6, height: 6)),
+            with: .color(entry.color.opacity(0.22))
+        )
+        context.fill(
+            Path(ellipseIn: CGRect(x: latest.x - 1.5, y: latest.y - 1.5, width: 3, height: 3)),
+            with: .color(entry.color)
+        )
     }
 }

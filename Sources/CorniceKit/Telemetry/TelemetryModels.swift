@@ -59,6 +59,17 @@ public struct BatteryState: Equatable, Sendable {
     }
 }
 
+/// The one edge that should raise a low-battery warning.
+public enum BatteryAlertPolicy {
+    public static let lowLevel = 0.10
+
+    public static func shouldWarn(previous: BatteryState?, current: BatteryState) -> Bool {
+        guard !current.isCharging, current.level <= lowLevel else { return false }
+        guard let previous else { return true }
+        return previous.isCharging || previous.level > lowLevel
+    }
+}
+
 /// A bounded ring of recent samples, for the sparklines.
 ///
 /// Fixed capacity so a session left running for days cannot grow this without

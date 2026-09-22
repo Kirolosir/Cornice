@@ -105,6 +105,11 @@ Loudness rises quickly and settles gradually when the music gets quieter.
 Run `./Scripts/check-audio.sh` to check buffer sizes, stereo phase, sample rates,
 and silence using generated test tones. This check works with Command Line Tools.
 
+The System tab shows exact CPU and memory history with a fixed 0–100% scale,
+guide lines, and a marked current sample. Cornice raises both a notch alert and
+a macOS notification once when battery charge crosses 10% while unplugged.
+Run `./Scripts/check-battery.sh` to check the warning boundary.
+
 ### Timers and controls
 
 A finished timer has a repeat button that restarts the same duration and stops

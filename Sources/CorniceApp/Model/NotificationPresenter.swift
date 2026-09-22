@@ -29,18 +29,36 @@ final class NotificationPresenter {
             identifier: "timer-\(label)-\(Int(Date().timeIntervalSince1970))",
             title: "\(label) finished",
             body: "Your timer is done.",
-            url: nil
+            url: nil,
+            playsSound: false
         )
     }
 
-    private func post(identifier: String, title: String, body: String, url: URL?) {
+    func lowBattery(level: Double) {
+        let percent = Int((level * 100).rounded())
+        post(
+            identifier: "low-battery",
+            title: "Battery Low",
+            body: "Your Mac is at \(percent)%. Connect it to power or turn on Low Power Mode.",
+            url: nil,
+            playsSound: true
+        )
+    }
+
+    private func post(
+        identifier: String,
+        title: String,
+        body: String,
+        url: URL?,
+        playsSound: Bool
+    ) {
         Task {
             guard await ensureAuthorized() else { return }
 
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = body
-            content.sound = nil          // a build failing does not need a chime
+            content.sound = playsSound ? .default : nil
             if let url {
                 content.userInfo = ["url": url.absoluteString]
             }

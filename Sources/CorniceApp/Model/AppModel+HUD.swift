@@ -134,12 +134,17 @@ extension AppModel {
     /// Reacts to a new telemetry sample's battery reading.
     ///
     /// Edge-triggered throughout: a HUD fires on the sample where something
-    /// *changed*, never on the state persisting. Polling a level and showing a
-    /// notice whenever it is under 15% would put a battery warning on screen
-    /// every two seconds for the rest of the afternoon.
+    /// changed, never on the state persisting.
     func handleBatteryChange(from previous: BatteryState?, to current: BatteryState?) {
         guard let current else { return }
-        guard let previous else { return }   // the first reading is not an event
+
+        if BatteryAlertPolicy.shouldWarn(previous: previous, current: current) {
+            presentHUD(.batteryLow(level: current.level))
+            NotificationPresenter.shared.lowBattery(level: current.level)
+            return
+        }
+
+        guard let previous else { return }
 
         if current.isCharging && !previous.isCharging {
             presentHUD(.charging(level: current.level))
@@ -148,9 +153,6 @@ extension AppModel {
         if current.level >= 1.0 && previous.level < 1.0 && current.isPluggedIn {
             presentHUD(.fullBattery)
             return
-        }
-        if !current.isCharging, current.level < 0.15, previous.level >= 0.15 {
-            presentHUD(.batteryLow(level: current.level))
         }
     }
 

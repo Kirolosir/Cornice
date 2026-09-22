@@ -226,7 +226,7 @@ struct HUDView: View {
                             .monospacedDigit()
                             .foregroundStyle(Theme.Palette.red)
                     }
-                    Text("Turn on Low Power Mode or it\nis recommended to charge it.")
+                    Text("Connect your Mac to power or\nturn on Low Power Mode.")
                         .font(Theme.Typeface.hudBody)
                         .lineSpacing(4)
                         .foregroundStyle(ink.at(0.62))
@@ -235,7 +235,7 @@ struct HUDView: View {
 
                 Spacer(minLength: 0)
 
-                LargeBatteryGlyph(fraction: level, tint: Theme.Palette.red, glowing: true)
+                LowBatteryGlyph(fraction: level)
             }
         }
     }
@@ -418,6 +418,35 @@ struct LargeBatteryGlyph: View {
                 .frame(width: 3, height: 8)
         }
         .shadow(color: glowing ? tint.opacity(0.45) : .clear, radius: glowing ? 7 : 0)
+    }
+}
+
+/// Low charge uses a quieter shell and a red cell that reflects the real level.
+struct LowBatteryGlyph: View {
+    let fraction: Double
+
+    private var fillWidth: CGFloat {
+        max(2.5, 36 * CGFloat(fraction.clamped(to: 0...1)))
+    }
+
+    var body: some View {
+        HStack(spacing: 2) {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.34), lineWidth: 1.5)
+                .frame(width: 44, height: 23)
+                .overlay(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: min(3, fillWidth / 2), style: .continuous)
+                        .fill(Theme.Palette.red)
+                        .frame(width: fillWidth, height: 16)
+                        .padding(.leading, 4)
+                        .shadow(color: Theme.Palette.red.opacity(0.5), radius: 4)
+                }
+            Capsule()
+                .fill(Color.white.opacity(0.34))
+                .frame(width: 3, height: 8)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Battery \(Int((fraction * 100).rounded())) percent")
     }
 }
 

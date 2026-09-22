@@ -112,7 +112,7 @@ enum DocsCapture {
             isFinished: false
         ),
         .charging(level: 0.67),
-        .batteryLow(level: 0.14),
+        .batteryLow(level: 0.10),
         .fullBattery,
         .vpn(name: "VPN · utun4", since: Date().addingTimeInterval(-515)),
         .download(name: "ReallyVeryExtremelyImportBigNameForFile.mov", progress: 0.6, bytesPerSecond: 13_421_772),
