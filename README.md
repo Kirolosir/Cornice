@@ -43,7 +43,7 @@ written from scratch. No Electron, no private APIs, no helper daemon.
 | | |
 |---|---|
 | **Now Playing** | Apple Music and Spotify: artwork, title, artist, a draggable scrubber, shuffle, repeat, output device. |
-| **System** | CPU and memory as filled sparklines over the last 48 samples. |
+| **System** | CPU and memory charts over the last minute, with live readings. |
 | **Timers** | Presets add time to the current countdown, with pause, repeat and an alarm. |
 | **AirPods** | A live activity when a wireless device connects, with its charge. |
 | **System HUDs** | Charging, battery low, full battery, no internet, VPN, downloads. Each gets its own size. |
@@ -105,10 +105,25 @@ Loudness rises quickly and settles gradually when the music gets quieter.
 Run `./Scripts/check-audio.sh` to check buffer sizes, stereo phase, sample rates,
 and silence using generated test tones. This check works with Command Line Tools.
 
-The System tab shows exact CPU and memory history with a fixed 0–100% scale,
-guide lines, and a marked current sample. Cornice raises both a notch alert and
-a macOS notification once when battery charge crosses 10% while unplugged.
-Run `./Scripts/check-battery.sh` to check the warning boundary.
+The six bars settle when the song is paused. With audio capture enabled, silence
+stays silent; the app doesn't replace it with a made-up wave. With capture off,
+the bars are a playback indicator and only move while the player says it's playing.
+See the [paused player](Docs/images/player-paused.png).
+
+The player background uses a blurred copy of the cover plus colours sampled from
+it. Grey covers stay grey, cream stays cream, and albums with similar colours
+still keep their own layout. The tint slider adjusts how much shows through.
+
+The System tab has a fixed 0–100% chart scale and a real one-minute timeline.
+Gaps after sleep or slower polling stay visible. Memory is shown in GiB, using
+1,073,741,824 bytes per unit. CPU waits for two readings, and unavailable readings
+show a dash instead of zero. Run `./Scripts/check-system.sh` for the CPU, memory
+and paused-visualizer checks, or `cornice --probe-appearance` for the hover and
+artwork checks.
+
+Cornice raises both a notch alert and a macOS notification once when battery
+charge crosses 10% while unplugged. Run `./Scripts/check-battery.sh` to check
+the warning boundary.
 
 ### Timers and controls
 
@@ -240,8 +255,9 @@ on display change, resolution change, rotation and wake.
 
 ### Measuring the machine
 
-CPU load is `1 − Δidle/Δtotal` across two `host_statistics` readings. That lands
-within a few tenths of a percent of `top` over the same window.
+CPU load is `1 − Δidle/Δtotal` across two `host_statistics` readings. Each
+32-bit state counter is differenced separately so a rollover still works.
+The first reading needs a second sample before it can show a percentage.
 
 Memory took three tries, because the obvious page classes are the wrong ones:
 
@@ -254,7 +270,8 @@ machine and drifted around depending on how much file cache happened to be warm.
 Counting inactive file pages instead is what `top` calls "used", and that goes
 too far the other way: every Mac looks permanently near capacity, because macOS
 keeps that cache full on purpose and reclaims it when something needs the room.
-With the formula above the probe agrees with Activity Monitor to the megabyte.
+The calculation follows [Activity Monitor's memory categories](https://support.apple.com/guide/activity-monitor/view-memory-usage-actmntr1004/mac).
+The percentage and byte count come from the same kernel reading.
 
 ### Reading what's playing
 

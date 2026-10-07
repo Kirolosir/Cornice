@@ -17,6 +17,10 @@ enum Probes {
     /// Probes that need no interface. Returns `true` when one has started, in
     /// which case launch should go no further.
     static func runDetached(_ arguments: [String]) -> Bool {
+        if arguments.contains("--probe-appearance") {
+            Task { await probeAppearance() }
+            return true
+        }
         if arguments.contains("--probe-timers") {
             Task { await probeTimers() }
             return true
@@ -227,7 +231,7 @@ enum Probes {
                 controller.toggle()
                 for _ in 0..<12 {
                     try? await Task.sleep(for: .seconds(1))
-                    let bars = model.levels.barHeights(count: 3, outputVolume: model.outputVolume)
+                    let bars = model.levels.barHeights(count: 6, outputVolume: model.outputVolume)
                     let bandText = model.levels.bands.map { String(format: "%.2f", $0) }
                         .joined(separator: ",")
                     let barText = bars.map { String(format: "%.2f", $0) }.joined(separator: ",")

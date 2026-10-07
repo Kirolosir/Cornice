@@ -47,10 +47,20 @@ enum DocsCapture {
         model.refreshNow("media")
         model.refreshNow("telemetry")
         try? await Task.sleep(for: .seconds(2))
-        for _ in 0..<40 {
-            model.refreshNow("telemetry")
-            try? await Task.sleep(for: .milliseconds(12))
+        var history = TelemetryHistory(capacity: 48)
+        let historyEnd = Date()
+        for index in 0..<31 {
+            let used = UInt64((18.6 + 0.6 * sin(Double(index) * 0.24)) * 1_073_741_824)
+            let total = UInt64(32) * 1_073_741_824
+            history.append(TelemetrySample(
+                cpuUsage: 0.24 + 0.12 * sin(Double(index) * 0.45) + (index > 19 && index < 24 ? 0.25 : 0),
+                memoryUsage: Double(used) / Double(total), memoryUsedBytes: used,
+                memoryTotalBytes: total, battery: nil,
+                capturedAt: historyEnd.addingTimeInterval(Double(index - 30) * 2)
+            ))
         }
+        model.stopRefreshLoops()
+        model.applyTelemetry(history)
         model.addTimer(minutes: 25)
         model.addTimer(minutes: 25)
         try? await Task.sleep(for: .milliseconds(600))
@@ -65,8 +75,31 @@ enum DocsCapture {
             model.select(module: module)
             model.present(state)
             try? await Task.sleep(for: .milliseconds(420))
+            if module == .stats { model.applyTelemetry(history) }
             capture(model: model, geometry: geometry, name: name, to: directory)
         }
+
+        model.select(module: .media)
+        model.playPause()
+        try? await Task.sleep(for: .milliseconds(420))
+        capture(model: model, geometry: geometry, name: "player-paused", to: directory)
+        model.playPause()
+
+        let originalArtwork = model.artwork
+        for (name, colors) in [
+            ("player-warm", [NSColor.systemOrange, .systemPink, .systemPurple]),
+            ("player-cool", [NSColor.systemBlue, .systemTeal, .systemIndigo]),
+            ("player-neutral", [NSColor(white: 0.8, alpha: 1), NSColor(white: 0.3, alpha: 1)])
+        ] {
+            let image = NSImage(size: NSSize(width: 160, height: 160))
+            image.lockFocus()
+            NSGradient(colors: colors)?.draw(in: NSRect(x: 0, y: 0, width: 160, height: 160), angle: -45)
+            image.unlockFocus()
+            model.applyArtwork(image)
+            try? await Task.sleep(for: .milliseconds(550))
+            capture(model: model, geometry: geometry, name: name, to: directory)
+        }
+        model.applyArtwork(originalArtwork)
 
         // The wireless-device announcement, which is otherwise only visible for
         // three seconds when something actually connects.

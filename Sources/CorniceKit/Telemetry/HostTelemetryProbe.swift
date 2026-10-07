@@ -20,7 +20,7 @@ public protocol TelemetryProbing: Sendable {
 public actor HostTelemetryProbe: TelemetryProbing {
 
     /// Cumulative CPU tick counters from the previous sample.
-    private var previousCPUTicks: (idle: UInt64, total: UInt64)?
+    private var previousCPUTicks: CPUCounterReading?
 
     private let totalMemory: UInt64
     /// VM page size, read once. The global `vm_kernel_page_size` is a mutable
@@ -44,13 +44,16 @@ public actor HostTelemetryProbe: TelemetryProbing {
         // rate-based figures it meant the second call differenced against the
         // first call's own reading, over an interval of zero.
         let used = memoryUsed()
+        let cpu = cpuUsage()
         return TelemetrySample(
-            cpuUsage: cpuUsage(),
-            memoryUsage: totalMemory > 0 ? Double(used) / Double(totalMemory) : 0,
-            memoryUsedBytes: used,
+            cpuUsage: cpu ?? 0,
+            memoryUsage: totalMemory > 0 ? Double(used ?? 0) / Double(totalMemory) : 0,
+            memoryUsedBytes: used ?? 0,
             memoryTotalBytes: totalMemory,
             battery: Self.batteryState(),
-            capturedAt: Date()
+            capturedAt: Date(),
+            cpuAvailable: cpu != nil,
+            memoryAvailable: used != nil && totalMemory > 0
         )
     }
 
@@ -60,9 +63,8 @@ public actor HostTelemetryProbe: TelemetryProbing {
     ///
     /// The kernel exposes cumulative tick counters per state, not a percentage,
     /// so usage is `1 - Δidle/Δtotal` between two readings. The first call has
-    /// nothing to difference against and correctly reports 0 rather than a
-    /// fabricated value.
-    private func cpuUsage() -> Double {
+    /// nothing to difference against, so the UI shows an unavailable reading.
+    private func cpuUsage() -> Double? {
         var info = host_cpu_load_info_data_t()
         var count = mach_msg_type_number_t(
             MemoryLayout<host_cpu_load_info_data_t>.stride / MemoryLayout<integer_t>.stride
@@ -74,23 +76,15 @@ public actor HostTelemetryProbe: TelemetryProbing {
         }
         guard status == KERN_SUCCESS else {
             Log.telemetry.error("host_statistics(HOST_CPU_LOAD_INFO) failed: \(status)")
-            return 0
+            previousCPUTicks = nil
+            return nil
         }
 
-        let user = UInt64(info.cpu_ticks.0)
-        let system = UInt64(info.cpu_ticks.1)
-        let idle = UInt64(info.cpu_ticks.2)
-        let nice = UInt64(info.cpu_ticks.3)
-        let total = user + system + idle + nice
-
-        defer { previousCPUTicks = (idle: idle, total: total) }
-        guard let previous = previousCPUTicks else { return 0 }
-
-        let totalDelta = total &- previous.total
-        let idleDelta = idle &- previous.idle
-        // Counters can appear to go backwards across a sleep/wake cycle.
-        guard totalDelta > 0, idleDelta <= totalDelta else { return 0 }
-        return 1 - Double(idleDelta) / Double(totalDelta)
+        let current = CPUCounterReading(user: info.cpu_ticks.0, system: info.cpu_ticks.1,
+                                        idle: info.cpu_ticks.2, nice: info.cpu_ticks.3)
+        defer { previousCPUTicks = current }
+        guard let previous = previousCPUTicks else { return nil }
+        return current.usage(since: previous)
     }
 
     // MARK: - Memory
@@ -110,7 +104,7 @@ public actor HostTelemetryProbe: TelemetryProbing {
     /// "used") goes the other way and makes every Mac look permanently near
     /// capacity, because macOS deliberately keeps that cache full and reclaims
     /// it on demand.
-    private func memoryUsed() -> UInt64 {
+    private func memoryUsed() -> UInt64? {
         var stats = vm_statistics64_data_t()
         var count = mach_msg_type_number_t(
             MemoryLayout<vm_statistics64_data_t>.stride / MemoryLayout<integer_t>.stride
@@ -122,7 +116,7 @@ public actor HostTelemetryProbe: TelemetryProbing {
         }
         guard status == KERN_SUCCESS else {
             Log.telemetry.error("host_statistics64(HOST_VM_INFO64) failed: \(status)")
-            return 0
+            return nil
         }
         let appMemory = UInt64(stats.internal_page_count)
             .subtractingReportingOverflow(UInt64(stats.purgeable_count))

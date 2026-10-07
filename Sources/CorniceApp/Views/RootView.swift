@@ -154,7 +154,7 @@ struct RootView: View {
     /// Never at rest, where the surface must be indistinguishable from the notch
     /// glass, and never on states that are not about the music.
     private var showsTint: Bool {
-        guard model.artworkTint != nil else { return false }
+        guard model.preferences.tintFromArtwork, model.artwork != nil else { return false }
         switch state {
         case .collapsed, .activity, .hud: return false
         case .peek: return true
@@ -167,8 +167,8 @@ struct RootView: View {
         surfaceShape
             .fill(Theme.Palette.panel(scheme))
             .overlay {
-                if let tint = model.artworkTint, showsTint {
-                    tintLayers(tint: tint, size: size)
+                if showsTint {
+                    tintLayers(size: size)
                         .clipShape(surfaceShape)
                 }
             }
@@ -197,55 +197,45 @@ struct RootView: View {
             .frame(width: size.width, height: size.height)
     }
 
-    /// Artwork colour, layered rather than blended.
-    ///
-    /// A vertical wash in the cover's strongest colour, then one soft pool per
-    /// accent in the corner that accent came from, so a sleeve that is amber at
-    /// the top and green at the bottom paints a surface that is amber at the top
-    /// and green at the bottom. Averaging the cover to a single colour is what
-    /// made every album produce the same generic tint.
-    ///
-    /// The accents are clamped before they get here, which is what keeps white
-    /// text above 4.5:1 however lurid the cover.
-    private func tintLayers(tint: Color, size: CGSize) -> some View {
-        let strength = model.preferences.tintStrength * (scheme == .light ? 0.55 : 1)
+    private func tintLayers(size: CGSize) -> some View {
+        let strength = model.preferences.tintStrength / Preferences.maximumTintStrength
         let reach = max(size.width, size.height)
         let accents = model.artworkAccents
-        // Shared out across however many pools there are, so a detailed cover
-        // paints more colours rather than more opacity. Six pools at the alpha
-        // one pool wants would stack straight back into a single flat wash,
-        // and take the text's contrast with them.
-        let poolAlpha = 0.30 / max(1, Double(accents.count)).squareRoot()
 
         return ZStack {
-            LinearGradient(
-                stops: [
-                    .init(color: tint.opacity(0.22 * strength), location: 0),
-                    .init(color: tint.opacity(0.08 * strength), location: 0.46),
-                    .init(color: tint.opacity(0), location: 0.82),
-                    .init(color: tint.opacity(0), location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-
+            // Blurring the cover keeps its colour layout and texture, even when
+            // two albums share the same dominant hue.
+            if let artwork = model.artwork {
+                Image(nsImage: artwork)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size.width, height: size.height)
+                    .clipped()
+                    .blur(radius: 28)
+                    .scaleEffect(1.15)
+                    .opacity(0.9 * strength)
+                    .id(ObjectIdentifier(artwork))
+                    .transition(.opacity)
+            }
             ForEach(Array(accents.enumerated()), id: \.offset) { _, accent in
                 RadialGradient(
-                    stops: [
-                        .init(color: accent.color.opacity(poolAlpha * strength * accent.weight), location: 0),
-                        .init(color: accent.color.opacity(poolAlpha * 0.4 * strength * accent.weight), location: 0.45),
-                        .init(color: accent.color.opacity(0), location: 1),
-                    ],
-                    center: accent.position,
-                    startRadius: 0,
-                    // Tighter than the surface, so each pool stays where the
-                    // colour came from instead of washing over the whole panel.
-                    endRadius: reach * 0.55
+                    colors: [accent.color.opacity(0.42 * strength * accent.weight), .clear],
+                    center: accent.position, startRadius: 0, endRadius: reach * 0.48
                 )
             }
+            // A quiet centre for the title and transport; colour stays around
+            // the edges. Contrast comes from this scrim, not altered colours.
+            LinearGradient(
+                colors: [Theme.Palette.panel(scheme).opacity(0.55),
+                         Theme.Palette.panel(scheme).opacity(0.7),
+                         Theme.Palette.panel(scheme).opacity(0.55)],
+                startPoint: .top, endPoint: .bottom
+            )
         }
+        .frame(width: size.width, height: size.height)
         .allowsHitTesting(false)
-        .animation(Theme.Motion.telemetry, value: model.artworkAccents)
+        .animation(.easeInOut(duration: 0.5), value: model.artworkAccents)
+        .animation(.easeInOut(duration: 0.5), value: model.artwork.map(ObjectIdentifier.init))
     }
 
     private func animation(for state: SurfaceState) -> Animation {

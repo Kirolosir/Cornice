@@ -16,7 +16,7 @@ struct PulsingArtwork: View {
             image: model.artwork,
             size: size,
             cornerRadius: cornerRadius,
-            beatIntensity: model.levels.beatIntensity
+            beatIntensity: model.indicatorMode == .spectrum ? model.levels.beatIntensity : 0
         )
     }
 }
@@ -66,22 +66,22 @@ struct EqualizerIndicator: View {
     private let barCount = 6
     private let barHeight: CGFloat = 14
     private let resting: Float = 2.0 / 14.0
-    private var audioDriven: Bool { model.barsFollowAudio }
+    private var mode: AudioIndicatorMode { isLive ? model.indicatorMode : .resting }
 
     var body: some View {
         // Only use a display clock for the playback indicator shown when audio
         // capture is off. Captured audio already has its own sampling clock.
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !isLive || audioDriven || reduceMotion)) { context in
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: mode != .playback || reduceMotion)) { context in
             let heights = heights(at: context.date)
             WaveformBars(heights: heights, tint: tint, height: barHeight)
-                .animation(reduceMotion || !audioDriven ? nil : .linear(duration: 1.0 / 30), value: heights)
+                .animation(reduceMotion ? nil : .linear(duration: 1.0 / 30), value: heights)
                 .accessibilityHidden(true)
         }
     }
 
     private func heights(at date: Date) -> [Float] {
-        guard isLive else { return Array(repeating: resting, count: barCount) }
-        if audioDriven {
+        guard mode != .resting else { return Array(repeating: resting, count: barCount) }
+        if mode == .spectrum {
             return model.levels.barHeights(count: barCount, resting: resting, outputVolume: model.outputVolume)
         }
         guard !reduceMotion else { return Array(repeating: resting, count: barCount) }

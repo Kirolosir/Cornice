@@ -45,6 +45,7 @@ enum PreviewServices {
 private actor PreviewMediaController: MediaControlling {
     nonisolated let source: MediaSource = .spotify
     private let startedAt = Date()
+    private var state: PlaybackState = .playing
 
     nonisolated func isRunning() async -> Bool { true }
 
@@ -53,7 +54,7 @@ private actor PreviewMediaController: MediaControlling {
         let elapsed = Date().timeIntervalSince(startedAt).truncatingRemainder(dividingBy: duration)
         return MediaSnapshot(
             source: .spotify,
-            state: .playing,
+            state: state,
             title: "Do I Wanna Know?",
             artist: "Arctic Monkeys",
             album: "AM",
@@ -68,7 +69,9 @@ private actor PreviewMediaController: MediaControlling {
         )
     }
 
-    func perform(_ command: MediaCommand) async throws {}
+    func perform(_ command: MediaCommand) async throws {
+        if command == .playPause { state = state.isPlaying ? .paused : .playing }
+    }
 
     /// A generated cover, so the documentation images exercise the artwork and
     /// tinting paths without shipping someone else's album art in the repo.
@@ -113,11 +116,13 @@ private actor PreviewMediaController: MediaControlling {
 private struct PreviewTelemetryProbe: TelemetryProbing {
     func sample() async -> TelemetrySample {
         let phase = Date().timeIntervalSince1970
+        let used = UInt64((18.6 + 0.8 * sin(phase * 0.3)) * 1024 * 1024 * 1024)
+        let total = UInt64(32) * 1024 * 1024 * 1024
         return TelemetrySample(
             cpuUsage: 0.29 + 0.18 * sin(phase * 0.7),
-            memoryUsage: 0.58 + 0.04 * sin(phase * 0.3),
-            memoryUsedBytes: UInt64(18.6 * 1024 * 1024 * 1024),
-            memoryTotalBytes: UInt64(32.0 * 1024 * 1024 * 1024),
+            memoryUsage: Double(used) / Double(total),
+            memoryUsedBytes: used,
+            memoryTotalBytes: total,
             battery: BatteryState(level: 0.72, isCharging: false, isPluggedIn: false, minutesRemaining: 214),
             capturedAt: .now
         )

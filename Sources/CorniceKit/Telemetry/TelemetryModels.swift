@@ -17,6 +17,8 @@ public struct TelemetrySample: Equatable, Sendable {
     public let memoryTotalBytes: UInt64
     public let battery: BatteryState?
     public let capturedAt: Date
+    public let cpuAvailable: Bool
+    public let memoryAvailable: Bool
 
     public init(
         cpuUsage: Double,
@@ -24,7 +26,9 @@ public struct TelemetrySample: Equatable, Sendable {
         memoryUsedBytes: UInt64,
         memoryTotalBytes: UInt64,
         battery: BatteryState?,
-        capturedAt: Date
+        capturedAt: Date,
+        cpuAvailable: Bool = true,
+        memoryAvailable: Bool = true
     ) {
         self.cpuUsage = cpuUsage
         self.memoryUsage = memoryUsage
@@ -32,14 +36,38 @@ public struct TelemetrySample: Equatable, Sendable {
         self.memoryTotalBytes = memoryTotalBytes
         self.battery = battery
         self.capturedAt = capturedAt
+        self.cpuAvailable = cpuAvailable
+        self.memoryAvailable = memoryAvailable
     }
 
-    /// The zero sample, shown before the first delta is available. CPU load is
-    /// meaningless until there are two readings to subtract.
+    /// Before sampling, values are placeholders and both metrics are unavailable.
     public static let empty = TelemetrySample(
         cpuUsage: 0, memoryUsage: 0, memoryUsedBytes: 0, memoryTotalBytes: 0,
-        battery: nil, capturedAt: .distantPast
+        battery: nil, capturedAt: .distantPast, cpuAvailable: false, memoryAvailable: false
     )
+}
+
+/// The kernel exposes four separate 32-bit counters. Difference each one
+/// before adding them, so one wrapping counter cannot spoil the whole reading.
+public struct CPUCounterReading: Sendable {
+    public let user: UInt32
+    public let system: UInt32
+    public let idle: UInt32
+    public let nice: UInt32
+
+    public init(user: UInt32, system: UInt32, idle: UInt32, nice: UInt32) {
+        self.user = user; self.system = system; self.idle = idle; self.nice = nice
+    }
+
+    public func usage(since previous: Self) -> Double? {
+        let deltas = [user &- previous.user, system &- previous.system,
+                      idle &- previous.idle, nice &- previous.nice]
+        // A reset after waking looks like an implausibly large interval.
+        guard deltas.allSatisfy({ $0 < UInt32.max / 2 }) else { return nil }
+        let total = deltas.reduce(UInt64(0)) { $0 + UInt64($1) }
+        guard total > 0 else { return nil }
+        return 1 - Double(deltas[2]) / Double(total)
+    }
 }
 
 public struct BatteryState: Equatable, Sendable {

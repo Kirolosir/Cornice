@@ -37,13 +37,12 @@ final class TelemetryProbeTests: XCTestCase {
         XCTAssertLessThan(Double(sample.memoryUsedBytes), everythingButFree)
     }
 
-    /// The first reading has nothing to difference against and must report zero
-    /// rather than inventing a figure; the second must be a real fraction.
-    func testCPULoadIsAFractionAndStartsAtZero() async {
+    /// The first reading needs a second set of counters before it is available.
+    func testCPULoadIsAFractionAndWaitsForADelta() async {
         let probe = HostTelemetryProbe()
 
         let first = await probe.sample()
-        XCTAssertEqual(first.cpuUsage, 0, "nothing to difference against yet")
+        XCTAssertFalse(first.cpuAvailable, "nothing to difference against yet")
 
         // Give the counters something to move.
         var sink = 0.0
@@ -51,6 +50,7 @@ final class TelemetryProbeTests: XCTestCase {
         XCTAssertGreaterThan(sink, 0)
 
         let second = await probe.sample()
+        XCTAssertTrue(second.cpuAvailable)
         XCTAssertGreaterThanOrEqual(second.cpuUsage, 0)
         XCTAssertLessThanOrEqual(second.cpuUsage, 1, "load is a fraction of total capacity")
     }

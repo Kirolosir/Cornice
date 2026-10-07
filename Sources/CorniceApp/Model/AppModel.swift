@@ -360,13 +360,17 @@ final class AppModel {
         preferences.audioVisualizerEnabled && visualizerStatus == .running
     }
 
-    /// Whether the playing indicator has anything to report.
-    ///
-    /// Either the analyser is live (in which case it draws real audio, whatever
-    /// is producing it), or a player says it is playing, in which case the bars
-    /// report that and nothing more.
+    /// Keep a resting row beside a loaded song; motion is decided separately.
     var showsIndicator: Bool {
-        isVisualizerLive || media?.state.isPlaying == true
+        media?.hasTrack == true || indicatorMode != .resting
+    }
+
+    var indicatorMode: AudioIndicatorMode {
+        .resolve(captureEnabled: preferences.audioVisualizerEnabled,
+                 captureRunning: visualizerStatus == .running,
+                 hasTrack: media?.hasTrack == true,
+                 isPlaying: media?.state.isPlaying == true,
+                 hasAudio: !levels.isSilent && outputVolume > 0)
     }
 
     /// Marks repeat-one as the app's responsibility for this player.
@@ -547,6 +551,7 @@ final class AppModel {
         case "telemetry":
             let previousBattery = telemetry.latest?.battery
             let sample = await serviceContainer.telemetry.sample()
+            guard !Task.isCancelled else { return }
             telemetry.append(sample)
             handleBatteryChange(from: previousBattery, to: sample.battery)
         default: break
@@ -562,9 +567,14 @@ final class AppModel {
     private func refreshMedia() async {
         readOutputVolume()
         let coordinator = serviceContainer.media
-        runningPlayers = await coordinator.runningSources()
+        let sources = await coordinator.runningSources()
         let polled = await coordinator.snapshot()
-        mediaPermissionDenied = await coordinator.allSourcesUnavailable()
+        let unavailable = await coordinator.allSourcesUnavailable()
+        // A hover can replace the polling task while an Apple event is still
+        // returning. Don't let that cancelled poll restore an old playing state.
+        guard !Task.isCancelled else { return }
+        runningPlayers = sources
+        mediaPermissionDenied = unavailable
 
         var snapshot = reconcile(polled)
         // The player cannot report a mode it does not have, so a repeat-one the
@@ -601,20 +611,16 @@ final class AppModel {
 
         // Only refetch when the *track* changed, not on every poll.
         guard snapshot.trackIdentity != artworkTrackIdentity else { return }
-        artworkTrackIdentity = snapshot.trackIdentity
-
-        guard let data = await coordinator.artwork(for: snapshot),
-              let image = NSImage(data: data) else {
+        let data = await coordinator.artwork(for: snapshot)
+        guard !Task.isCancelled, media?.trackIdentity == snapshot.trackIdentity else { return }
+        guard let data, let image = NSImage(data: data) else {
             artwork = nil
             artworkTint = nil
             artworkAccents = []
             return
         }
-        artwork = image
-        // Extracted once per track, not once per poll: this walks the cover.
-        let accents = preferences.tintFromArtwork ? ArtworkPalette.accents(of: image) : []
-        artworkAccents = accents
-        artworkTint = accents.first?.color
+        artworkTrackIdentity = snapshot.trackIdentity
+        applyArtwork(image)
     }
 
     /// Pulls the newest audio frame. Called from the UI's display timer.
@@ -639,12 +645,8 @@ final class AppModel {
 
         // Say so once, where the user is actually looking.
         //
-        // The Settings tab has carried this warning for a while, but nobody
-        // opens Settings to find out why a row of bars looks wrong. From the
-        // outside a refused tap is indistinguishable from music the visualiser
-        // does not like: the bars fall back to the standard bob and keep going,
-        // so it reads as "it doesn't react to some songs" rather than as a
-        // permission that needs granting again.
+        // A refused tap also returns silence. Keep the bars at rest and make
+        // the permission issue visible instead of substituting fake motion.
         if audioCaptureLooksBlocked, !warnedTapIsDeaf {
             warnedTapIsDeaf = true
             Log.audio.error("visualiser is running but hearing nothing while a player is playing")
@@ -683,39 +685,12 @@ final class AppModel {
         return Date().timeIntervalSince(lastAudioAt) < 1.0
     }
 
-    /// Whether the bars should follow the analyser rather than the standard bob.
-    ///
-    /// Deliberately slow to change, and separate from `hasLiveAudio` for that
-    /// reason. Driven by whether audio arrived in the *last second* (which is
-    /// what the indicator used to use), the bars swapped between two quite
-    /// different motions at every gap between tracks and in any quiet passage.
-    /// That swap is the glitch: one moment they are following the music, the
-    /// next they are doing a synthetic wave, and back again a second later.
-    ///
-    /// Whether there is sound right now is already carried by the band values,
-    /// which fall to zero on their own. This answers only whether the analyser
-    /// can hear *at all*, which changes about once a session.
-    var barsFollowAudio: Bool {
-        guard preferences.audioVisualizerEnabled, visualizerStatus == .running else { return false }
-        guard let lastAudioAt else {
-            // Nothing heard yet. macOS feeds a tap it has refused silence rather
-            // than an error, so after long enough this is the shape of a denied
-            // permission. Fall back to the bob rather than leaving a dead row.
-            guard let since = visualizerRunningSince else { return true }
-            return Date().timeIntervalSince(since) < 15
-        }
-        // Long enough to cover a gap between tracks, a quiet intro, or a pause.
-        return Date().timeIntervalSince(lastAudioAt) < 8
-    }
-
-    /// The tap is running, the music is playing, and it has heard nothing.
-    ///
-    /// The one combination that means the permission is missing rather than the
-    /// room being quiet.
+    /// Silence alone is not proof of a missing permission. Only flag a tap
+    /// that has never heard audio, after giving it time to start.
     var audioCaptureLooksBlocked: Bool {
         guard visualizerStatus == .running, media?.state.isPlaying == true else { return false }
-        guard let lastAudioAt else { return true }
-        return Date().timeIntervalSince(lastAudioAt) > 4
+        guard lastAudioAt == nil, let since = visualizerRunningSince else { return false }
+        return Date().timeIntervalSince(since) > 15
     }
 
     /// Starts audio capture off the main actor.
@@ -747,6 +722,8 @@ final class AppModel {
     func applyVisualizerStatus(_ status: AudioVisualizerEngine.Status) {
         visualizerStatus = status
         visualizerRunningSince = status == .running ? Date() : nil
+        lastAudioAt = nil
+        warnedTapIsDeaf = false
         if case .failed(let reason) = status {
             Log.audio.notice("visualiser disabled: \(reason.message, privacy: .public)")
         }
@@ -761,11 +738,28 @@ final class AppModel {
     // MARK: - Mutators for the actions extension
 
     func applyPreferences(_ updated: Preferences) {
+        let tintChanged = preferences.tintFromArtwork != updated.tintFromArtwork
         preferences = updated
+        if tintChanged { updateArtworkPalette() }
+    }
+
+    func applyArtwork(_ image: NSImage?) {
+        artwork = image
+        updateArtworkPalette()
+    }
+
+    private func updateArtworkPalette() {
+        artworkAccents = preferences.tintFromArtwork
+            ? artwork.map { ArtworkPalette.accents(of: $0) } ?? [] : []
+        artworkTint = artworkAccents.first.map { ArtworkPalette.indicatorColor($0.color) }
     }
 
     func applyTimers(_ updated: TimerBoard) {
         timers = updated
+    }
+
+    func applyTelemetry(_ history: TelemetryHistory) {
+        telemetry = history
     }
 
     func mutateTimers(_ mutate: (inout TimerBoard) -> Void) {
