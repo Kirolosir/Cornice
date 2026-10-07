@@ -2,25 +2,16 @@ import Foundation
 import ServiceManagement
 import CorniceKit
 
-/// Launch-at-login, via `SMAppService`.
-///
-/// `SMAppService.mainApp` is the modern replacement for the deprecated
-/// `SMLoginItemSetEnabled` and the long-deprecated login-items AppleScript.
-/// It requires no helper bundle and no extra entitlement, and the user can
-/// revoke it from System Settings (where they will look for it), rather than
-/// only from inside this app.
+/// Manage launch at login with SMAppService. The user can also change it in System
+/// Settings.
 enum LoginItem {
 
     static var isEnabled: Bool {
         SMAppService.mainApp.status == .enabled
     }
 
-    /// Returns an error message, or `nil` on success.
-    ///
-    /// The common failure is running from an unsigned build outside
-    /// `/Applications`, where the service cannot be registered. That is the
-    /// normal state during development, so it is reported as a clear
-    /// explanation rather than swallowed.
+    /// Return nil on success or a readable error. Registration can fail when running a
+    /// development build outside Applications.
     @discardableResult
     static func setEnabled(_ enabled: Bool) -> String? {
         do {

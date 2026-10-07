@@ -3,10 +3,8 @@ import Observation
 import SwiftUI
 import CorniceKit
 
-/// All observable application state.
-///
-/// A coordinator, not a worker: every operation is delegated to a service, so
-/// this type holds scheduling and state transitions and nothing else.
+/// The state the views read, plus the tasks that refresh it. Services handle the player and
+/// system calls.
 @MainActor
 @Observable
 final class AppModel {
@@ -33,13 +31,8 @@ final class AppModel {
     /// Several colours from the cover with the corner each belongs to, so the
     /// surface is laid out like the artwork rather than averaged from it.
     private(set) var artworkAccents: [ArtworkAccent] = []
-    /// A toggle the user has just pressed, held until the player confirms it.
-    ///
-    /// Players do not apply a command synchronously. Measured against Spotify, a
-    /// shuffle change was still being reported the old way 154 ms after the
-    /// command and had landed by 320 ms, so a poll fired in between reads the
-    /// stale value and overwrites the button's own state, which looks exactly
-    /// like a button that does nothing.
+    /// Hold a button's new state while the player catches up. Otherwise an old poll can
+    /// briefly undo the click.
     private struct PendingToggle {
         var isShuffling: Bool?
         var repeatMode: RepeatMode?
@@ -49,12 +42,8 @@ final class AppModel {
 
     private var pendingToggle: PendingToggle?
 
-    /// Repeat-one the app is providing itself, for a player that cannot be asked
-    /// for it. Held here because the player has no way to report it back.
-    ///
-    /// Only used when Spotify's Web API is not signed in. With a sign-in the
-    /// player is asked for repeat-one directly and this stays false. See
-    /// `AppModel+Spotify`.
+    /// Repeat-one handled by Cornice when Spotify isn't connected to the Web API. The
+    /// player can't report this mode back to us.
     private(set) var appliesRepeatOne = false
 
     /// Whether Spotify's Web API can be asked for a repeat mode. Drives Settings.
@@ -168,9 +157,8 @@ final class AppModel {
     private var visualizerRunningSince: Date?
     /// When the analyser last reported something other than silence.
     private var lastAudioAt: Date?
-    /// How far the output fader is up, 0...1. Re-read a few times a second
-    /// rather than every frame: it is cheap, but it is not free, and nobody
-    /// moves a volume slider at sixty hertz.
+    /// Read output volume a few times a second. There is no need to query the device on
+    /// every frame.
     private(set) var outputVolume: Float = 1
     private var volumeReadAt: Date?
 
@@ -199,21 +187,8 @@ final class AppModel {
         // Restored, so the setting survives a relaunch the way a setting should.
         appliesRepeatOne = preferences.appliesRepeatOne
         if appliesRepeatOne { Log.media.notice("repeat one: restored") }
-        // Order matters here, and it has taken a stopwatch to see why more than
-        // once. Nothing the app actually *does* may sit behind something slow.
-        //
-        // Three offenders so far: the audio tap (building a process tap, an
-        // aggregate device and an IO proc, measured at 5.2 s), the machine's
-        // marketing name, which shells out to `system_profiler`, and reading the
-        // Spotify token out of the Keychain, which can stop to ask the user for
-        // permission and wait as long as it likes for an answer. Each of them,
-        // in turn, used to run before the polling loop started, and each in turn
-        // meant the app read nothing at all until it finished: no track, no
-        // artwork, and no repeat-one timer, which is a long time for a thing
-        // whose whole job is to show what is playing.
-        //
-        // The cheap event sources and the polling loop go first. Everything slow
-        // runs on its own task and reports back when it is ready.
+        // Start polling first. Audio setup, system_profiler and Keychain prompts can be
+        // slow, so don't make startup wait for them.
         startOutputDeviceMonitoring()
         startHUDSources()
         restartRefreshLoops()
@@ -222,10 +197,8 @@ final class AppModel {
             startVisualizer()
         }
 
-        // Reads the Keychain, which is allowed to take as long as it likes.
-        // After a rebuild macOS asks the user before handing the token over,
-        // and an ad-hoc signature is rebuilt often. Nothing else waits on it:
-        // until it lands, the repeat button uses the fallback it always had.
+        // The Keychain may show a prompt after a rebuild. Let the rest of the app start
+        // while this waits.
         Task { [weak self] in await self?.configureSpotify() }
 
         // Cosmetic: it names the Mac in Settings and in the About tab.
@@ -254,12 +227,8 @@ final class AppModel {
 
     // MARK: - Output device
 
-    /// Watches the default output and announces wireless devices as they connect.
-    ///
-    /// Event-driven through Core Audio rather than polled, and deliberately not
-    /// via CoreBluetooth: connecting AirPods changes the default output device,
-    /// which is both the moment worth reacting to and a signal that needs no
-    /// Bluetooth permission to observe.
+    /// Watch Core Audio's default output for wireless device connections. This doesn't need
+    /// Bluetooth permission.
     private func startOutputDeviceMonitoring() {
         outputDevice = serviceContainer.outputDevices.current()
         serviceContainer.outputDevices.start { [weak self] device in
@@ -316,11 +285,8 @@ final class AppModel {
         isHovering = hovering
     }
 
-    /// Called whenever the drawn surface changes size, so AppKit's hit-testing
-    /// and hover regions can be brought back into step with it.
-    ///
-    /// SwiftUI knows what it drew; AppKit does not. Any state change that skips
-    /// this leaves a surface that is visible but not clickable.
+    /// Tell AppKit when the drawn surface changes, so its clickable and hover areas still
+    /// match.
     var onSurfaceStateChanged: (() -> Void)?
 
     func present(_ state: SurfaceState) {
@@ -329,13 +295,8 @@ final class AppModel {
         surfaceState = state
         onSurfaceStateChanged?()
 
-        // Both loops poll faster while the panel is open, so they are rebuilt
-        // when that changes, and `restartLoop` reads immediately, so opening
-        // already refreshes. Rebuilding on *every* transition instead, with a
-        // separate forced read on top, meant one hover fired four Apple events
-        // in a millisecond: peek and expanded, twice each. At roughly 100 ms of
-        // CPU per round trip that is most of a frame budget spent re-reading
-        // what had just been read.
+        // Only restart the loops when the panel's open state changes. Restarting on every
+        // animation step sends duplicate player requests.
         if wasOpen != state.isOpen {
             restartLoop("media")
             restartLoop("telemetry")
@@ -350,12 +311,8 @@ final class AppModel {
         present(surfaceState.isOpen ? .collapsed : .expanded)
     }
 
-    /// Whether the spectrum analyser is running and its output can be trusted.
-    ///
-    /// Deliberately not "is a player playing": the tap hears everything the Mac
-    /// outputs, including a browser tab that no scriptable player knows about.
-    /// Tying the indicator to Spotify's reported state meant it sat still
-    /// through music the app could plainly hear.
+    /// Whether audio capture is running. It can hear browser audio too, even without a
+    /// track from Music or Spotify.
     var isVisualizerLive: Bool {
         preferences.audioVisualizerEnabled && visualizerStatus == .running
     }
@@ -387,15 +344,8 @@ final class AppModel {
         expectsTrackChange = true
     }
 
-    /// Puts the track back when the player moved on by itself.
-    ///
-    /// The pre-emptive loop is the seamless path, but it can be beaten: Spotify
-    /// can be set to crossfade, which starts the next track seconds before the
-    /// current one reaches the length it reports, and that setting lives on
-    /// Spotify's servers where it cannot be read. So the app also watches for a
-    /// track changing on its own near the end and goes back, and remembers how
-    /// early it happened, so the next loop lands ahead of the crossfade rather
-    /// than behind it and no second recovery is needed.
+    /// Return to the previous song if Spotify advances early during repeat-one. Remember
+    /// the early transition so the next loop can run ahead of the crossfade.
     private func recoverFromAutomaticAdvance() {
         guard let snapshot = media, snapshot.hasTrack else { return }
         defer {
@@ -428,11 +378,8 @@ final class AppModel {
         stepToPreviousTrack()
     }
 
-    /// Arranges for the track to loop before the player can move on.
-    ///
-    /// Rescheduled on every snapshot rather than left to run: the playhead moves
-    /// when the user scrubs, the track changes, and playback pauses, and each of
-    /// those makes the previous plan wrong.
+    /// Recalculate the loop when a snapshot arrives. Seeking, pausing or changing tracks
+    /// can invalidate the previous deadline.
     func scheduleRepeatOneLoop() {
         repeatOneTask?.cancel()
         repeatOneTask = nil
@@ -460,11 +407,7 @@ final class AppModel {
         scheduleRepeatOneLoop()
     }
 
-    /// Whether the travelling artwork is on screen at all.
-    ///
-    /// It is one view across every state, so this is asked once rather than
-    /// being decided independently by each layout, which is how it ended up
-    /// visible in one state and missing in the next.
+    /// Decide whether the shared artwork view should be visible in this state.
     var showsArtwork: Bool {
         guard let media, media.hasTrack else { return false }
         switch surfaceState {
@@ -511,33 +454,17 @@ final class AppModel {
         }
     }
 
-    /// Refresh cadence, adjusted for whether the panel is actually on screen.
-    ///
-    /// Telemetry is only drawn when expanded, so it backs right off otherwise.
-    /// Media keeps its cadence regardless, because the collapsed surface shows
-    /// the current track and a stale title there is the most visible possible
-    /// bug.
+    /// Poll faster while the panel is open. Keep checking the battery when it's closed, but
+    /// less often.
     private func interval(for name: String) -> Double {
         switch name {
         case "telemetry":
-            // Drawn in the System module when the panel is open, but also the
-            // only source of battery transitions, which have to be noticed
-            // whether anyone is looking or not. Thirty seconds closed is a
-            // compromise: fast enough that a charge notice is not stale, slow
-            // enough to be free.
+            // Keep checking battery changes in the background. Thirty seconds is enough
+            // when the System tab isn't visible.
             return surfaceState.isOpen ? preferences.telemetryRefreshInterval : 30
         default:
-            // Each media poll is several Apple events to another process, and
-            // profiling puts one Spotify round-trip at roughly 100 ms of CPU.
-            // Its scripting handler is not cheap. That cost is unavoidable on
-            // the supported API, so the cadence follows what is on screen
-            // rather than a fixed rate.
-            //
-            // Open: the scrubber and playhead are visible, so use the
-            // configured rate. Collapsed: the surface shows album art and a
-            // title that only change between tracks, so poll lazily, and any
-            // staleness is erased by the immediate refresh on hover, before
-            // the user can see it.
+            // AppleScript polling isn't free. Use the configured rate when open and a
+            // slower rate when closed. Hovering triggers a fresh reading.
             if surfaceState.isOpen { return preferences.mediaRefreshInterval }
             if media?.state.isPlaying != true { return 8 }
             if preferences.idleDisplay == .nothing { return 8 }
@@ -577,16 +504,8 @@ final class AppModel {
         mediaPermissionDenied = unavailable
 
         var snapshot = reconcile(polled)
-        // The player cannot report a mode it does not have, so a repeat-one the
-        // app is providing is layered back on.
-        //
-        // Held purely locally, and never cleared from a reading. Deciding it was
-        // off whenever the player reported repeat off made the feature self-
-        // destructing: the app sets the player's own repeat *off* for this mode
-        // (the loop is what does the repeating), so an honest poll saying "repeat
-        // is off" is the normal case, not a reason to give up. Any dropped
-        // command or race did the same thing. It now ends only when the button
-        // is pressed again.
+        // Keep our local repeat-one mode until the user changes it. The player's repeat
+        // value doesn't describe the loop Cornice is running.
         if appliesRepeatOne, let current = snapshot {
             snapshot = current.with(repeatMode: .one)
         }
@@ -633,9 +552,7 @@ final class AppModel {
         levels = latest
         let wasHearing = hasLiveAudio
         if !latest.isSilent { lastAudioAt = .now }
-        // Logged on the edge only. "Is the visualiser working?" is otherwise
-        // unanswerable from outside the app, because macOS reports a tap it has
-        // denied as running and simply feeds it silence.
+        // Log the first non-silent frame to confirm that capture is receiving audio.
         if !wasHearing, !latest.isSilent {
             Log.audio.notice("visualiser hearing audio")
             // Heard something, so any earlier complaint was wrong or has been
@@ -643,10 +560,8 @@ final class AppModel {
             warnedTapIsDeaf = false
         }
 
-        // Say so once, where the user is actually looking.
-        //
-        // A refused tap also returns silence. Keep the bars at rest and make
-        // the permission issue visible instead of substituting fake motion.
+        // Warn once if the tap can't hear anything. Don't substitute a fake waveform for
+        // silence.
         if audioCaptureLooksBlocked, !warnedTapIsDeaf {
             warnedTapIsDeaf = true
             Log.audio.error("visualiser is running but hearing nothing while a player is playing")
@@ -654,12 +569,8 @@ final class AppModel {
         }
     }
 
-    /// Re-reads the output fader, at most a few times a second.
-    ///
-    /// Called from the frame timer while the surface is visible *and* from the
-    /// polling loop, which always runs. Reading it only from the frame timer
-    /// meant the value stayed at its initial full-volume assumption until the
-    /// panel was first opened, and the bars are sized by it.
+    /// Read output volume from both polling and the frame timer. Otherwise the bars assume
+    /// full volume until the panel opens.
     func readOutputVolume(at now: Date = .now) {
         guard volumeReadAt.map({ now.timeIntervalSince($0) > 0.25 }) ?? true else { return }
         volumeReadAt = now
@@ -675,11 +586,8 @@ final class AppModel {
         outputVolume = updated
     }
 
-    /// Whether the analyser has heard anything recently.
-    ///
-    /// macOS hands a process tap silence (not an error) when audio capture has
-    /// not been granted, so "the tap is running" says nothing about whether it
-    /// can hear. This is the question the interface actually needs answered.
+    /// Whether audio arrived recently. A tap can be running but still return silence if
+    /// macOS hasn't allowed capture.
     var hasLiveAudio: Bool {
         guard visualizerStatus == .running, let lastAudioAt else { return false }
         return Date().timeIntervalSince(lastAudioAt) < 1.0
@@ -693,21 +601,13 @@ final class AppModel {
         return Date().timeIntervalSince(since) > 15
     }
 
-    /// Starts audio capture off the main actor.
-    ///
-    /// `start()` builds a Core Audio process tap, an aggregate device and an IO
-    /// proc, and can additionally block on a TCC prompt. Run on the main actor
-    /// (which is where it used to run), that is five seconds in which the surface
-    /// does not respond to the pointer and no other event source has been
-    /// attached yet. The engine is its own lock-guarded object, so there is no
-    /// reason for any of it to happen here.
+    /// Start capture in a background task. Building the tap and waiting for permission
+    /// mustn't freeze the panel.
     func startVisualizer() {
         let engine = serviceContainer.visualizer
         Task.detached(priority: .utility) {
             let status = engine.start()
-            // Hopped back rather than captured: `self` is main-actor isolated,
-            // and the whole point of this detour is that the slow part happens
-            // somewhere else.
+            // Apply the result on the main actor after the slow setup finishes.
             await MainActor.run { [weak self] in
                 self?.applyVisualizerStatus(status)
             }
@@ -779,10 +679,7 @@ final class AppModel {
     private(set) var toast: String?
     private var toastTask: Task<Void, Never>?
 
-    /// Brief acknowledgement of an action.
-    ///
-    /// The panel does not take focus and there is no status area to write to,
-    /// so without this a control gives no feedback and people press it twice.
+    /// Brief feedback after an action, since this panel has no permanent status area.
     func flashToast(_ message: String) {
         toast = message
         toastTask?.cancel()

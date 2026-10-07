@@ -1,17 +1,7 @@
 import Foundation
 
-/// Every system notification the surface can show, and the size it takes.
-///
-/// All eleven use the one construction (square top corners, convex bottom,
-/// concave cove) at whatever size the notification needs. Nothing here is a
-/// separate window or a separate shape; a HUD is the same object as the player,
-/// stopped at a different size.
-///
-/// Widths are expressed as a *wing* (how far the surface grows past the notch
-/// on each side), rather than as an absolute, so a display whose notch measures
-/// something other than the 209 pt the design was drawn against still gets a
-/// surface centred on its own cut-out. Heights are a drop below the 38 pt band
-/// for the same reason.
+/// Sizes and behavior for each HUD, using the same panel shape. Widths grow from the
+/// measured notch on each side; heights extend below the notch band.
 public enum HUDKind: String, Equatable, Sendable, CaseIterable, Identifiable {
     case noInternet
     case filesReceived
@@ -72,11 +62,7 @@ public enum HUDKind: String, Equatable, Sendable, CaseIterable, Identifiable {
         }
     }
 
-    /// Horizontal inset for this HUD's content, measured from the body's edge.
-    ///
-    /// Short pills sit tighter to their edges than tall panels do, which is what
-    /// keeps a 42 pt strip from looking padded out and a 196 pt panel from
-    /// looking cramped.
+    /// Content inset for each HUD. Short notices use less padding than taller panels.
     public var contentPadding: CGFloat {
         switch self {
         case .charging: 18
@@ -105,11 +91,8 @@ public enum HUDKind: String, Equatable, Sendable, CaseIterable, Identifiable {
     /// only ever live in the margins either side of the hole.
     public var isShortPill: Bool { contentTop == 0 }
 
-    /// How long it stays up before retracting on its own.
-    ///
-    /// `nil` means it waits to be dealt with: an alert with buttons, or a timer
-    /// that is currently making a noise. Everything else is an announcement, and
-    /// an announcement that needs dismissing is a dialog wearing a disguise.
+    /// Automatic dismissal delay. Nil means the notice waits for input, such as a ringing
+    /// timer or an alert with buttons.
     public var dismissAfter: TimeInterval? {
         switch self {
         case .noInternet: nil

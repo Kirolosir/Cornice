@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
-#
-# Assembles Cornice.app from the SwiftPM build product.
-#
-# SwiftPM produces a bare executable, but macOS needs a bundle for several
-# things this app depends on: LSUIElement (no Dock icon), the Keychain access
-# group implied by a bundle identifier, user notifications, and SMAppService
-# for launch-at-login. All of those fail in ways that are confusing to debug
-# when the binary is run loose, so the bundle is not optional.
+# Build Cornice.app from the SwiftPM executable.
+# The bundle is needed for permissions, notifications and launch at login.
 
 set -euo pipefail
 
@@ -17,8 +11,7 @@ BUNDLE_ID="dev.cornice.app"
 BUILD_DIR="$ROOT/.build/$CONFIGURATION"
 APP_DIR="$ROOT/dist/$APP_NAME.app"
 
-# Version comes from the current tag when there is one, so a release build is
-# labelled by the tag rather than by whatever is hardcoded in a plist.
+# Use the latest tag for the version and the commit count for the build number.
 VERSION="$(git -C "$ROOT" describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.1.0")"
 BUILD_NUMBER="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo "1")"
 
@@ -66,19 +59,13 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
     <true/>
     <key>NSHumanReadableCopyright</key>
     <string>MIT licensed.</string>
-    <!-- Required before the app may send Apple events. macOS shows this string
-         in the permission prompt, so it has to say what the app actually wants
-         and why. Without it the first Apple event is refused outright. -->
+    <!-- Explain why the app needs Music and Spotify automation. -->
     <key>NSAppleEventsUsageDescription</key>
     <string>Cornice reads what Music and Spotify are playing, and sends play, pause, skip, and seek commands when you use the controls in the panel.</string>
-    <!-- Required for the Core Audio process tap that drives the visualiser.
-         Only requested when you turn the visualiser on in Settings. -->
+    <!-- Audio capture is requested when the visualizer is enabled. -->
     <key>NSAudioCaptureUsageDescription</key>
     <string>Cornice reads the audio your Mac is playing so the visualiser follows the music. Audio is analysed in memory for the spectrum display and is never recorded, saved, or sent anywhere.</string>
-    <!-- Registered so the Spotify sign-in can hand the browser somewhere to
-         come back to. The redirect carries an authorization code that is
-         useless without the PKCE verifier held in memory by the process that
-         started the sign-in, and its state parameter is checked on arrival. -->
+    <!-- Callback for Spotify PKCE sign-in. The app checks the returned state. -->
     <key>CFBundleURLTypes</key>
     <array>
         <dict>
@@ -90,9 +77,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
             </array>
         </dict>
     </array>
-    <!-- Cornice talks to accounts.spotify.com and api.spotify.com, and only
-         once you connect Spotify in Settings. It requests no camera,
-         microphone, location, contacts, or full-disk access. -->
+    <!-- Spotify requests only happen after the user connects their account. -->
     <key>NSSupportsAutomaticTermination</key>
     <false/>
     <key>NSSupportsSuddenTermination</key>
@@ -105,9 +90,8 @@ if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
     cp "$ROOT/Resources/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
 fi
 
-# An ad-hoc signature is enough for the app to run locally and for the Keychain
-# to treat it as a stable identity across rebuilds. It is NOT notarization and
-# will still show Gatekeeper's warning on another machine — see the README.
+# Sign locally. This isn't notarization; downloaded copies may need the README's
+# first-launch step, and rebuilding can affect permission grants.
 echo "==> Ad-hoc signing"
 codesign --force --deep --sign - "$APP_DIR" 2>/dev/null \
     || echo "    (codesign unavailable; the bundle will still run locally)"

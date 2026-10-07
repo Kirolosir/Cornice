@@ -30,106 +30,57 @@ public struct AudioLevels: Sendable, Equatable {
 
     public var isSilent: Bool { level < 0.001 }
 
-    /// Bar heights for a compact playing indicator, each 0...1 of full height.
-    ///
-    /// The spectrum decides the *shape* and the overall level decides how much
-    /// room that shape has to move in. That second half is what makes a quiet
-    /// passage barely stir and a loud one swing the full height: driving the
-    /// bars from the bands alone gives every passage the same amplitude, because
-    /// each band is already perceptually compressed, so the music changes shape
-    /// but never size.
+    /// Map the spectrum to bar heights from 0 to 1. Loudness and output volume control how
+    /// far the bars move.
     ///
     /// - Parameters:
-    ///   - count: how many bars to fill.
-    ///   - resting: the height a bar holds in silence, so the row reads as a
-    ///     control rather than as a glitch.
-    /// - Parameter outputVolume: how loud the Mac is playing, 0...1. The tap
-    ///   captures the stream *before* the volume fader, so without this the bars
-    ///   cannot tell music blasting from the same track at a whisper.
+    ///   - count: Number of bars.
+    ///   - resting: Height when silent.
+    ///   - outputVolume: System volume from 0 to 1. Capture happens before this fader.
     public func barHeights(count: Int, resting: Float = 0.3, outputVolume: Float = 1) -> [Float] {
         guard count > 0 else { return [] }
         guard !bands.isEmpty else { return Array(repeating: resting, count: count) }
 
-        // What is actually reaching the room: the stream's own level, scaled by
-        // how far the fader is up *relative to a normal listening volume*.
-        //
-        // Scaling straight off the fader was wrong in both directions. It shrank
-        // everything at ordinary volumes, so the indicator got quieter than it
-        // had been before the fader was considered at all; and the spread
-        // between one volume and another was too narrow to notice, so it did not
-        // buy the responsiveness it cost. Measured against a reference of 0.7,
-        // a normal volume now reads at full strength, a loud one is allowed to
-        // push past it, and a quiet one plainly falls away.
+        // Use 70% output volume as the reference. Lower volume reduces the motion, with a
+        // little extra range for louder output.
         let reference: Float = 0.7
         let fader = min(1, max(0, outputVolume))
         let volumeFactor = min(1.3, fader / reference)
         let audible = min(1, min(1, max(0, level)) * volumeFactor)
 
-        // A floor under the swing, so quiet-but-audible music still moves rather
-        // than sitting at rest and reading as broken, while loud music still
-        // plainly moves more.
-        //
-        // Both numbers were wrong before and in the same direction: a floor of
-        // 0.25 under a 0.45 exponent is heavily compressive, and left barely a
-        // fifth of the bars' travel covering a tenfold change in volume. That is
-        // technically a response and perceptually a flat line. A lower floor and
-        // a gentler curve spread the same range over something a person can
-        // actually see.
-        //
-        // The gate is what stops that floor outliving the audio. Applied
-        // unconditionally it left a quarter of the travel in place at zero
-        // volume, so muting the Mac still produced bars that moved: the floor
-        // was doing its job and doing it when there was nothing to report. It
-        // closes smoothly rather than snapping, so the bars settle out as the
-        // volume comes down instead of vanishing at a threshold.
-        // Low enough that it only bites on genuine silence and a muted fader,
-        // rather than on quiet music.
+        // Keep some motion for quiet music, but close the gate at silence or mute. The
+        // floor mustn't keep the bars moving with no audible output.
         let gate = min(1, audible / 0.006)
         let headroom = gate * (0.10 + 0.90 * pow(audible, 0.8))
 
         return (0..<count).map { index in
-            // Expanded a little before it drives the bar. Band values sit in the
-            // middle of the range by design (pinning them would throw away the
-            // shape of the music), but mapped straight onto height that leaves
-            // the row looking timid, so the curve is bent upwards here where it
-            // costs nothing.
+            // Lift midrange band values a little so their motion is visible without pinning
+            // the bars at full height.
             let energy = pow(min(1, max(0, peak(of: index, of: count))), 0.75)
-            // A little extra punch on the lowest bar when an onset lands, so the
-            // row reads as locked to the beat rather than merely busy. Gated
-            // like the rest: added outside the gate it kept punching the first
-            // bar on every beat while the Mac was muted, which is how a row that
-            // was otherwise perfectly still still looked alive.
+            // Give the bass bar a small beat kick. Apply the same gate so it stays still
+            // when muted.
             let kick = index == 0 ? beatIntensity * 0.14 * gate : 0
             let swing = (1 - resting) * energy * headroom + kick
             return min(1, max(resting, resting + swing))
         }
     }
 
-    /// The loudest band in one bar's slice of the spectrum.
-    ///
-    /// Peak rather than mean, for the same reason the analyser folds bins that
-    /// way: a narrow tone should move its bar fully instead of being averaged
-    /// into nothing by the quiet bins beside it.
+    /// Take the loudest band in this bar's range. An average would hide narrow tones among
+    /// quiet bands.
     private func peak(of index: Int, of count: Int) -> Float {
-        // Spread evenly rather than fixed-width-with-a-remainder: at five bars
-        // across eight bands the old split gave four bars one band each and the
-        // last one four, so the right-hand bar answered to half the spectrum.
+        // Spread the bands evenly across the requested bars so the last bar does not get
+        // most of the spectrum.
         let start = index * bands.count / count
         let end = max(start + 1, (index + 1) * bands.count / count)
         return bands[start..<min(end, bands.count)].max() ?? 0
     }
 }
 
-/// Turns a block of PCM samples into `AudioLevels`.
-///
-/// Kept free of Core Audio so the whole signal chain (windowing, banding,
-/// smoothing, onset detection) can be driven from synthetic waveforms in
-/// tests. Feeding it a 60 Hz sine and asserting the energy lands in the lowest
-/// band is a far better check than squinting at bars while music plays.
+/// Turn PCM samples into levels. Keeping Core Audio out of this type lets tests feed it
+/// generated signals.
 public struct SpectrumAnalyzer: Sendable {
 
-    /// Number of output bands. Eight reads clearly at notch size; more would be
-    /// sub-pixel on a 200-point-wide surface.
+    /// Number of frequency bands produced by the analyzer.
     public let bandCount: Int
     /// FFT window length. 1024 at 48 kHz is ~21 ms. Fast enough to track a
     /// beat, long enough to resolve bass.
@@ -137,12 +88,8 @@ public struct SpectrumAnalyzer: Sendable {
 
     private let sampleRate: Double
 
-    /// Attack and release coefficients.
-    ///
-    /// Asymmetric on purpose: bars jump to a transient almost immediately and
-    /// fall away slowly. Symmetric smoothing either looks sluggish on the
-    /// attack or jitters on the decay, and the asymmetry is what makes a
-    /// visualiser look "locked" to the music.
+    /// Rise quickly on a transient and settle more slowly. Using the same smoothing in both
+    /// directions felt sluggish or jittery.
     private let attack: Float = 0.55
     private let release: Float = 0.12
 
@@ -170,11 +117,11 @@ public struct SpectrumAnalyzer: Sendable {
         }
     }
 
-    /// Analyses one block of mono samples.
+    /// Analyze one block of mono audio.
     ///
     /// - Parameters:
-    ///   - samples: interleaved-to-mono PCM, nominally -1...1.
-    ///   - state: carried between calls; updated in place.
+    ///   - samples: Mono PCM samples, normally -1...1.
+    ///   - state: Previous analysis state, updated in place.
     public func analyze(_ samples: [Float], state: inout State) -> AudioLevels {
         analyze(channels: [samples], state: &state)
     }
@@ -195,19 +142,8 @@ public struct SpectrumAnalyzer: Sendable {
         for index in magnitudes.indices { magnitudes[index] = sqrt(magnitudes[index] / divisor) }
         var raw = Self.fold(magnitudes, into: bandCount, sampleRate: sampleRate, fftSize: fftSize)
 
-        // Gain, then perceptual scaling.
-        //
-        // The gain is the part that took a measurement to get right. A single
-        // FFT bin holds all of a pure tone's energy but only a fraction of
-        // broadband material's, because music spreads itself across hundreds of
-        // bins, so a chain calibrated on a sine wave reads real music as almost
-        // nothing. Measured here: a full-scale 1 kHz tone put its band at 0.89,
-        // while noise at a normal listening level put its band at 0.09, and the
-        // bars moved by a fraction of a point.
-        //
-        // This lifts broadband material into the usable range. A pure tone now
-        // saturates instead, which is the right way round: a sine wave pegging
-        // the meter is correct, a song failing to move it is not.
+        // Apply gain before compression. Music spreads energy over many FFT bins, so gain
+        // tuned only for a sine wave makes songs barely move the bars.
         for index in raw.indices {
             raw[index] = Self.compress(raw[index] * Self.bandGain * Self.spectralTilt(index, of: raw.count))
         }
@@ -245,17 +181,8 @@ public struct SpectrumAnalyzer: Sendable {
         state.framesSinceBeat += step
     }
 
-    /// Energy-based onset detection on the low bands.
-    ///
-    /// Compares the current low-frequency energy against a rolling mean and
-    /// fires when it exceeds it by a margin. This is the classic approach and
-    /// it is chosen over anything cleverer for a specific reason: it costs
-    /// almost nothing, and a visualiser that is occasionally a beat off is
-    /// vastly preferable to one that burns CPU on a laptop doing spectral flux
-    /// analysis for a decorative animation.
-    ///
-    /// A refractory period prevents one loud kick from firing on several
-    /// consecutive frames.
+    /// Detect a beat when bass energy rises above its recent average. The cooldown stops
+    /// one kick from triggering on several frames.
     private func detectBeat(bands: [Float], state: inout State) -> Bool {
         let lowBandCount = max(1, bandCount / 4)
         let energy = bands.prefix(lowBandCount).reduce(0, +) / Float(lowBandCount)
@@ -274,11 +201,7 @@ public struct SpectrumAnalyzer: Sendable {
         return energy > mean * 1.35 && energy > 0.08
     }
 
-    /// Folds linear FFT bins into log-spaced bands.
-    ///
-    /// Log spacing because musical pitch is logarithmic: linear bands would put
-    /// six of eight bars above 10 kHz, where there is almost no energy, and
-    /// cram the entire bass range into one.
+    /// Group FFT bins on a logarithmic frequency scale so the bass range gets enough room.
     static func fold(_ magnitudes: [Float], into bandCount: Int, sampleRate: Double, fftSize: Int) -> [Float] {
         guard !magnitudes.isEmpty, bandCount > 0 else {
             return Array(repeating: 0, count: bandCount)
@@ -309,9 +232,7 @@ public struct SpectrumAnalyzer: Sendable {
         return bands
     }
 
-    /// Overall band gain, set so that loud material sits high in the range
-    /// without pinning. Measured against pink noise at a normal listening level,
-    /// this puts every band around three-quarters height with room to move.
+    /// Scale broadband music into a useful range without keeping most bands at full height.
     static let bandGain: Float = 13
 
     /// The bottom of the analysed range. Below this is rumble, not music.
@@ -319,18 +240,9 @@ public struct SpectrumAnalyzer: Sendable {
     /// How many times that the top of the range is: 40 Hz to 16 kHz.
     static let bandFrequencySpan: Double = 400
 
-    /// Per-band compensation for music's natural downward spectral slope.
-    ///
-    /// Recorded music approximates pink noise: equal energy per octave, which
-    /// means the amplitude in any one FFT bin falls as `1/√f`. Reading the peak
-    /// bin of each band therefore reports the bottom of the spectrum as loud and
-    /// the top as nearly silent. That's accurate and useless. Measured against
-    /// synthetic pink noise, the lowest band came back 15.0× the highest; `√f`
-    /// predicts 15.5.
-    ///
-    /// So the compensation is `√(centre frequency)`, normalised at the middle
-    /// band. That is a property of the signal rather than a curve fitted to one
-    /// song, and it generalises to any band count.
+    /// Compensate for the drop in energy toward higher frequencies. Use the square root of
+    /// each band's center frequency, relative to the middle band; pink noise should then
+    /// look roughly level.
     static func spectralTilt(_ index: Int, of count: Int) -> Float {
         guard count > 1 else { return 1 }
         func centre(_ i: Int) -> Float {

@@ -1,12 +1,8 @@
 import SwiftUI
 import CorniceKit
 
-/// The whole interface: one surface that changes size.
-///
-/// There is exactly one object on screen. It is never a window that appears near
-/// the notch. It is the notch becoming larger and then smaller again. So the top
-/// edge never moves, the outline is interpolated rather than swapped, and the
-/// artwork travels rather than cross-fading between copies.
+/// One panel that changes size, with its top edge fixed to the screen. The artwork moves
+/// between positions in the same view.
 struct RootView: View {
     @Bindable var model: AppModel
     let geometry: SurfaceGeometry
@@ -38,13 +34,9 @@ struct RootView: View {
             ZStack(alignment: .top) {
                 surfaceBackground(size: size)
 
-                // Built at all times and cross-faded. Switching with a `switch`
-                // tore down one tree and built another *during* the expand
-                // animation, which is exactly when there is no spare frame
-                // budget, and is what made opening feel like it hitched.
-                //
-                // The artwork is the exception: it sits outside this stack so it
-                // survives the cross-fade and can travel.
+                // Keep the content views built and fade between them. Building a new tree
+                // while expanding caused a hitch. The artwork stays outside this stack so
+                // it can move.
                 ZStack(alignment: .top) {
                     PeekContentView(model: model, geometry: geometry)
                         .frame(width: size.width, height: size.height)
@@ -136,9 +128,8 @@ struct RootView: View {
         }
     }
 
-    /// A HUD that waits to be dealt with (an alert with buttons, a ringing
-    /// timer) has to accept clicks. One that retracts on its own must not, or
-    /// it swallows a click meant for the desktop on its way out.
+    /// Alerts with buttons need to accept clicks. Notices that dismiss themselves should
+    /// let clicks reach the desktop.
     private var isInteractiveHUD: Bool {
         guard let kind = state.hud else { return false }
         return kind.dismissAfter == nil
@@ -176,10 +167,8 @@ struct RootView: View {
             // rest, where it would draw a line across the bottom of the cut-out.
             .overlay {
                 if state != .collapsed {
-                    // Expanded to the full surface *before* clipping: clipping a
-                    // 0.5pt-tall view against the surface path evaluates that path
-                    // in a 0.5pt rect, which let the hairline escape and draw
-                    // straight across the desktop.
+                    // Expand the highlight to the panel's bounds before clipping. Clipping
+                    // the thin line alone uses the wrong size for the shape.
                     Rectangle()
                         .fill(ink.hairline)
                         .frame(height: 0.5)
@@ -250,18 +239,13 @@ struct RootView: View {
         }
     }
 
-    /// Whether anything on screen actually needs per-frame updates.
-    ///
-    /// Each clause corresponds to something that genuinely moves. Returning true
-    /// whenever music played cost several percent of a core for nothing visible.
+    /// Only run the frame timer when something visible needs to move.
     private var needsFrameTimer: Bool {
         // Countdowns move wherever they are drawn, including while resting.
         if model.timers.anyRunning { return true }
 
-        // The analyser is live wherever its indicator is drawn. This used to
-        // require a scriptable player to be reporting `playing`, which left the
-        // bars frozen through anything the tap could hear but Spotify could not
-        // see. A browser tab, most obviously.
+        // Keep sampling where the waveform is visible. Browser audio can drive it even when
+        // no supported player reports playback.
         if model.isVisualizerLive {
             if state == .peek || state == .expanded { return true }
             // Only when there is a track to indicate. Without this the timer

@@ -7,11 +7,7 @@ extension AppModel {
 
     // MARK: - Preferences
 
-    /// Mutates preferences and persists the result.
-    ///
-    /// Every settings change funnels through here so there is one place that
-    /// writes, one that re-sanitises, and one that decides whether the refresh
-    /// loops need rebuilding.
+    /// Update, check and save settings here. Restart the affected services if needed.
     func updatePreferences(_ mutate: (inout Preferences) -> Void) {
         var updated = preferences
         mutate(&updated)
@@ -43,11 +39,8 @@ extension AppModel {
 
     // MARK: - Playback
 
-    /// Flipped locally before the command is sent, like the other transport
-    /// toggles. Without it the glyph did not change until the next poll came
-    /// back (up to a second after the click), so the symbol-replace animation
-    /// played long after the press it belonged to, which reads as no animation
-    /// at all.
+    /// Change the button immediately, then send the command. Waiting for the next poll
+    /// makes the click feel delayed.
     func playPause() {
         if let snapshot = media {
             let wanted: PlaybackState = snapshot.state.isPlaying ? .paused : .playing
@@ -56,25 +49,12 @@ extension AppModel {
         }
         send(.playPause)
     }
-    /// Whether repeat-one is holding the player on this track.
-    ///
-    /// Reads the mode rather than the mechanism, so it is true whether the
-    /// player is repeating the track itself (Music always, Spotify once the
-    /// Web API is connected), or the app is imitating it.
+    /// True when repeat-one is on, whether the player handles it or Cornice does.
     var holdsCurrentTrack: Bool {
         media?.repeatMode == .one
     }
 
-    /// Skip, unless repeat-one is holding this track.
-    ///
-    /// Spotify's own Next advances even with repeat-one set, and Cornice used
-    /// to match that. But "repeat this song" and "and now play a different one"
-    /// are contradictory instructions, and of the two the one the user pressed
-    /// most recently should not be the one that loses. So while repeat-one is
-    /// on, skipping starts the song again: the playhead jumping back to zero is
-    /// visible feedback that the button worked and the song is being held.
-    ///
-    /// Press repeat again to release it, and skip goes back to skipping.
+    /// With repeat-one on, Next restarts this song. Turn repeat off to skip to another one.
     func nextTrack() {
         guard !holdsCurrentTrack else { return restartTrack() }
         expectTrackChange()
@@ -86,12 +66,8 @@ extension AppModel {
         stepToPreviousTrack()
     }
 
-    /// Moves to the previous track even while repeat-one is holding.
-    ///
-    /// Kept apart from the button, because the automatic-advance recovery is
-    /// the one caller that genuinely has to move: it runs *because* the player
-    /// already left the track, so restarting whatever it landed on instead
-    /// would lock repeat-one onto the wrong song.
+    /// Go back a track even when repeat-one is on. Recovery needs this to return to the
+    /// song the player just left.
     func stepToPreviousTrack() {
         expectTrackChange()
         send(.previous)
@@ -104,10 +80,8 @@ extension AppModel {
     func seek(toProgress progress: Double) {
         guard let snapshot = media, snapshot.duration > 0 else { return }
         let target = (progress.clamped(to: 0...1) * snapshot.duration)
-        // Move the local playhead immediately rather than waiting for the next
-        // poll to confirm. A scrubber that snaps back to where it was for half
-        // a second before jumping forward feels broken, even though the command
-        // worked.
+        // Move the scrubber straight away so it doesn't snap back while the player catches
+        // up.
         applyMedia(MediaSnapshot(
             source: snapshot.source, state: snapshot.state, title: snapshot.title,
             artist: snapshot.artist, album: snapshot.album, duration: snapshot.duration,
@@ -120,12 +94,7 @@ extension AppModel {
 
     func setVolume(_ level: Double) { send(.setVolume(level)) }
 
-    /// Flipped locally before the command is sent, then confirmed by the next
-    /// poll. The same trick the scrubber uses.
-    ///
-    /// Without it the glyph does not change for up to a second, which reads as
-    /// the button having done nothing, so people press it again and toggle it
-    /// straight back.
+    /// Show the new shuffle state immediately and confirm it on the next poll.
     func toggleShuffle() {
         if let snapshot = media {
             let wanted = !snapshot.isShuffling
@@ -139,10 +108,8 @@ extension AppModel {
         guard let snapshot = media else { return }
         let wanted = snapshot.repeatMode.next(on: snapshot.source)
 
-        // Spotify, signed in to the Web API: it can be told to repeat one track
-        // outright, so tell it. This is the real setting. The `1` appears on
-        // Spotify's own button, it survives skips and restarts, and no part of
-        // the app has to watch for the end of the song.
+        // Use Spotify's own repeat-one setting when the Web API is connected. That also
+        // updates the button inside Spotify.
         if snapshot.source == .spotify, spotifyCanSetRepeat {
             applyMedia(snapshot.with(repeatMode: wanted))
             holdToggle(repeatMode: wanted)
@@ -157,17 +124,9 @@ extension AppModel {
 
         applyMedia(snapshot.with(repeatMode: wanted))
         holdToggle(repeatMode: wanted)
-        // The player's own repeat stays *on* for repeat-one, even though the
-        // loop is what repeats the track.
-        //
-        // Two reasons. Spotify's window is the thing most people are looking at,
-        // and switching its repeat off on the second press makes the button look
-        // like it undid itself. And if a loop is ever missed, the track ending
-        // lands on the playlist repeating rather than on playback stopping.
-        //
-        // This is safe now only because the mode is no longer inferred from what
-        // the player reports. That inference is what used to make the setting
-        // switch itself off.
+        // Keep the player's repeat on while our loop handles the single track. If the loop
+        // misses, playback can keep going. Hold our repeat-one mode locally so a poll
+        // doesn't switch it off.
         send(.setRepeat(wanted))
         scheduleRepeatOneLoop()
     }
@@ -223,17 +182,8 @@ extension AppModel {
         NSWorkspace.shared.open(url)
     }
 
-    /// Clears the app's own audio-capture permission and asks again.
-    ///
-    /// Worth a button because this app is ad-hoc signed, and macOS ties a
-    /// permission to the code signature: every rebuild is a different signature
-    /// and therefore a different app as far as TCC is concerned, so the grant is
-    /// dropped and a fresh prompt appears. A prompt that is missed or dismissed
-    /// leaves the tap running and fed silence (macOS reports no error for a
-    /// refused tap), and the visualiser simply stops working with no way back
-    /// short of knowing the incantation.
-    ///
-    /// Only ever resets this app's own entry.
+    /// Reset only Cornice's audio permission and ask again. Rebuilding an ad-hoc signed app
+    /// can cause macOS to stop trusting the old grant.
     func resetAudioPermission() {
         let bundleIdentifier = Bundle.main.bundleIdentifier ?? "dev.cornice.app"
         Task { [weak self] in

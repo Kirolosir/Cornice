@@ -2,86 +2,55 @@
 
 <img src="Resources/AppIcon.png" width="128" alt="Cornice app icon">
 
-A media surface that lives in the MacBook notch.
+I wanted something like the iPhone's Dynamic Island on my Mac, so I started
+Cornice. It sits around the notch and opens when you hover over it. I used
+[Atoll](https://github.com/Atoll-Labs/Atoll) as inspiration, especially for how
+opening the panel should feel.
 
-Cornice turns the camera notch into something like a Dynamic Island. At rest you
-can't see it. Move the pointer onto it and it grows out of the cut-out with the
-album art, track and artist, then opens into a full transport with a draggable
-scrubber, timers and system stats. Charging, network and VPN notices show up
-there too.
-
-It never takes focus, so clicking it doesn't pull you out of whatever you were
-doing.
-
-I'm a CS student and this is the first thing I've written in Swift. I started it
-for two reasons. I'd wanted a Dynamic Island on my Mac since I first used one on
-a phone, and I wanted a project big enough to actually learn a language on
-instead of another CRUD app with a login page.
-
-I'm a big fan of Apple's hardware and the way they design software, and the
-Dynamic Island is my favourite thing they've shipped in years. It takes a piece
-of hardware nobody asked for and turns it into the most useful part of the
-screen. I wanted that on the machine I actually use all day.
-
-It turned out to be a good choice for that, mostly because so much of it is
-stuff you can't fake. The notch is a real measurement, the audio is a real FFT,
-and the CPU numbers either match Activity Monitor or they don't. There's no
-partial credit. Most of what I now know about SwiftUI, Core Audio and
-AppleScript I learned by getting it wrong first, and I kept a section below
-about the bugs because they're the part I actually learned from.
-
-I was using [Atoll](https://github.com/Atoll-Labs/Atoll) before I started this,
-and it's what convinced me the idea works on a Mac. Cornice is my own take on it,
-written from scratch. No Electron, no private APIs, no helper daemon.
+The idea is to check your music, timers and system stats without opening another
+window. I'm still working on it and polishing the parts that feel off.
 
 ![The player](Docs/images/player.png)
 
----
-
 ## What it does
 
-| | |
-|---|---|
-| **Now Playing** | Apple Music and Spotify: artwork, title, artist, a draggable scrubber, shuffle, repeat, output device. |
-| **System** | CPU and memory charts over the last minute, with live readings. |
-| **Timers** | Presets add time to the current countdown, with pause, repeat and an alarm. |
-| **AirPods** | A live activity when a wireless device connects, with its charge. |
-| **System HUDs** | Charging, battery low, full battery, no internet, VPN, downloads. Each gets its own size. |
+- Shows Apple Music and Spotify with the cover, song, artist and playback controls.
+- Has six visualizer bars that follow captured audio. They stay still when the
+  song is paused. With capture off, they only act as a playing indicator.
+- Uses the cover's colors for the background, including muted and grey artwork.
+- Lets you pause, repeat and add time to a timer. Adding 25 minutes twice gives
+  you one 50-minute timer. The alarm keeps ringing until you deal with it.
+- Shows CPU and memory readings with charts for the last minute.
+- Shows notices for charging, low battery, network and VPN changes, and wireless
+  audio devices. Download notices can be enabled in Settings.
 
-![System](Docs/images/stats.png)
-![Charging](Docs/images/hud-charging.png)
+Hover only starts inside the notch's measured bounds. It gets measured again
+when your display or scaling changes. You can also open the panel with **⌥⌘D**.
 
----
+![System tab](Docs/images/stats.png)
 
 ## Download
 
-[**Download the latest DMG**](https://github.com/Kirolosir/Cornice/releases/latest),
-open it, and drag Cornice to Applications.
+Get the DMG from the [latest release](https://github.com/Kirolosir/Cornice/releases/latest),
+open it, and drag Cornice into Applications. The current installer includes the
+app icon and is built for Apple silicon.
 
-The first time you open it, macOS will refuse and say the app is damaged. It
-isn't. Cornice is signed ad-hoc rather than with a paid Apple Developer
-certificate, and macOS treats anything it can't trace to a registered developer
-that way once it has been downloaded. To get past it, run this once:
+The app runs on macOS 14 or later. Audio capture needs macOS 14.2 or later.
+It's mainly made for MacBooks with a notch. On a display without one, it uses a
+small region in the middle of the menu bar.
+
+The app is ad-hoc signed and isn't notarized, so macOS may block the first launch
+or call it damaged. For this downloaded copy, you can remove the quarantine flag:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Cornice.app
 ```
 
-Then open it normally. If you would rather not run that, build it from source
-instead, which skips the problem entirely because apps you build yourself are
-never quarantined.
+Then try opening it again. Building it yourself is another option.
 
----
+## Build it yourself
 
-## Build from source
-
-You need macOS 14 or later. A Mac with a notch is what it's designed around, but
-it isn't required: without one, the surface reserves a notch-shaped region in the
-middle of the menu bar and behaves the same.
-
-Building needs Xcode or the Command Line Tools. Command Line Tools are enough for
-the app itself; `make test` needs full Xcode, because XCTest doesn't ship with
-the CLT.
+Xcode or the Command Line Tools are enough to build the app.
 
 ```bash
 git clone https://github.com/Kirolosir/Cornice.git
@@ -89,490 +58,148 @@ cd Cornice
 make run
 ```
 
-That builds a release bundle into `dist/` and launches it. There's no Dock icon.
-The app lives in the menu bar.
+This builds `dist/Cornice.app` and opens it. Cornice has no Dock icon; settings
+and the quit option are in its menu bar item.
 
-The visualiser asks for System Audio Recording permission the first time you turn
-it on. Nothing else needs a permission.
-
-### Visualizer
-
-The visualizer uses overlapping audio windows and measures stereo channels
-separately before combining their energy. This keeps wide stereo mixes from
-cancelling out and makes the readings consistent across audio buffer sizes.
-Loudness rises quickly and settles gradually when the music gets quieter.
-
-Run `./Scripts/check-audio.sh` to check buffer sizes, stereo phase, sample rates,
-and silence using generated test tones. This check works with Command Line Tools.
-
-The six bars settle when the song is paused. With audio capture enabled, silence
-stays silent; the app doesn't replace it with a made-up wave. With capture off,
-the bars are a playback indicator and only move while the player says it's playing.
-See the [paused player](Docs/images/player-paused.png).
-
-The player background uses a blurred copy of the cover plus colours sampled from
-it. Grey covers stay grey, cream stays cream, and albums with similar colours
-still keep their own layout. The tint slider adjusts how much shows through.
-
-The System tab has a fixed 0–100% chart scale and a real one-minute timeline.
-Gaps after sleep or slower polling stay visible. Memory is shown in GiB, using
-1,073,741,824 bytes per unit. CPU waits for two readings, and unavailable readings
-show a dash instead of zero. Run `./Scripts/check-system.sh` for the CPU, memory
-and paused-visualizer checks, or `cornice --probe-appearance` for the hover and
-artwork checks.
-
-Cornice raises both a notch alert and a macOS notification once when battery
-charge crosses 10% while unplugged. Run `./Scripts/check-battery.sh` to check
-the warning boundary.
-
-### Timers and controls
-
-A finished timer has a repeat button that restarts the same duration and stops
-its alarm. It keeps ringing until you repeat it, dismiss it with ×, or press
-Escape while its alert is open. If two timers finish together, dismissing one
-leaves the other ringing. The alert closes when the last timer is dismissed,
-and the panel can be opened again without restarting the app.
-
-Hover starts only inside the notch bounds reported by macOS, with no extra
-activation area beside or below it. The bounds update when the display or its
-scaling changes. Hover opens with a single spring when the dwell setting is zero. Buttons have
-a small press dip and a hover highlight. Reduce Motion turns off the button
-scaling and skip movement.
-
-To check timer completion and dismissal in a development build:
+To build without opening it:
 
 ```bash
-make app-debug
-dist/Cornice.app/Contents/MacOS/Cornice --probe-timers
+make app
 ```
 
-The probe plays the alarm for eight seconds, checks adding time, repeating,
-overlapping alarms and Escape, then exits. It needs an audio output and a
-logged-in macOS session.
+To package the app after building:
 
-### Connecting Spotify (optional)
-
-You only need this for real repeat-one. Everything else works without it. It also
-needs Spotify Premium, because that's what the Web API's playback controls
-require.
-
-1. Go to [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard)
-   and create an app. The name doesn't matter.
-2. Add `cornice://spotify-callback` as a Redirect URI and tick **Web API**. Your
-   app stays in Spotify's development mode, which is fine, because the owner of
-   an app is always allowed to authorize it and the owner is you.
-3. Paste the Client ID into **Settings → Spotify** and press **Connect Spotify**.
-
-The client ID isn't a secret. The sign-in uses PKCE, so there's no secret to
-keep. The refresh token it gives back is sensitive, and that goes in the Keychain.
-
----
-
-## How the code is laid out
-
-Two targets. `CorniceKit` holds everything with no UI in it, and `CorniceApp` is
-the SwiftUI app on top. I split it that way so the logic could be tested without
-launching a window, which is why none of the tests need a running music player or
-audio permission.
-
-```
-Sources/
-  CorniceKit/
-    Audio/        FFT, band folding, beat detection, the Core Audio process tap
-    Media/        Apple Music and Spotify over AppleScript
-      Spotify/    OAuth and the Web API, for repeat-one
-    Notch/        Measuring the notch, picking which display to live on
-    System/       HUD sources: power, network, VPN, downloads
-    Telemetry/    CPU and memory out of host_statistics
-    Focus/        Timers
-    Process/      Running subprocesses with timeouts and cancellation
-    Settings/     Preferences and their migration
-    Support/      Errors, logging, formatting, clamping
-  CorniceApp/
-    Views/        The surface itself, the three panes, the HUDs
-    Model/        AppModel and its extensions, all the observable state
-    Window/       The NSPanel and its geometry
-    Design/       Colour, type and motion tokens
-    Diagnostics/  The --probe flags
-Tests/
-  CorniceKitTests/
+```bash
+./Scripts/package-dmg.sh
 ```
 
-Roughly 12,000 lines of Swift and 2,600 of tests.
+## Permissions
 
-Most of the interesting stuff is in `CorniceKit`. If you only want to read one
-file, `Notch/NotchGeometryResolver.swift` is probably the most self-contained
-piece: it takes a screen and works out where the notch is, with two fallbacks for
-when macOS won't tell you directly.
+macOS can ask for Automation permission when Cornice talks to Music or Spotify.
+Turning on the visualizer asks for System Audio Recording permission. The audio
+is analyzed in memory and isn't saved or sent anywhere.
 
----
+Notifications ask for permission when there's a notice to send. Download
+monitoring is off by default because it can ask for access to the Downloads
+folder.
 
-## How it works
+Rebuilding the app can affect its audio permission because the signature changes.
+If the visualizer can't hear anything, check the Audio Recording settings. The
+**Ask again** button in Cornice's settings can reset its own permission.
 
-### One object that changes size
+## Spotify connection
 
-There's only ever one shape on screen. Resting, peek, activity, expanded and
-every HUD are the same view with different geometry, so it reads as the notch
-growing instead of a panel appearing next to it.
+The normal Spotify controls work through AppleScript. Connecting the Web API
+lets Cornice use Spotify's own repeat-one setting. Those API playback controls
+need [Spotify Premium](https://developer.spotify.com/documentation/web-api/reference/set-repeat-mode-on-users-playback).
 
-| State | Size | Bottom radius | Flare |
-|---|---|---|---|
-| Resting | 209 × 38 | 10 | 0 |
-| Peek | 425 × 48 | 16 | 14 |
-| Activity | 549 × 54 | 20 | 16 |
-| Expanded | 604 × 226 | 28 | 24 |
+1. Create an app in the [Spotify developer dashboard](https://developer.spotify.com/dashboard).
+2. Enable Web API and add `cornice://spotify-callback` as the redirect URI.
+3. Copy the client ID into **Settings → Spotify**, then click **Connect Spotify**.
 
-Three rules do most of the work. The top corners have no radius, since the top
-edge is the physical edge of the screen. The shoulders are concave coves, so
-extra width looks like it grew out of the notch rather than sitting beside it.
-And nothing is drawn inside the notch's own rectangle, because that's a hole in
-the display. Short states use the two margins either side of it and tall ones
-start below it.
+The client ID isn't a secret. Sign-in uses PKCE, and the refresh token is saved
+in the Keychain. Cornice doesn't ask for your Spotify password.
 
-The album artwork is drawn once and then travels. Its frame is interpolated along
-the same spring as the outline, so it moves outward and down instead of
-cross-fading between two copies.
+Without that connection, repeat-one uses a local loop. Crossfade can make that
+less reliable than Spotify's own setting. With repeat-one on, Cornice's Next
+button restarts the current song; turn repeat off to skip normally.
 
-### The window never resizes
+## Latest fixes
 
-I tried resizing the `NSWindow` in step with the SwiftUI animation first. That
-means the window server and SwiftUI are each animating a different thing at a
-different cadence, and it stutters. So the window is created once at its maximum
-size and never resized. All the motion happens inside it at display rate. That
-window is much bigger than what you can see, so `hitTest` returns `nil` outside
-the drawn shape and it doesn't swallow clicks meant for the desktop.
+The timer now repeats without creating a new timer, and presets add time to the
+current countdown. A paused timer stays paused when more time is added.
 
-### The notch is measured, not looked up
+Opening the player no longer makes paused music look like it's playing. Silence
+from the audio capture also stays still. Here's the [paused player](Docs/images/player-paused.png).
 
-A notch is a fixed number of pixels, but macOS reports displays in points, and
-the ratio changes with whatever scaled resolution you picked in Settings. The
-same Mac reports a different notch size depending on a setting you can change
-whenever you like, so hardcoding a table of sizes doesn't work.
+Backgrounds use a blurred copy of the cover and its sampled colors. The tint
+slider changes how much of it shows through.
 
-Cornice measures it instead, from `NSScreen.auxiliaryTopLeftArea` and
-`auxiliaryTopRightArea`. The gap between those two is the notch. It re-measures
-on display change, resolution change, rotation and wake.
+The System tab has a fixed 0–100% chart scale. It uses actual sample times, so
+gaps after sleep or slower polling aren't hidden. Memory is shown in GiB, where
+one GiB is 1,073,741,824 bytes. Missing readings show a dash. CPU needs two
+readings before it can calculate usage.
 
-### Measuring the machine
+The low-battery warning triggers at 10% when the battery isn't charging. It
+shows both a notch notice and a macOS notification if notifications are allowed.
 
-CPU load is `1 − Δidle/Δtotal` across two `host_statistics` readings. Each
-32-bit state counter is differenced separately so a rollover still works.
-The first reading needs a second sample before it can show a percentage.
+## Checks
 
-Memory took three tries, because the obvious page classes are the wrong ones:
-
-    Memory Used = App Memory + Wired + Compressed
-    App Memory  = internal pages − purgeable pages
-
-`active` is not App Memory. It counts file-backed pages the kernel is caching and
-leaves out inactive pages an app still owns, which read about 250 MB light on my
-machine and drifted around depending on how much file cache happened to be warm.
-Counting inactive file pages instead is what `top` calls "used", and that goes
-too far the other way: every Mac looks permanently near capacity, because macOS
-keeps that cache full on purpose and reclaims it when something needs the room.
-The calculation follows [Activity Monitor's memory categories](https://support.apple.com/guide/activity-monitor/view-memory-usage-actmntr1004/mac).
-The percentage and byte count come from the same kernel reading.
-
-### Reading what's playing
-
-Cornice talks to Apple Music and Spotify through macOS's own scripting
-interfaces. It uses no private frameworks.
-
-The obvious route is closed. `MediaRemote` is the private framework most notch
-utilities use, and since macOS 15.4 Apple gates it on the caller's platform
-signature, so a third-party app just gets an empty dictionary back. The known
-workaround is to load a helper into an Apple-signed binary and inherit privileges
-that binary was granted and you weren't. I didn't want to ship something that fragile.
-
-The cost of staying on the supported path is browser audio, which Cornice can't
-see. What you get for it is full metadata and artwork, working transport control,
-and a binary that won't break on the next macOS release.
-
-Repeat-one is the interesting case. Music has a real three-way `song repeat`.
-Spotify's dictionary only has a boolean `repeating` and no way to ask for a
-single track, so Cornice does it two ways.
-
-If you connect Spotify in Settings, it asks the player directly. The Web API
-takes `off`, `context` or `track`, so repeat-one becomes Spotify's own setting.
-The `1` shows up on Spotify's button, it survives skips and restarts, and nothing
-has to watch for the end of a song. The sign-in is authorization code with PKCE,
-because an app bundle can't hold a client secret when anyone with the bundle can
-read it. The refresh token goes in the Keychain, device-only. Cornice asks for two
-scopes, both about playback, and never sees your password.
-
-Without that sign-in it imitates the setting. With repeat-one on it seeks back to
-the start just before the end, so the player never gets to the point where it
-would move on.
-
-Working out when "just before the end" is took some doing. Spotify can be set to
-crossfade, which starts the next track seconds before the current one reaches the
-length it reports, and that setting lives on Spotify's servers where I can't read
-it. On my machine a 230.5 second track got abandoned at around 226. So the app
-also watches for a track changing on its own near the end, puts it back, and
-remembers how early it happened. The next loop lands ahead of the crossfade
-instead of behind it.
-
-That's a lot of moving parts standing in for one API call, which is basically
-why I went and learned how to do the API call.
-
-One thing Cornice does differently from Spotify on purpose: with repeat-one on,
-the skip button restarts the song instead of moving to the next one. Spotify's
-own Next advances even with repeat-one set, but "repeat this song" and "now play
-a different one" contradict each other, and I'd rather the button you pressed
-most recently win. Press repeat again to release it and skip goes back to
-skipping.
-
-Everything else that differs between the two players gets normalised in one
-place. Spotify reports duration in milliseconds and Music in seconds. Music
-spells repeat as `off`/`one`/`all` where Spotify uses a boolean. AppleScript
-renders numbers in the user's locale, so a comma-decimal machine hands back
-`182,813` and a naive parse puts the playhead at zero for a good chunk of the
-world.
-
-### The visualiser is a real FFT
-
-Audio is captured with a Core Audio process tap, the public API added in macOS
-14.2. It's mixed to mono, windowed, transformed with vDSP, folded into log-spaced
-bands, and run through energy-based onset detection for the beat.
-
-The alternatives are worse. A virtual audio device needs an installer and a
-reboot, and ScreenCaptureKit wants full Screen Recording permission just to read
-a waveform.
-
-Analysis happens in the audio callback and writes into a lock-protected box. The
-UI pulls the newest frame on its own timer. I tried pushing observable updates
-from the audio thread and it schedules main-actor work faster than it drains.
-
-The playing indicator uses both halves of the analysis. The spectrum decides the
-shape of the bars, and loudness decides how much room that shape has to move in.
-Loudness has to mean what's actually reaching the room, so the volume fader is
-part of it. A tap captures the stream before the fader, and on my machine
-dropping the system volume from 70 to 25 only moved the captured level from 0.96
-to 0.86. Without reading the fader separately, the bars can't tell blasting music
-from the same track at a whisper.
-
-Band magnitudes get compensated for music's natural downward slope. Recorded
-music is roughly pink noise, meaning equal energy per octave, so the amplitude in
-any one FFT bin falls off as `1/√f`. Reading the peak bin per band reports the
-bottom of the spectrum as loud and the top as nearly silent, which is accurate
-and useless. Measured against synthetic pink noise, the lowest band came back
-15.0× the highest, and `√f` predicts 15.5, so the compensation is `√(centre
-frequency)`. That's a property of the signal rather than a curve I fitted to one
-song. Pink noise now draws as a flat row of bars, and there's a test that checks
-exactly that, so if I break the compensation later the test tells me.
-
-Calibration was a separate problem. A pure tone puts all its energy in one FFT
-bin and music spreads itself over hundreds, so a chain tuned on a sine wave reads
-a real song as almost nothing. On this machine a full-scale 1 kHz tone put its
-band at 0.89 and actual music put it at 0.06, which moved a 13 pt bar by a fifth
-of a point. After correcting and retuning, the same audio reads 0.70.
-
-One more thing worth knowing: macOS hands a tap silence instead of an error when
-the permission is missing. So the app checks whether it's hearing anything while
-music is playing and says so, rather than showing you dead bars and leaving you
-to guess.
-
----
-
-## Things that went wrong
-
-I kept these because the bugs were more interesting than the features, and
-because most of them took me a while to find.
-
-**The timer never counted down.** It showed the right number and then sat
-there. I went looking in the countdown logic, the formatting, the notification
-code. The problem was none of those. SwiftUI was memoising the row against a
-value that never changed, so it had no reason to redraw. The clock was fine the
-whole time and nothing was asking it for the time.
-
-**A one-line AppleScript mistake broke the entire app.** I wrote
-`set rep to (if repeating then "all" else "off")`, which looks reasonable and
-is not valid AppleScript, since there's no conditional expression in the
-language. A compile error kills the whole script, not the one line, so the app
-stopped showing any track at all. The lesson stuck: there's now a test that
-compiles every script the app can send, because a script that fails to compile
-fails completely and silently.
-
-**The visualiser danced along while my Mac was muted.** A process tap captures
-audio before the volume fader, so as far as the FFT was concerned the music was
-playing at full volume. I added the fader as a separate reading, then found the
-bars still twitched at zero because the floor I'd set for "something is playing"
-survived being multiplied by nothing. Then I found the beat detector was adding
-a kick outside that check too. Two separate leaks, same symptom.
-
-**Repeat-one kept switching itself off.** The app set the player's own repeat
-off, since its internal loop was doing the repeating, and then read the player
-back on the next poll, saw repeat was off, and concluded the user must have
-turned it off. It was undoing itself once a second. The mode is held locally now
-and only ends when you press the button.
-
-**A crossfade beat the loop.** Spotify can start the next track seconds before
-the current one reaches its stated length, and that setting lives on Spotify's
-servers where I can't read it. A 230.5 second track got abandoned at around 226,
-so the pre-emptive seek arrived to find a different song already playing. The
-app now watches for that, puts the track back, and remembers how early it
-happened so the next loop lands ahead of it.
-
-**The Spotify sign-in revoked itself two seconds after it worked.** The browser
-delivered the same `cornice://` redirect thirteen times. The first one redeemed
-the code and the other twelve found no pending request waiting, which I was
-treating as a failed sign-in. So it connected, then immediately disconnected,
-and the repeat button quietly went back to the fallback with nothing on screen
-to say why. A repeated redirect is now recognised as a repeat.
-
-**Three different things blocked startup, and I found them one at a time.**
-First the audio tap, which took 5.2 seconds on the main actor. Then
-`system_profiler`, which the app was waiting on to learn the Mac's marketing
-name, a string that only labels the Settings window. Then reading the Spotify
-token out of the Keychain, which stops to ask permission after a rebuild and
-waits as long as it takes you to notice the dialog. Each time, nothing polled
-until the slow thing finished: no track, no artwork, no timers. I'd written a
-comment warning about exactly this after the first one and then put the third
-one directly above it.
-
-**The test suite couldn't be built from a clone.** `Package.swift` declared a
-`Fixtures` folder as a test resource, but the folder was empty, so git never
-tracked it and it didn't exist for anyone who cloned the repo. `swift test`
-failed immediately. I only caught it because I cloned the project into a
-scratch directory to check what a stranger would get.
-
-The pattern in all of these is that I was guessing, and guessing kept being
-wrong. So I stopped. A lot of the second half of this project went into small
-diagnostic probes (`--probe-audio`,
-`--probe-repeat-one`, and friends, all in `Diagnostics/Probes.swift`) that run
-the real code from inside the app bundle and log what actually happened.
-Permissions are granted to a bundle and not to a terminal, so testing from the
-command line was answering a different question than the one I was asking.
-
----
-
-## Performance
-
-Measured with `./Scripts/measure.sh`, not estimated. Release build, MacBook Air
-(M3), surface resting with Spotify open, sampled 40 times over two minutes:
-
-| | |
-|---|---|
-| CPU, mean | **2.9%** of one core |
-| Memory, mean | **14.0 MB** |
-
-Most of that is the AppleScript round-trip to Spotify, which costs roughly 100 ms
-of CPU per poll and can't be avoided on the supported API. So the polling cadence
-follows what's on screen instead of running at a fixed rate, and it drops sharply
-when the panel is closed.
-
-It took three rounds of profiling to get there, and two of the three things I
-found were not what I expected:
-
-- **The frame counter lived on the root view.** Every tick invalidated the root,
-  so SwiftUI re-laid out the whole tree, including all four surface states and
-  the two modules that weren't showing, to move one scrubber. It now lives in an
-  observable object that only the few views redrawing per frame ever read.
-- **Starting the audio tap blocked launch for 5.2 seconds.** Building a process
-  tap, an aggregate device and an IO proc all ran on the main actor, so the
-  surface ignored the pointer for five seconds after login and every other event
-  source was stuck in line behind it. It runs on a detached task now.
-- **The frame timer ran whenever music played**, including for a resting surface
-  showing a title that only changes between tracks. It only runs now when
-  something on screen actually moves.
-
----
-
-## Built with
-
-Swift 6 with strict concurrency, SwiftUI and AppKit, Core Audio, vDSP, IOKit,
-SystemConfiguration, Network.framework, Carbon hot keys. No third-party
-dependencies.
-
-**201 tests** over the pure logic: parsing player replies, playhead
-extrapolation, FFT and beat detection, notch geometry for every display
-configuration, the HUD size table, the indicator's loudness mapping, band
-calibration and spectral tilt, per-player repeat support, the Spotify OAuth
-handshake including RFC 7636's own challenge vector, the telemetry probe against
-the running machine, every AppleScript the app sends (compiled, not just parsed),
-preference migration, and subprocess timeout and cancellation against real
-processes. None of them need a running music player or audio permission.
+The XCTest suite needs full Xcode; Command Line Tools alone don't include it.
 
 ```bash
 make test
 ```
 
----
+These smaller checks work with Command Line Tools:
 
-## What I'd do differently
+```bash
+./Scripts/check-audio.sh
+./Scripts/check-system.sh
+./Scripts/check-battery.sh
+```
 
-**`AppModel` is too big.** It's 780 lines even after splitting the actions, the
-HUD logic and the Spotify code into separate extension files. It ended up as the
-place where everything meets, which made it easy to write and is now the file I'm
-most nervous about changing. If I started again I'd give the media, timer and
-telemetry state their own observable objects instead of one.
+For timer and appearance checks, use the app bundle so macOS permissions work:
 
-**I should have written the probes on day one.** I spent a long time guessing at
-things I could have just measured, particularly with the audio and the repeat
-handling. Every one of those bugs got fixed within an hour of the moment I
-stopped guessing and printed what was actually happening.
+```bash
+make app-debug
+dist/Cornice.app/Contents/MacOS/Cornice --probe-timers
+dist/Cornice.app/Contents/MacOS/Cornice --probe-appearance
+```
 
-**The tests don't run on my own machine.** XCTest ships with Xcode, not with the
-Command Line Tools, so `swift test` doesn't work on the setup I built this on.
-I got around it by writing a stand-in harness, which works but isn't the real
-thing. I should have noticed that constraint before writing 200 tests against a
-framework I couldn't run.
+The timer check plays the alarm for eight seconds and checks repeat, adding time,
+overlapping alarms and dismissal. The appearance check covers paused hovering
+and artwork colors. Both need a logged-in macOS session.
 
-**Browser audio still bothers me.** Most of what I listen to is in a browser tab,
-and Cornice can't see any of it, because the supported APIs only cover apps that
-expose a scripting interface. The visualiser picks it up, since the audio tap
-hears everything, but there's no track or artwork to show next to it. I don't
-have a good answer for this that doesn't involve private frameworks.
+You can also measure CPU and memory while the app is running with
+`./Scripts/measure.sh`, or save screenshots with:
 
----
+```bash
+dist/Cornice.app/Contents/MacOS/Cornice --capture-docs Docs/images
+```
 
-## Limitations
+The screenshots use preview data and sample artwork.
 
-- Apple Music and Spotify only. Browser audio is invisible, for the reason above.
-- Built-in display only, not every screen in a multi-monitor setup.
-- There's no download. Clone and build it. The app is ad-hoc signed, so a
-  prebuilt copy passed around would be stopped by Gatekeeper; building it
-  yourself avoids that, because locally built apps aren't quarantined.
-- Ad-hoc signed, so it isn't notarized. macOS ties permissions to the code
-  signature, so **rebuilding invalidates the audio-capture grant**. This doesn't
-  look like a permission problem when it happens, which is the annoying part:
-  macOS gives a refused tap silence rather than an error, so the bars fall back
-  to their idle animation and keep moving. It reads as "the visualiser doesn't
-  react to this song" when actually it can't hear anything at all. Cornice now
-  says so when it notices, and the fix is:
-  `tccutil reset AudioCapture dev.cornice.app`, then relaunch and allow it.
-- For the same reason, macOS asks again before handing back the stored Spotify
-  token after a rebuild, since the new binary is a different code identity.
-  Answer **Always Allow**. It doesn't block startup; the app keeps polling while
-  the prompt waits.
-- Spotify's repeat-one is imitated unless you connect the Web API in Settings,
-  which needs the free app registration above and a Premium account. Without it
-  the fallback still replays the track, but Spotify's own button won't show the
-  `1`.
-- The hot key is fixed at ⌥⌘D.
-- Do Not Disturb, AirDrop and Handoff HUDs are drawn but not wired up. macOS
-  doesn't publish that state without Full Disk Access or an API that doesn't
-  exist.
-- English only.
+## Code layout
 
----
+`CorniceKit` holds the timer, audio, media and system logic. `CorniceApp` holds
+the views, app state and window setup. The project uses Swift 6, SwiftUI and
+AppKit, with no third-party packages.
 
-## Credit
+```text
+Sources/
+  CorniceKit/
+    Audio/        Capture, FFT and visualizer levels
+    Focus/        Timer state and timer board
+    Media/        Music and Spotify controls, plus Spotify sign-in
+    Notch/        Display and notch measurements
+    Telemetry/    CPU, memory and battery readings
+    System/       Network, VPN and download notices
+    Settings/     Preferences and migrations
+    Process/      Process runner and tool lookup
+    Support/      Logging, errors and formatting
+  CorniceApp/
+    Views/        Player, timers, System tab and notices
+    Model/        App state and actions
+    Window/       Panel placement, hover and shortcut
+    Design/       Colors, fonts and animations
+    Diagnostics/  The --probe checks
+Tests/
+  CorniceKitTests/
+```
 
-The idea comes from Apple's Dynamic Island, and
-[Atoll](https://github.com/Atoll-Labs/Atoll) is what convinced me it could work
-on a Mac. I used it for a while before starting this and it's a good app.
+## Still to work on
 
-Cornice is not a fork or a reskin of it. The UI is my own, the geometry is my
-own, and so are the parts I spent the most time on: the Spotify Web API sign-in
-for real repeat-one, the pink-noise spectral compensation on the visualiser, bars
-that respond to the system volume, per-region artwork tinting, and the eleven
-system HUDs. Cornice shares no code with it. Atoll is GPL v3 and
-this is MIT, which only works because I wrote everything here from scratch, and
-writing it was the whole point.
+Browser audio can drive the visualizer, but the app can't get its song title or
+cover. Track information is limited to Music and Spotify.
 
----
+The panel chooses one display. There's no separate panel on every monitor.
+Do Not Disturb, AirDrop and Handoff layouts exist, but their automatic triggers
+aren't connected yet. The shortcut is fixed, and the interface is English only.
 
-## License
+## Credit and license
 
-MIT. See [LICENSE](LICENSE).
+Thanks to [Atoll](https://github.com/Atoll-Labs/Atoll) for the inspiration, and to
+Apple for the Dynamic Island idea.
+
+Cornice is MIT licensed. See [LICENSE](LICENSE).

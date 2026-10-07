@@ -1,13 +1,7 @@
 import Foundation
 import Network
 
-/// Whether the Mac has a usable route to the internet.
-///
-/// `NWPathMonitor` rather than a reachability ping: it is the framework Apple
-/// provides for exactly this, it reports the answer the networking stack already
-/// knows, and it costs nothing when nothing is changing. Polling a host would
-/// mean sending traffic to somebody else's server every few seconds to learn
-/// something the kernel could have told us.
+/// Watch the network route with NWPathMonitor instead of repeatedly pinging a server.
 public final class NetworkReachability: @unchecked Sendable {
 
     public typealias ChangeHandler = @Sendable (Bool) -> Void
@@ -39,9 +33,8 @@ public final class NetworkReachability: @unchecked Sendable {
             let satisfied = path.status == .satisfied
 
             self.lock.lock()
-            // The first update is the current state, not a change. Reporting it
-            // would raise a "no internet" HUD at launch on a machine that has
-            // simply not finished associating with Wi-Fi yet.
+            // Use the first update to set the state. Only show a network notice for later
+            // changes.
             let previous = self.lastSatisfied
             self.lastSatisfied = satisfied
             let handler = self.handler

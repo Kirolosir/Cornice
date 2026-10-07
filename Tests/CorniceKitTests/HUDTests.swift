@@ -3,9 +3,7 @@ import XCTest
 
 final class HUDTests: XCTestCase {
 
-    /// The design's measured table. These are the numbers the whole HUD system
-    /// is, so they are asserted rather than trusted: a wing is half the width
-    /// past a 209 pt notch, and a drop is the height below the 38 pt band.
+    /// Check HUD sizes relative to a 209-point notch and a 38-point band.
     func testEveryHUDMatchesTheMeasuredTable() {
         let expected: [HUDKind: (width: CGFloat, height: CGFloat, bottom: CGFloat, flare: CGFloat)] = [
             .noInternet: (604, 152, 28, 24),

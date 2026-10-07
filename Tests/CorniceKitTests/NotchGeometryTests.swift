@@ -1,10 +1,8 @@
 import XCTest
 @testable import CorniceKit
 
-/// The display configurations here are the ones that actually break notch
-/// placement. They cannot be reproduced by running on a developer's machine
-/// (you would need four different MacBooks, an external monitor, and a
-/// mirrored display), which is exactly why the resolver takes a value type.
+/// Create different display configurations as values so these tests don't need several real
+/// Macs and monitors.
 final class NotchGeometryTests: XCTestCase {
 
     /// Captured from a MacBook Air (Mac15,12) running a scaled 1710×1112 point
@@ -35,10 +33,7 @@ final class NotchGeometryTests: XCTestCase {
         XCTAssertEqual(profile.rect.maxY, 1112)
     }
 
-    /// The central claim of the design: the same hardware reports a different
-    /// notch size in points under a different scaled resolution, so any
-    /// hardcoded per-model point size is wrong for most users. Here the same
-    /// machine is described at its default 1470-point mode.
+    /// The same notch has different point dimensions at different display scaling settings.
     func testSameHardwareAtDifferentScalingYieldsDifferentPointSize() {
         let scaled = NotchGeometryResolver.resolve(macBookAirScaled())
 

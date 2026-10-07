@@ -1,19 +1,7 @@
 import Foundation
 
-/// Maps `hw.model` identifiers to human-readable names, and records which
-/// models ship with a notch.
-///
-/// This catalog deliberately contains **no geometry**. An earlier version stored
-/// notch dimensions per model; that was removed because the numbers cannot be
-/// stated accurately without measuring each machine, and a table of
-/// approximations is worse than useless when the runtime measurement path is
-/// both exact and almost always available. Notch size comes from
-/// `NotchGeometryResolver`; this type only answers "what machine is this?" and
-/// "should I have expected a notch here?".
-///
-/// The table is also incomplete by construction (new Macs ship faster than it
-/// is updated), so every lookup returns an optional and callers fall back to
-/// the name the operating system reports for itself.
+/// Known model names and whether a model has a notch. Measure the actual geometry at
+/// runtime; new models can fall back to the system's name.
 public enum MacModelCatalog {
     public enum Family: String, Sendable, Equatable {
         case macBookAir13 = "MacBook Air 13″"
@@ -46,11 +34,8 @@ public enum MacModelCatalog {
         notched[identifier]
     }
 
-    /// Whether this model is known to ship with a notch.
-    ///
-    /// A `false` here never suppresses the notch surface. The runtime
-    /// measurement wins. It is used only to decide whether a *missing*
-    /// measurement is worth logging as surprising.
+    /// This is only a hint for logging missing measurements. The measured display geometry
+    /// takes priority.
     public static func expectsNotch(modelIdentifier: String) -> Bool {
         notched[modelIdentifier] != nil
     }

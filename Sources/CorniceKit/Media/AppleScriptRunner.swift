@@ -1,17 +1,8 @@
 import Foundation
 import AppKit
 
-/// Executes AppleScript in-process.
-///
-/// `NSAppleScript` rather than spawning `osascript`: the player is polled about
-/// once a second, and a process launch per poll would cost several milliseconds
-/// of CPU and a fork for something that takes microseconds in-process. Scripts
-/// are compiled once and reused, so the per-poll cost is just the Apple event
-/// round-trip to the player.
-///
-/// Everything runs on one serial queue. `NSAppleScript` is not thread-safe and
-/// is not `Sendable`; confining it to a single queue is what makes it safe to
-/// call from an actor without the compiler having to take our word for it.
+/// Compile and reuse NSAppleScript objects instead of launching osascript on every poll.
+/// Run them on one serial queue because they aren't thread-safe.
 public actor AppleScriptRunner {
 
     /// Holds compiled scripts. `@unchecked Sendable` because the instances are
@@ -36,21 +27,16 @@ public actor AppleScriptRunner {
     /// have granted permission in System Settings.
     public func clearDenial(_ target: String) { deniedTargets.remove(target) }
 
-    /// What a script returned, reduced to `Sendable` values.
-    ///
-    /// The raw `NSAppleEventDescriptor` never leaves the execution queue: it
-    /// is not `Sendable`, and it is a detail of how the answer was obtained
-    /// rather than part of the answer. Both possible shapes (a delimited
-    /// string, or raw artwork bytes) are extracted before returning.
+    /// Return only Sendable values. Keep the Apple event descriptor on the execution queue
+    /// and extract its text or image bytes there.
     public struct ScriptResult: Sendable {
         public let string: String?
         public let data: Data?
     }
 
-    /// Runs a script and returns its result.
+    /// Run a script and return its result.
     ///
-    /// - Parameter target: the application being scripted, used only to record
-    ///   an authorisation denial against it.
+    /// - Parameter target: Player name used when reporting an automation denial.
     public func run(_ source: String, target: String) async throws -> ScriptResult {
         if deniedTargets.contains(target) {
             throw ServiceError.unauthorized(
@@ -94,13 +80,8 @@ public actor AppleScriptRunner {
         }
     }
 
-    /// Maps AppleScript's error dictionary onto a `ServiceError`.
-    ///
-    /// The codes that matter:
-    /// `-1743` is "user has not allowed automation", which is a permission
-    /// problem the user can fix; `-600` and `-609` mean the application is not
-    /// running, which is normal rather than an error; `-1728` means the object
-    /// does not exist, which happens when a player is open with nothing loaded.
+    /// Translate AppleScript errors: -1743 means automation was denied, -600/-609 mean the
+    /// player isn't running, and -1728 means the requested object is missing.
     private static func mapError(_ info: NSDictionary, target: String) -> ServiceError {
         let code = (info[NSAppleScript.errorNumber] as? Int) ?? 0
         let message = (info[NSAppleScript.errorMessage] as? String) ?? "AppleScript failed"
@@ -117,12 +98,8 @@ public actor AppleScriptRunner {
         }
     }
 
-    /// Whether an application is running, without launching it.
-    ///
-    /// Checked through `NSWorkspace` rather than by scripting: asking a stopped
-    /// application anything through AppleScript *launches* it, which is a
-    /// spectacularly bad thing for a background poller to do. This also needs no
-    /// permission at all.
+    /// Check NSWorkspace before scripting a player. Sending an Apple event to a stopped app
+    /// can launch it.
     public nonisolated static func isRunning(bundleIdentifier: String) -> Bool {
         !NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).isEmpty
     }

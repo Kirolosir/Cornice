@@ -1,10 +1,7 @@
 import Foundation
 
-/// One HTTP answer, reduced to the three things this client reads.
-///
-/// The transport hands back a value type rather than `URLResponse` so that the
-/// whole client can be exercised against a stub, and so nothing has to reason
-/// about the sendability of a Foundation class across an actor hop.
+/// The parts of an HTTP response this client needs. A plain value is easy to return from an
+/// actor and replace in tests.
 public struct HTTPReply: Sendable {
     public let status: Int
     public let body: Data
@@ -48,12 +45,8 @@ public struct URLSessionTransport: HTTPTransport {
     }
 }
 
-/// What the Web API says is playing.
-///
-/// Narrower than `MediaSnapshot` on purpose: the scripting interface is faster
-/// and cheaper for everything the panel draws every frame, so this carries only
-/// what scripting cannot answer. The true three-state repeat, and which device
-/// the commands will land on.
+/// Web API repeat state and device information. Local scripting still supplies the regular
+/// track readings.
 public struct SpotifyPlaybackState: Sendable, Equatable {
     public let repeatMode: RepeatMode
     public let isShuffling: Bool
@@ -68,25 +61,12 @@ public struct SpotifyPlaybackState: Sendable, Equatable {
     }
 }
 
-/// Spotify's Web API, for the things AppleScript cannot say.
-///
-/// The scripting dictionary has one boolean where repeat needs three states, so
-/// `repeat one` on Spotify was previously the app faking it. Watching for the
-/// end of a track and seeking back to zero. That works, but it is Cornice's
-/// state and not Spotify's: the player's own button never shows the `1`, and
-/// anything that happens outside Cornice's poll gets it wrong.
-///
-/// This asks Spotify directly. `repeat_state` comes back as `off`, `context` or
-/// `track`, and setting `track` is real repeat-one. The badge appears in the
-/// Spotify window, it survives skips, and it needs no timers at all.
+/// Use Spotify's Web API for repeat-one. Unlike its scripting interface, the API can set
+/// track repeat directly.
 public actor SpotifyWebRemote {
 
-    /// Whether the API can be called at all.
-    ///
-    /// Deliberately only about credentials. A failed *command* (no active
-    /// device, a rate limit) is reported separately, because folding it in
-    /// here meant one transient refusal disabled the Web API path for the rest
-    /// of the session and quietly reverted to imitating repeat-one.
+    /// Connection status tracks credentials. A failed playback command shouldn't disable
+    /// the whole connection.
     public enum Status: Sendable, Equatable {
         /// No client ID entered, so sign-in cannot be offered yet.
         case unconfigured
@@ -142,12 +122,7 @@ public actor SpotifyWebRemote {
     /// Redeems the code the browser handed back.
     public func completeSignIn(callback: URL) async throws {
         guard let pending else {
-            // A redirect can arrive more than once: the browser re-sends it on a
-            // reload, and macOS delivers it again if it had to launch the app to
-            // do so. The first copy consumes the verifier, so the rest find
-            // nothing waiting, which is a replay of work already done, not a
-            // failure, and treating it as one used to tear down the sign-in that
-            // had just succeeded.
+            // Ignore a repeated callback if sign-in already succeeded.
             if store.loadRefreshToken() != nil {
                 Log.media.debug("spotify: ignoring a repeated sign-in reply")
                 return
@@ -225,11 +200,8 @@ public actor SpotifyWebRemote {
 
     // MARK: - Tokens
 
-    /// Runs a request with a live access token, refreshing once if it is stale.
-    ///
-    /// The retry is deliberately single: a token refused twice is a token that
-    /// will not work, and looping on it would turn one bad credential into a
-    /// stream of requests at Spotify.
+    /// Refresh and retry once if the token expires. Don't keep sending a request Spotify
+    /// has already refused twice.
     private func authorized(_ build: (String) -> URLRequest) async throws -> HTTPReply {
         let token = try await accessToken()
         let reply = try await transport.send(build(token))
@@ -267,9 +239,8 @@ public actor SpotifyWebRemote {
             store.save(refreshToken: fresh.refreshToken)
             return fresh.accessToken
         } catch {
-            // A refresh token Spotify no longer honours is worse than none: it
-            // makes every later call fail the same way. Drop it so the UI can
-            // offer a fresh sign-in instead of retrying a dead credential.
+            // Drop an invalid refresh token so the user can sign in again instead of
+            // getting the same failure.
             if case ServiceError.unauthorized = error {
                 tokens = nil
                 store.clear()

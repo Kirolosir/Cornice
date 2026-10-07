@@ -1,28 +1,15 @@
 import Foundation
 
-/// Controls Apple Music or Spotify through their scripting interfaces.
-///
-/// One implementation for both, because the *shape* of the conversation is
-/// identical (read a handful of properties, send a handful of commands), and
-/// only the vocabulary differs. The differences are isolated in `Dialect`:
-///
-/// - Spotify reports track duration in **milliseconds**, Music in seconds.
-/// - Spotify exposes `artwork url`; Music only hands over raw image data.
-/// - Music spells repeat as `song repeat` with `off`/`one`/`all`; Spotify uses
-///   a boolean `repeating`.
-/// - Both report volume 0–100, not 0–1.
-///
-/// Getting any one of those wrong produces a plausible-looking but wrong UI
-/// (a 272-second track showing as 272,394 seconds, for instance), which is why
-/// each is parsed explicitly and covered by a test.
+/// Read and control Music and Spotify with AppleScript. Normalize their differences here:
+/// Spotify's duration is in milliseconds, Music's is in seconds; artwork and repeat are
+/// exposed differently; both report volume from 0 to 100.
 public actor ScriptedMediaController: MediaControlling {
 
     public nonisolated let source: MediaSource
     private let runner: AppleScriptRunner
 
-    /// Field separator. A unit separator rather than anything printable,
-    /// because track and album names contain every printable character there
-    /// is, including the pipes and tabs people reach for first.
+    /// Use a unit separator so normal punctuation in song and album names does not split
+    /// fields.
     private static let separator = "\u{1f}"
 
     /// The last full metadata read, reused while the track has not changed.
@@ -37,17 +24,8 @@ public actor ScriptedMediaController: MediaControlling {
         AppleScriptRunner.isRunning(bundleIdentifier: source.bundleIdentifier)
     }
 
-    /// Current state, or `nil` when nothing is loaded.
-    ///
-    /// Two tiers, because polling cost matters. Neither player supports reading
-    /// a track's properties as one record (Spotify raises on `properties of
-    /// current track`), so each property read is its own Apple event to another
-    /// process. Reading all ten every second was measurably expensive.
-    ///
-    /// So the frequent read fetches only what actually changes between polls
-    /// (playback state, playhead, volume, and the track title as a change
-    /// signal), and the full metadata read runs only when the title or length
-    /// says the track moved on. Steady-state cost drops by more than half.
+    /// Read playback and position often, but fetch full metadata only when the track
+    /// changes. Each player property costs an Apple event.
     public func snapshot() async throws -> MediaSnapshot? {
         guard await isRunning() else { return nil }
 
@@ -142,12 +120,8 @@ public actor ScriptedMediaController: MediaControlling {
         """
     }
 
-    /// The two players' spellings for the properties the light read needs.
-    ///
-    /// Both are *statements*, not expressions. AppleScript has no conditional
-    /// expression. `set x to (if p then "a" else "b")` is a compile error, and a
-    /// compile error fails the whole script, so a surrounding `try` does not
-    /// contain it.
+    /// Use proper AppleScript statements for repeat. AppleScript has no inline if
+    /// expression, and one syntax error breaks the whole script.
     nonisolated var dialect: (shuffleProperty: String, repeatStatement: String) {
         switch source {
         case .spotify: ("shuffling", "if repeating then set rep to \"all\"")
@@ -190,15 +164,8 @@ public actor ScriptedMediaController: MediaControlling {
         )
     }
 
-    /// The full read: everything, run only when the track changes.
-    ///
-    /// One round-trip rather than one per property: each is an IPC call to
-    /// another process, and reading eight properties separately would be eight
-    /// context switches per poll.
-    ///
-    /// Wrapped in `try` blocks because a player that is open with nothing
-    /// loaded raises on `current track` rather than returning empty, so the
-    /// script degrades to a "stopped" answer instead of throwing.
+    /// Read the full track metadata when the song changes. Catch missing-track errors so an
+    /// empty player reports stopped instead of failing the poll.
     nonisolated var readScript: String {
         switch source {
         case .spotify:
@@ -276,11 +243,8 @@ public actor ScriptedMediaController: MediaControlling {
         }
     }
 
-    /// Parses the delimited reply.
-    ///
-    /// Exposed for testing: this is where the millisecond/second mismatch and
-    /// the locale-dependent number formatting actually bite, and both are far
-    /// easier to cover with a fixture than with a running music player.
+    /// Parse the player's delimited reply. Tests cover duration units and numbers formatted
+    /// with different locales.
     public func parse(_ raw: String) -> MediaSnapshot? {
         Self.parse(raw, source: source)
     }
@@ -303,10 +267,8 @@ public actor ScriptedMediaController: MediaControlling {
             )
         }
 
-        // AppleScript renders reals using the *user's* locale, so a machine set
-        // to a comma-decimal locale returns "182,813". Parsing with a fixed
-        // POSIX locale and falling back to a comma swap keeps the playhead from
-        // silently reading as zero for a large fraction of the world.
+        // AppleScript can return a comma decimal separator. Accept that too so positions
+        // don't parse as zero.
         let rawDuration = Self.number(fields[4])
         let position = Self.number(fields[5])
 
@@ -348,11 +310,8 @@ public actor ScriptedMediaController: MediaControlling {
 
     // MARK: - Artwork
 
-    /// Apple Music's artwork, as raw image data.
-    ///
-    /// Music has no artwork URL (the image lives in the library), so it comes
-    /// back as an Apple event data descriptor rather than a string. Returns
-    /// `nil` for tracks with no artwork, which is common for local files.
+    /// Music returns artwork as image bytes, not a URL. Local tracks may have no cover, so
+    /// nil is fine.
     public func artworkData() async throws -> Data? {
         guard source == .appleMusic, await isRunning() else { return nil }
         let script = """
@@ -380,9 +339,8 @@ public actor ScriptedMediaController: MediaControlling {
         case .next:
             return "tell application \"\(application)\" to next track"
         case .previous:
-            // Both players restart the current track on a single "previous"
-            // when the playhead has moved. Seeking to zero first makes the
-            // button always mean "go back a track", which is what the icon says.
+            // Seek to zero before Previous so it goes back a track instead of restarting
+            // the current one.
             return """
             tell application "\(application)"
                 set player position to 0

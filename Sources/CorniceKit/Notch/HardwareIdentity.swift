@@ -1,13 +1,7 @@
 import Foundation
 
-/// Identifies the machine the app is running on.
-///
-/// Two tiers, because they have very different costs. The model identifier
-/// comes from `sysctl`, which is a cheap in-process read and is available
-/// immediately at launch. The marketing name and chip come from
-/// `system_profiler`, which spawns a process and takes on the order of a second,
-/// so it is fetched once, lazily, off the main actor, and cached for the
-/// lifetime of the app.
+/// Read the model ID from sysctl, then load and cache the name and chip from
+/// system_profiler in the background.
 public struct HardwareIdentity: Equatable, Sendable {
     /// e.g. `Mac15,12`. Always available.
     public let modelIdentifier: String
@@ -48,11 +42,7 @@ public actor HardwareIdentityProvider {
         self.runner = runner
     }
 
-    /// The model identifier from `sysctl hw.model`. Synchronous and cheap.
-    ///
-    /// Reads into a sized buffer rather than using a fixed-size array so an
-    /// unexpectedly long identifier on some future machine truncates cleanly
-    /// instead of overflowing.
+    /// Read hw.model into a buffer sized for the returned identifier.
     public nonisolated static func modelIdentifier() -> String {
         var size = 0
         guard sysctlbyname("hw.model", nil, &size, nil, 0) == 0, size > 0 else {
@@ -68,10 +58,8 @@ public actor HardwareIdentityProvider {
         return String(decoding: bytes, as: UTF8.self)
     }
 
-    /// Full identity, including the marketing name. Cached after the first call.
-    ///
-    /// Never throws: an identity with only the model identifier is still useful,
-    /// and the diagnostics panel is not worth failing over.
+    /// Cache the full hardware name after the first read. If system_profiler fails, the
+    /// model identifier is still useful.
     public func identity() async -> HardwareIdentity {
         if let cached { return cached }
 
@@ -104,11 +92,8 @@ public actor HardwareIdentityProvider {
         return identity
     }
 
-    /// Extracts `machine_name` and `chip_type` from `system_profiler -json`.
-    ///
-    /// Intel Macs report `cpu_type` where Apple silicon reports `chip_type`, and
-    /// the key names have changed across macOS releases, so several spellings
-    /// are accepted and a miss simply yields `nil`.
+    /// Parse the hardware profile JSON. Intel and Apple silicon use different chip keys, so
+    /// accept either and return nil for missing fields.
     static func parseHardwareProfile(_ data: Data) -> (name: String?, chip: String?) {
         guard
             let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],

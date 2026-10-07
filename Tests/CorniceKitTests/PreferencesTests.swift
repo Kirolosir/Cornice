@@ -200,10 +200,8 @@ final class PreferencesMigrationTests: XCTestCase {
 /// Repeat-one has to be remembered.
 final class RepeatOnePersistenceTests: XCTestCase {
 
-    /// The player has nowhere to store "repeat this track" (that is the whole
-    /// reason the app provides it), so if the app does not remember it either,
-    /// the setting vanishes at every launch. From the outside that is
-    /// indistinguishable from a button that does not work.
+    /// Local repeat-one must survive saving and loading preferences because the scripting
+    /// player can't store that mode for us.
     func testRepeatOneSurvivesAWriteAndRead() throws {
         var preferences = Preferences()
         preferences.appliesRepeatOne = true

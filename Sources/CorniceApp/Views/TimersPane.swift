@@ -1,12 +1,8 @@
 import SwiftUI
 import CorniceKit
 
-/// Presets on top, the current countdown beneath.
-///
-/// Each running timer is the system timer HUD *wholesale*. The same orange
-/// pause, the same grey dismiss, the same oversized count. A timer should look
-/// the same whether it is announcing itself from the notch or sitting in a list,
-/// because it is the same timer.
+/// Timer presets and the current countdown. Use the same controls as the timer HUD so it
+/// feels consistent.
 struct TimersPane: View {
     @Bindable var model: AppModel
     let clock: FrameClock
@@ -73,10 +69,8 @@ struct TimerRow: View {
     private var ink: Theme.Ink { .of(scheme) }
 
     var body: some View {
-        // Remaining time comes from the wall clock, so nothing in the model
-        // changes between the second a timer starts and the second it ends.
-        // Without a dependency on the frame clock the countdown was correct and
-        // simply never redrawn.
+        // Read the frame clock so SwiftUI updates the countdown even though the timer's
+        // stored deadline hasn't changed.
         let reading = TimerCountdown.reading(entry, tick: clock.tick)
         return HStack(spacing: 12) {
             Button {

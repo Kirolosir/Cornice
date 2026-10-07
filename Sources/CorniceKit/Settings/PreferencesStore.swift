@@ -7,20 +7,14 @@ public protocol PreferencesPersisting: Sendable {
     func save(_ preferences: Preferences) async throws
 }
 
-/// JSON-file-backed preferences with atomic writes and corruption recovery.
-///
-/// A file rather than `UserDefaults` because the settings form one coherent
-/// document that should be written all-or-nothing: a crash midway through
-/// saving must not leave the app with new ports and an old repository list.
-/// It is also inspectable and diffable, which matters when someone reports a
-/// bug that depends on their configuration.
+/// Save settings as JSON with atomic writes. The file is easy to inspect when debugging a
+/// settings problem.
 public actor PreferencesStore: PreferencesPersisting {
 
     private let fileURL: URL
     private let fileManager: FileManager
-    /// The last value written, so a redundant save can be skipped. Settings
-    /// views emit a change per keystroke; without this, dragging a slider would
-    /// write the file a hundred times.
+    /// Skip repeated saves with the same settings. Sliders and text fields can call this
+    /// often.
     private var lastWritten: Preferences?
 
     /// Standard location: `~/Library/Application Support/Cornice/preferences.json`.
@@ -37,13 +31,8 @@ public actor PreferencesStore: PreferencesPersisting {
         self.fileManager = fileManager
     }
 
-    /// Reads preferences, falling back to defaults on any failure.
-    ///
-    /// Never throws. A user whose settings file was truncated by a bad shutdown
-    /// should get a working app with default settings, not a launch failure, so
-    /// a corrupt file is moved aside (preserved for debugging, and so the next
-    /// save does not immediately overwrite the evidence), and defaults are
-    /// returned.
+    /// Use defaults if loading fails. Move a corrupt file aside so it can be inspected
+    /// instead of overwritten.
     public func load() async -> Preferences {
         guard fileManager.fileExists(atPath: fileURL.path) else {
             Log.settings.info("no preferences file; starting from defaults")
@@ -64,12 +53,8 @@ public actor PreferencesStore: PreferencesPersisting {
         }
     }
 
-    /// Writes preferences atomically.
-    ///
-    /// `.atomic` writes to a temporary file and renames it into place, so a
-    /// reader either sees the whole old file or the whole new one. Combined
-    /// with the `lastWritten` check this makes saving cheap enough to call on
-    /// every change without debouncing at the call site.
+    /// Write a temporary file and replace the old one atomically. Skip the write if nothing
+    /// changed.
     public func save(_ preferences: Preferences) async throws {
         let sanitized = preferences.sanitized()
         guard sanitized != lastWritten else { return }
@@ -83,34 +68,23 @@ public actor PreferencesStore: PreferencesPersisting {
         let data = try encoder.encode(sanitized)
         try data.write(to: fileURL, options: [.atomic])
 
-        // Settings can include a GitHub login and repository paths, so the file
-        // is owner-only. The token is in the Keychain, never here, but the rest
-        // is still nobody else's business.
+        // Keep the settings file owner-only. Tokens are stored separately in the Keychain.
         try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
 
         lastWritten = sanitized
         Log.settings.debug("preferences saved (\(data.count) bytes)")
     }
 
-    /// Applies any schema migrations needed to bring an older file up to date.
-    ///
-    /// Additive changes are handled by giving every `Preferences` property a
-    /// default in its initialiser, so most releases need nothing here. This
-    /// exists for the changes `Codable` cannot absorb. A renamed key, or a
-    /// value whose meaning changed.
+    /// Migrate settings whose meaning changed. New fields with defaults don't need a
+    /// special migration.
     static func migrate(_ preferences: Preferences) -> Preferences {
         var result = preferences
         guard result.schemaVersion < Preferences.currentSchemaVersion else { return result }
-        // Version 2 dropped the repository, servers, GitHub, container and
-        // command modules when the app became media-first. Their keys simply
-        // stop being decoded, and `enabledModules` values that no longer exist
-        // are discarded by the tolerant decoder, so nothing was needed there.
+        // Version 2 removed the old developer modules. Unknown keys and module names are
+        // ignored by the decoder.
 
-        // Version 3 raised the tint ceiling. Someone whose setting was sitting
-        // *on* the old maximum had asked for as much colour as the app would
-        // give them and been refused, so they are moved up with it. Anyone who
-        // chose a value below the old ceiling chose it deliberately and is left
-        // exactly where they are.
+        // Version 3 increased the tint limit. Move settings at the old maximum to the new
+        // default; keep values the user set below it.
         if result.schemaVersion < 3,
            result.tintStrength >= Preferences.previousMaximumTintStrength {
             result.tintStrength = Preferences().tintStrength
@@ -148,11 +122,8 @@ public actor EphemeralPreferencesStore: PreferencesPersisting {
 
 
 extension ISO8601DateFormatter {
-    /// Shared formatter for timestamping quarantined files.
-    ///
-    /// `nonisolated(unsafe)` rather than a new instance per call:
-    /// `ISO8601DateFormatter` is expensive to construct, and this one is
-    /// configured once and only ever read afterwards.
+    /// Reuse a formatter for corrupt-file timestamps. Configure it once and don't change it
+    /// afterwards.
     nonisolated(unsafe) static let cornice: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]

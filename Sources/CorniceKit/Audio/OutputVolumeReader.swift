@@ -2,24 +2,14 @@ import Foundation
 import CoreAudio
 import AudioToolbox
 
-/// Reads how loud the Mac is actually playing.
-///
-/// A Core Audio process tap captures the application's stream, not the output
-/// after the volume fader: measured on this machine, dropping the system volume
-/// from 70 to 25 moved the captured level from 0.96 to 0.86. So the analyser on
-/// its own cannot tell blasting music from the same track at a whisper, and the
-/// visualiser has to combine the two.
-///
-/// Deliberately a *reader* rather than a monitor: no property listeners, no
-/// state to keep in step. The value is wanted at a few frames per second, and
-/// each read is a couple of microseconds of Core Audio.
+/// Read system output volume separately. The process tap captures audio before the fader,
+/// so the spectrum alone doesn't tell us whether the Mac is muted.
 public struct OutputVolumeReader: Sendable {
 
     public init() {}
 
-    /// Output volume, 0...1, or `nil` when the device exposes no volume control
-    /// (some HDMI and aggregate devices do not) in which case the caller should
-    /// assume full rather than silent.
+    /// Read output volume from 0 to 1. A device without a volume control returns nil; that
+    /// does not mean mute.
     public func current() -> Double? {
         guard let device = Self.defaultOutputDevice() else { return nil }
         if Self.isMuted(device: device) { return 0 }
@@ -41,11 +31,8 @@ public struct OutputVolumeReader: Sendable {
         return device
     }
 
-    /// Tries the main element, then averages the stereo pair.
-    ///
-    /// Plenty of devices expose per-channel volume and nothing on the main
-    /// element (AirPods among them), and reading only the main element reports
-    /// those as having no volume at all.
+    /// Try the main volume control, then the stereo channels. Some devices only expose
+    /// channel volume.
     static func scalarVolume(device: AudioDeviceID) -> Double? {
         if let main = scalar(device: device, element: kAudioObjectPropertyElementMain) {
             return main

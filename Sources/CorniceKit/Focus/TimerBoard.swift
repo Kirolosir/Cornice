@@ -21,18 +21,11 @@ public struct TimerEntry: Identifiable, Equatable, Sendable {
     }
 }
 
-/// A small collection of concurrent countdowns.
-///
-/// Each entry is an independent `FocusTimer`, so every one of them inherits the
-/// deadline-based model: remaining time is derived from the wall clock rather
-/// than decremented on a tick. Four timers running at once therefore cost
-/// exactly as much as zero timers. The UI repaints, but nothing is being
-/// counted down by anybody.
+/// Each timer keeps its own deadline. The UI reads remaining time from the clock instead of
+/// decrementing counters.
 public struct TimerBoard: Equatable, Sendable {
 
-    /// Cap on concurrent timers. The panel shows them as rows in a fixed-height
-    /// pane, and past this they stop being glanceable, which is the only reason
-    /// to put a timer in the notch in the first place.
+    /// Limit the number of timers so their rows fit in the panel.
     public static let maximumTimers = 4
 
     public private(set) var entries: [TimerEntry] = []
@@ -43,12 +36,8 @@ public struct TimerBoard: Equatable, Sendable {
 
     public var hasTimers: Bool { !entries.isEmpty }
 
-    /// The running timer closest to finishing. What the collapsed surface shows.
-    ///
-    /// Takes the reference time rather than reading the clock, like every other
-    /// time-dependent call here. Reading `.now` internally made the result
-    /// untestable and, worse, inconsistent with a caller that had already
-    /// decided which instant it was rendering.
+    /// Find the running timer nearest its deadline, using the caller's time so the result
+    /// matches the rest of the frame.
     public func soonest(at now: Date = .now) -> TimerEntry? {
         entries
             .filter(\.isRunning)
@@ -57,11 +46,7 @@ public struct TimerBoard: Equatable, Sendable {
 
     public var anyRunning: Bool { entries.contains(where: \.isRunning) }
 
-    /// Adds a timer and starts it immediately.
-    ///
-    /// Started on creation because every path that adds one is the user asking
-    /// for a countdown now; making them press play afterwards would be a second
-    /// step with no decision in it.
+    /// Start a new countdown immediately when the user adds it.
     @discardableResult
     public mutating func add(minutes: Int, label: String? = nil, at now: Date = .now) -> UUID? {
         guard entries.count < Self.maximumTimers else { return nil }

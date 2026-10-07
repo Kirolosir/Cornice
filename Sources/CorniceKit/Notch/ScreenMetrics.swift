@@ -1,15 +1,8 @@
 import Foundation
 import CoreGraphics
 
-/// A plain-data snapshot of everything `NotchGeometryResolver` needs from a
-/// display.
-///
-/// This exists so notch resolution is a pure function of values rather than a
-/// method on `NSScreen`. `NSScreen` cannot be constructed in a unit test (you
-/// get whatever displays the test machine happens to have), so all the
-/// interesting logic (which is to say, all the ways a display can be weird)
-/// would otherwise be untestable. The app layer builds one of these from a real
-/// `NSScreen`; tests build them by hand.
+/// The screen values the resolver needs. The app reads them from NSScreen; tests create
+/// them directly.
 public struct ScreenMetrics: Equatable, Sendable {
     /// Full display bounds in points, in AppKit's bottom-left origin space.
     public var frame: CGRect

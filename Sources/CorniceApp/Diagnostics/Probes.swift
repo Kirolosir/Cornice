@@ -1,16 +1,8 @@
 import AppKit
 import CorniceKit
 
-/// Command-line diagnostics.
-///
-/// Several of the harder bugs in this app lived where a debugger cannot follow:
-/// what the player reports between polls, what the audio tap delivers once the
-/// system fader has been applied, whether a repeat setting survives a track
-/// change. Each probe below drives the real code path, from inside the app
-/// bundle (which matters, because automation and audio-capture permission are
-/// granted to a bundle and not to a terminal), logs what it saw, and exits.
-///
-/// Nothing here runs unless a `--probe-…` argument is passed.
+/// Checks for the media, audio and timer bugs that are hard to reproduce by hand. Run these
+/// from the app bundle with a --probe flag so macOS permissions work normally.
 @MainActor
 enum Probes {
 
@@ -41,9 +33,8 @@ enum Probes {
             return true
         }
 
-        // Sends the transport commands and reads the player back, so "the
-        // button does nothing" can be told apart from "the player refused" and
-        // from "the player has no such setting".
+        // Send commands and read the player back to check whether the controls actually
+        // worked.
         if arguments.contains("--probe-transport") {
             Task { await probeTransport() }
             return true
@@ -98,9 +89,7 @@ enum Probes {
             }
         }
 
-        // Skip while repeat-one is holding: it should start the song again
-        // rather than leave it. Verified against the player, because the whole
-        // question is what the *player* does with the command.
+        // Check that Next restarts the song while repeat-one is on.
         if arguments.contains("--probe-repeat-skip") {
             Task { @MainActor in
                 try? await Task.sleep(for: .seconds(6))
@@ -149,9 +138,8 @@ enum Probes {
             }
         }
 
-        // Drives repeat-one against the real player: seeks to just before the
-        // end, waits, and reports whether the track looped instead of moving on.
-        // Restores playback state afterwards.
+        // Seek near the end and check that the real player loops. Restore its playback
+        // state afterwards.
         if arguments.contains("--probe-repeat-one") {
             Task { @MainActor in
                 try? await Task.sleep(for: .seconds(4))
@@ -307,10 +295,7 @@ enum Probes {
     }
 
     private static func probeTransport() async {
-        // Driven through AppModel, because that is what the buttons call: the
-        // optimistic flip, the hold that stops a stale poll undoing it, and the
-        // refresh afterwards. Probing the coordinator underneath it answers a
-        // different question from "does the button work".
+        // Go through AppModel here so this checks the same path as clicking the buttons.
         let model = AppModel(services: ServiceContainer.live())
         await model.start()
         try? await Task.sleep(for: .seconds(2))

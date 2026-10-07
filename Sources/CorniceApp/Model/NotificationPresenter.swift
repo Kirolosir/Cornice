@@ -2,12 +2,8 @@ import AppKit
 import UserNotifications
 import CorniceKit
 
-/// Posts user notifications.
-///
-/// Authorisation is requested lazily (the first time the app actually has
-/// something to tell the user), rather than at launch. A permission prompt
-/// during first launch, before the app has demonstrated why it would ever
-/// notify you, is the kind of thing people deny reflexively.
+/// Ask for notification permission when the first notice is sent, rather than during
+/// startup.
 @MainActor
 final class NotificationPresenter {
 

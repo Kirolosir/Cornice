@@ -1,11 +1,8 @@
 import SwiftUI
 import CorniceKit
 
-/// How open the surface is.
-///
-/// `peek` exists for perceived latency: responding instantly with a small growth
-/// and committing to the full panel a moment later feels faster than a dwell
-/// timer, even at the same total duration.
+/// The panel's current state. Peek gives feedback while waiting for the configured hover
+/// delay.
 enum SurfaceState: Equatable, Sendable {
     case collapsed
     case peek
@@ -34,14 +31,8 @@ enum SurfaceState: Equatable, Sendable {
     }
 }
 
-/// The surface's rectangle, radii, and content boxes for every state.
-///
-/// The single source of truth for drawing, hit testing and layout. Computing
-/// those separately let the interactive region drift out of step with the
-/// visible one mid-animation.
-///
-/// Sizes are expressed as offsets from the *measured* notch rather than as
-/// absolutes, because a notch's size in points changes with display scaling.
+/// Shared sizes for drawing and input. Most sizes are offsets from the measured notch so
+/// display scaling doesn't move content into the cutout.
 struct SurfaceGeometry: Equatable {
 
     /// The measured notch, in screen points.
@@ -51,21 +42,13 @@ struct SurfaceGeometry: Equatable {
     /// Full window width, which is fixed.
     let windowWidth: CGFloat
 
-    // MARK: - The measured table
-    //
-    // Resting  209 × 38  · bottom 10 · flare 0
-    // Peek     425 × 48  · bottom 16 · flare 14
-    // Activity 425 × 54  · bottom 20 · flare 16
-    // Expanded 604 × 226 · bottom 28 · flare 24
+    // MARK: - Layout sizes
 
-    /// How far peek and activity grow on each side: 425 − 209, halved.
+    /// How far peek grows on each side of the notch.
     static let wing: CGFloat = 108
 
-    /// The activity band is wider than peek because its content has to live
-    /// entirely in the two margins. At peek's width the margin is 70 pt, and a
-    /// device name plus a glyph does not fit in 70 pt, so the name ran under the
-    /// notch where nothing can be seen. Margin width is `wing - flare - padding`,
-    /// so this gives 132 pt a side.
+    /// Leave enough width for a device name and icon on each side. The usable margin is
+    /// wing minus flare minus padding.
     static let activityWing: CGFloat = 170
     /// How much taller peek is than the notch: 48 − 38.
     static let peekDrop: CGFloat = 10
@@ -80,9 +63,9 @@ struct SurfaceGeometry: Equatable {
     /// is the hole, so content lives in the two margins or below the band.
     var bandHeight: CGFloat { notchSize.height }
 
-    /// First clear row below the band, for tall surfaces. 58 in the handoff.
+    /// First content row below the notch band.
     static let contentTop: CGFloat = 58
-    /// Horizontal padding from the *body*'s edge, inside the flare. 22 in the handoff.
+    /// Padding inside the panel shoulders.
     static let contentPadding: CGFloat = 22
 
     init(notchSize: CGSize, notchCornerRadius: CGFloat, windowWidth: CGFloat) {
@@ -116,11 +99,8 @@ struct SurfaceGeometry: Equatable {
         }
     }
 
-    /// Bottom-corner radius for a state.
-    ///
-    /// Grows with the surface so the silhouette stays proportionate; a notch
-    /// radius on a 604-point panel would look like a rectangle, and a panel
-    /// radius on the collapsed notch would not match the hardware.
+    /// Increase the bottom radius as the panel grows. The collapsed state uses the hardware
+    /// notch's radius.
     func bottomRadius(for state: SurfaceState) -> CGFloat {
         switch state {
         case .collapsed: notchCornerRadius
@@ -131,10 +111,7 @@ struct SurfaceGeometry: Equatable {
         }
     }
 
-    /// The concave cove where the surface is wider than the notch.
-    ///
-    /// Zero when collapsed, at notch width there is nothing to grow out of,
-    /// and a cove would put a visible notch in the hardware notch.
+    /// The inward curve at each shoulder. No flare is needed at the resting notch width.
     func flareRadius(for state: SurfaceState) -> CGFloat {
         switch state {
         case .collapsed: 0
@@ -147,10 +124,7 @@ struct SurfaceGeometry: Equatable {
 
     // MARK: - Content boxes
 
-    /// The full width minus a cove on each side.
-    ///
-    /// The cove is a corner treatment, but the vertical sides sit `flare` inboard
-    /// for their whole height, so this is the rectangle content must fit.
+    /// Content width after removing the shoulder flare on both sides.
     func bodyWidth(for state: SurfaceState) -> CGFloat {
         max(0, size(for: state).width - flareRadius(for: state) * 2)
     }
@@ -163,10 +137,8 @@ struct SurfaceGeometry: Equatable {
 
     // MARK: - Placement
 
-    /// The surface's rect inside the window, in SwiftUI's top-left origin space.
-    ///
-    /// Always anchored to the top edge and horizontally centred, because the
-    /// surface is physically attached to the notch.
+    /// Center the panel horizontally and pin it to the top. Coordinates here use SwiftUI's
+    /// top-left origin.
     func rect(for state: SurfaceState) -> CGRect {
         let size = size(for: state)
         return CGRect(x: (windowWidth - size.width) / 2, y: 0, width: size.width, height: size.height)
@@ -209,12 +181,8 @@ struct SurfaceGeometry: Equatable {
     }
 }
 
-/// Where the album artwork sits, in window coordinates, for each state.
-///
-/// The artwork exists in every state, so it is drawn once and *moved* rather
-/// than drawn three times and cross-faded: SwiftUI interpolates its frame
-/// because it is the same view throughout. Offsets are relative to the surface's
-/// own left edge, so they survive a differently-sized notch.
+/// Artwork positions relative to the panel. Draw it once and move its frame between states
+/// so it doesn't fade between separate copies.
 struct ArtworkPlacement: Equatable {
     var x: CGFloat
     var y: CGFloat

@@ -1,10 +1,8 @@
 import XCTest
 @testable import CorniceKit
 
-/// The visualiser is driven by real signal processing, so it is tested with
-/// real signals. Feeding it a 60 Hz sine and asserting the energy lands in the
-/// lowest band is a far better check than watching bars move while music plays,
-/// which can look plausible while being completely wrong.
+/// Use generated signals to check which frequency bands get energy. Moving bars alone
+/// wouldn't show whether the FFT is correct.
 final class AudioAnalysisTests: XCTestCase {
 
     private let sampleRate = 48_000.0
@@ -186,9 +184,7 @@ final class IndicatorBarTests: XCTestCase {
         AudioLevels(bands: bands, level: level, isBeat: beat > 0, beatIntensity: beat)
     }
 
-    /// The whole point of the change: the same spectrum played louder has to
-    /// move further. Driving the bars from the bands alone gave every passage
-    /// the same amplitude, because each band is already compressed.
+    /// The same spectrum should move more when played louder.
     func testLouderAudioSwingsFurtherForTheSameSpectrum() {
         let spectrum: [Float] = [0.8, 0.8, 0.7, 0.7, 0.6, 0.6, 0.5, 0.5]
         let quiet = levels(bands: spectrum, level: 0.2).barHeights(count: 3)
@@ -238,12 +234,8 @@ final class IndicatorBarTests: XCTestCase {
     }
 }
 
-/// Calibration of band magnitudes against material the app actually meets.
-///
-/// These exist because the chain was correct for a sine wave and useless for a
-/// song. A pure tone puts all of its energy in one FFT bin; music spreads itself
-/// across hundreds, so a scale calibrated on a tone reads real audio as almost
-/// nothing and the bars move by a fraction of a point.
+/// Check broadband signals too. A gain that works for one sine tone can still make real
+/// music barely move the bars.
 final class BandCalibrationTests: XCTestCase {
 
     private let rate = 48_000.0
@@ -330,10 +322,8 @@ final class SpectralTiltTests: XCTestCase {
         XCTAssertEqual(SpectrumAnalyzer.spectralTilt(0, of: 1), 1)
     }
 
-    /// End to end: a high tone must move its bar about as much as a low one of
-    /// the same amplitude. Without compensation the top of the spectrum sat near
-    /// the resting height while the bottom pinned, which reads as a broken row
-    /// rather than as a quiet treble.
+    /// Equal-amplitude high and low tones should produce similar bar heights after
+    /// compensation.
     func testHighFrequenciesReachTheSameRangeAsLow() {
         let rate = 48_000.0
         let size = 1024
@@ -382,12 +372,8 @@ final class RepeatModeTests: XCTestCase {
     }
 }
 
-/// Balance across the spectrum, checked against pink noise.
-///
-/// Pink noise is the standard stand-in for music's long-term average spectrum:
-/// equal energy per octave. A visualiser that is correctly compensated draws it
-/// as a roughly level row. Drawn as a staircase (pinned on the left, motionless
-/// on the right) the compensation is wrong, which is exactly what it was.
+/// Pink noise has equal energy per octave. After compensation its bands should be roughly
+/// level.
 final class SpectrumBalanceTests: XCTestCase {
 
     private let rate = 48_000.0
@@ -436,8 +422,7 @@ final class SpectrumBalanceTests: XCTestCase {
         XCTAssertLessThan(highest - lowest, 0.25, "the row should read level, not as a staircase")
     }
 
-    /// The three bars the interface actually draws, rather than the eight bands
-    /// behind them: none may be dead and none may be permanently full.
+    /// Check three-bar aggregation: no bar should stay dead or pinned at full height.
     func testAllThreeBarsAreAliveAtEveryLevel() {
         for amplitude in [Float(0.35), 0.15, 0.05] {
             let measured = profile(amplitude: amplitude)
@@ -472,9 +457,7 @@ final class BarDistributionTests: XCTestCase {
         AudioLevels(bands: bands, level: level, isBeat: false, beatIntensity: 0)
     }
 
-    /// Every band must reach some bar. Fixed-width slices with a remainder gave
-    /// five bars across eight bands one band each and the last one four, so the
-    /// right-hand bar answered to half the spectrum.
+    /// Check that every band contributes at each requested bar count.
     func testEveryBandReachesABarAtEveryCount() {
         for count in 2...6 {
             for band in 0..<8 {
@@ -507,12 +490,8 @@ final class BarDistributionTests: XCTestCase {
     }
 }
 
-/// How the bars answer to the volume fader.
-///
-/// A process tap captures the stream before the fader (measured on this
-/// machine, dropping the system volume from 70 to 25 moved the captured level
-/// only from 0.96 to 0.86), so without the fader the bars cannot tell blasting
-/// music from the same track at a whisper.
+/// Check that the bars respond to system volume, since captured audio is measured before
+/// the output fader.
 final class OutputVolumeResponseTests: XCTestCase {
 
     private func levels(_ value: Float) -> AudioLevels {
@@ -532,10 +511,7 @@ final class OutputVolumeResponseTests: XCTestCase {
         XCTAssertGreaterThan(loud - quiet, 0.1, "the difference has to be visible")
     }
 
-    /// Muted output is not the same as silence (the stream is still playing), but
-    /// nothing is reaching the room, so the bars must be *still*, not merely
-    /// smaller. The floor that keeps quiet music moving used to survive a muted
-    /// fader and leave a quarter of the travel in place.
+    /// Muted output should leave every bar still, even if the captured stream is playing.
     func testMutedOutputIsCompletelyStill() {
         XCTAssertEqual(levels(0.9).barHeights(count: 3, outputVolume: 0), [0.3, 0.3, 0.3])
     }
@@ -552,9 +528,7 @@ final class OutputVolumeResponseTests: XCTestCase {
         XCTAssertEqual(heights.last, 0.3)
     }
 
-    /// Quiet music must still visibly move. Scaling straight off the level left
-    /// it sitting at the resting height, which reads as a component that failed
-    /// rather than as quiet music.
+    /// Quiet music should still produce some motion.
     func testQuietAudioStillMoves() {
         let bars = levels(0.18).barHeights(count: 3, outputVolume: 0.6)
         XCTAssertGreaterThan(bars[0], 0.42, "quiet audio should still lift the bars")
@@ -588,11 +562,7 @@ final class OutputVolumeResponseTests: XCTestCase {
         )
     }
 
-    /// The response has to be *perceptible*, not merely present.
-    ///
-    /// Every ordering test below passed against a curve that put barely a fifth
-    /// of the bars' travel across a tenfold change in volume. Technically a
-    /// response, and a flat line to look at. This asserts the size of it.
+    /// Check how much the bars move, not just whether lower volume gives a smaller number.
     func testTheFaderCoversAUsefulPartOfTheTravel() {
         let loudest = levels(0.5).barHeights(count: 3, outputVolume: 1.0)[0]
         let quietest = levels(0.5).barHeights(count: 3, outputVolume: 0.1)[0]

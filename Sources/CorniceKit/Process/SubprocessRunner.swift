@@ -1,20 +1,8 @@
 import Foundation
 
-/// Runs real subprocesses with a timeout, a cancellation path, and a cap on
-/// captured output.
-///
-/// The awkward part of running a process from Swift concurrency is that three
-/// things finish independently (stdout reaching EOF, stderr reaching EOF, and
-/// the process exiting), and the continuation must be resumed exactly once
-/// after all three, or after a timeout or cancellation pre-empts them. All of
-/// that bookkeeping lives in `RunState`, which is the only place a lock is
-/// taken.
-///
-/// Reads happen on a dedicated dispatch queue rather than in detached tasks.
-/// `readDataToEndOfFile` blocks, and blocking a thread from Swift's cooperative
-/// pool is precisely the thing that deadlocks a concurrency-heavy app: the pool
-/// is sized to the core count, and this app can have a git refresh, a port
-/// scan, and a docker query in flight at once.
+/// Run a process with timeout, cancellation and an output limit. Wait for stdout, stderr
+/// and exit before finishing once. Read pipes on a dispatch queue because blocking reads
+/// can stall Swift's task pool.
 public struct SubprocessRunner: ProcessRunning {
 
     /// Grace period between SIGTERM and SIGKILL when a command overruns.
@@ -27,13 +15,8 @@ public struct SubprocessRunner: ProcessRunning {
         attributes: .concurrent
     )
 
-    /// Base environment handed to every child.
-    ///
-    /// Built from scratch rather than inherited so behaviour does not change
-    /// depending on how the app was launched. `HOME` is needed for git to find
-    /// the user's global config; `LC_ALL=C` keeps git's output in the stable
-    /// machine-readable spelling that the parsers expect regardless of the
-    /// user's locale.
+    /// Use a consistent environment for child processes. HOME lets tools find user
+    /// configuration, and LC_ALL=C keeps their output predictable for parsing.
     private static var baseEnvironment: [String: String] {
         [
             "PATH": ToolLocator.searchPaths.joined(separator: ":"),
@@ -74,12 +57,8 @@ public struct SubprocessRunner: ProcessRunning {
         }
     }
 
-    /// Owns one running process and the three-way completion handshake.
-    ///
-    /// `@unchecked Sendable` because correctness here rests on the lock rather
-    /// than on the compiler: every mutable field is touched only inside
-    /// `lock`, and the continuation is resumed outside it so a resumed task
-    /// can never re-enter and deadlock.
+    /// Keep process state under the lock. Resume the continuation after releasing it so the
+    /// resumed task can't deadlock by coming back in.
     private final class RunState: @unchecked Sendable {
         private let command: Command
         private let lock = NSLock()
@@ -197,10 +176,8 @@ public struct SubprocessRunner: ProcessRunning {
             finishIfReady()
         }
 
-        /// Timeout fired. SIGTERM first so the child can clean up, SIGKILL after
-        /// a grace period if it ignores that. The continuation is not resumed
-        /// here. It resumes through the normal path once the pipes close, which
-        /// guarantees we never resume while a read is still running.
+        /// Try SIGTERM first, then SIGKILL after the grace period. Finish through the
+        /// normal pipe-closing path so reads aren't left running.
         private func expire(killGrace: TimeInterval, queue: DispatchQueue) {
             lock.lock()
             let alreadyDone = continuation == nil || exited
@@ -230,10 +207,8 @@ public struct SubprocessRunner: ProcessRunning {
             process.terminate()
         }
 
-        /// Resumes the continuation once stdout, stderr, and the process itself
-        /// have all finished, and exactly once, because taking the continuation
-        /// out of the field under the lock is what makes the second caller a
-        /// no-op.
+        /// Finish once stdout, stderr and the process have ended. Taking the continuation
+        /// under the lock prevents a second resume.
         private func finishIfReady() {
             lock.lock()
             guard outputClosed, errorClosed, exited, let continuation else {

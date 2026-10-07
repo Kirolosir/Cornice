@@ -1,10 +1,6 @@
 import Foundation
 
-/// A `ProcessRunning` whose responses are supplied by the test.
-///
-/// Ships in the library rather than the test target so SwiftUI previews and the
-/// `--demo` launch mode can drive the whole app from canned output without any
-/// of the real services running.
+/// A process runner with responses supplied by the caller, useful for tests and previews.
 public actor ScriptedProcessRunner: ProcessRunning {
 
     /// How to answer one invocation.
@@ -16,9 +12,8 @@ public actor ScriptedProcessRunner: ProcessRunning {
         case delayed(Duration, then: CommandResult)
     }
 
-    /// Matches an invocation. Matching on the argument list rather than on call
-    /// order keeps tests readable when a service issues several git commands
-    /// whose order is an implementation detail.
+    /// Match commands by arguments instead of call order so tests do not depend on
+    /// scheduling.
     public struct Rule: Sendable {
         let matches: @Sendable (Command) -> Bool
         let response: Response

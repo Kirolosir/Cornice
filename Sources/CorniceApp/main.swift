@@ -1,19 +1,11 @@
 import AppKit
 import CorniceKit
 
-// Entry point.
-//
-// AppKit rather than a SwiftUI `App`: this application has no windows in the
-// ordinary sense (its entire interface is one borderless panel pinned to the
-// top of the screen), and `NSApplicationMain` gives direct control over
-// activation policy, the status item, and termination. A SwiftUI `App` would
-// mean fighting its window management to end up in the same place.
+// AppKit entry point for the panel, menu bar item and app lifecycle.
 
 let delegate = AppDelegate()
 let application = NSApplication.shared
 application.delegate = delegate
-// `.accessory`: no Dock icon and no menu bar of its own, but still able to show
-// windows and become active when the settings window or a file picker needs it.
-// `.prohibited` would block those outright.
+// Hide the Dock icon but still allow settings and file pickers to open and receive focus.
 application.setActivationPolicy(.accessory)
 application.run()

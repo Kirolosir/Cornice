@@ -1,17 +1,9 @@
 import Foundation
 import SystemConfiguration
 
-/// Whether a VPN is carrying the Mac's default route.
-///
-/// The test is deliberately "is the primary interface a tunnel", not "does a
-/// tunnel interface exist". Plenty of things create `utun` devices without being
-/// a VPN (iCloud Private Relay, Handoff, AirDrop), so counting interfaces reports
-/// a VPN connected on a machine that has none. What people mean by "the VPN is
-/// on" is that their traffic is going through it, and that is exactly what the
-/// primary interface says.
-///
-/// Event-driven through `SCDynamicStore` rather than polled: the networking
-/// stack already publishes this and notifies on change.
+/// Check whether the primary route uses a tunnel. A utun interface by itself can belong to
+/// other system features, so it isn't enough to identify a VPN. Listen for route changes
+/// with SCDynamicStore.
 public final class VPNMonitor: @unchecked Sendable {
 
     public struct Connection: Equatable, Sendable {

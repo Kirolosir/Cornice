@@ -1,12 +1,7 @@
 import SwiftUI
 
-/// The visual language.
-///
-/// Two rules shape it. **The surface is true black wherever it touches the
-/// notch** (anything else shows a seam against the unlit cut-out), so only the
-/// expanded panel follows the system appearance. And **colour is carried by a
-/// value or a glyph, never by a block of text**, which is what keeps a surface
-/// this small from turning into a dashboard.
+/// Shared colors, fonts and animations. Keep the notch area black so it blends into the
+/// screen cutout.
 enum Theme {
 
     // MARK: - Ink
@@ -150,10 +145,7 @@ enum Theme {
         static let cardValue = Font.system(size: 21, weight: .semibold, design: .monospaced)
         /// A session clock.
         static let sessionClock = Font.system(size: 21, weight: .semibold, design: .monospaced)
-        /// A timer inside the Timers module.
-        ///
-        /// SF Pro with tabular figures, matching Apple's own countdowns. SF Mono
-        /// reads as a terminal beside them; tabular is the part that matters.
+        /// Use tabular digits so the countdown doesn't shift around as it changes.
         static let timerValue = Font.system(size: 30, weight: .medium).monospacedDigit()
         /// A timer in its own HUD, where it is the only thing on the row.
         static let timerHUD = Font.system(size: 34, weight: .medium).monospacedDigit()
@@ -179,9 +171,8 @@ enum Theme {
 
     // MARK: - Motion
 
-    /// Overshoot applies to width and height only, and height overshoots
-    /// *downward*. The top edge is a fixed anchor: a surface attached to the top
-    /// of the screen that overshoots upward looks like it has come unstuck.
+    /// Keep the top edge pinned to the screen. Width and height can overshoot, with height
+    /// growing downward.
     enum Motion {
         /// Opening stays close to its final size, with just a little give.
         static let expand = SwiftUI.Animation.spring(response: 0.36, dampingFraction: 0.88)
@@ -211,9 +202,7 @@ enum Theme {
         /// The scrubber growing under the pointer and shrinking again after.
         static let scrubGrab = SwiftUI.Animation.spring(response: 0.25, dampingFraction: 0.7)
 
-        /// The playhead moving somewhere it did not get to by playing: a seek,
-        /// a skip, a track starting over. Springy enough that you can see it
-        /// travel and know the press landed instead of having to check.
+        /// Animate seeks, skips and restarts so the new playhead position is easy to see.
         static let scrubJump = SwiftUI.Animation.spring(response: 0.42, dampingFraction: 0.8)
 
         // Content arrives in two groups at fixed points along the opening

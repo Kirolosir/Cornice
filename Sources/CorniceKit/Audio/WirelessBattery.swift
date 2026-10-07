@@ -1,14 +1,8 @@
 import Foundation
 import IOKit
 
-/// Battery level of a connected wireless audio device.
-///
-/// Apple exposes AirPods battery through `AppleDeviceManagementHIDEventService`
-/// in the IO registry. There is no public API for it, but this only *reads*
-/// registry properties. It calls nothing private, injects nothing, and needs no
-/// permission. If the keys are absent, which they are for most non-Apple
-/// devices and can be immediately after connecting, it returns `nil` and the UI
-/// simply omits the ring.
+/// Read wireless-device battery properties from the IO registry. If the device doesn't
+/// expose them yet, return nil and omit the ring.
 public enum WirelessBattery {
 
     /// Combined level across both buds and the case, 0...1, or `nil`.

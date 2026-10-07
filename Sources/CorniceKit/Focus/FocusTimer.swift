@@ -1,13 +1,7 @@
 import Foundation
 
-/// State of the focus timer.
-///
-/// Modelled as a state machine over *timestamps* rather than a decrementing
-/// counter. A counter driven by a repeating timer drifts, stops advancing when
-/// the app is suspended, and is wrong after the Mac sleeps. Storing the
-/// deadline and subtracting the current time means the display is correct
-/// however long the process was descheduled, and the UI timer becomes a
-/// repaint trigger rather than the source of truth.
+/// Store deadlines instead of subtracting a second on each tick. Remaining time stays
+/// correct after sleep or a delayed redraw.
 public enum FocusTimerState: Equatable, Sendable {
     case idle
     /// Running, with the instant the session should end.
@@ -58,11 +52,8 @@ public enum FocusTimerState: Equatable, Sendable {
     }
 }
 
-/// Drives the focus timer.
-///
-/// Pure state transitions with an injected clock, so the whole state machine
-/// (including "what happens when you pause at 3 seconds left and resume an
-/// hour later") is tested without waiting in real time.
+/// Timer state changes with a supplied time, so tests can check pause and resume without
+/// waiting.
 public struct FocusTimer: Equatable, Sendable {
     public private(set) var state: FocusTimerState
     /// Configured session length in seconds.
@@ -121,9 +112,7 @@ public struct FocusTimer: Equatable, Sendable {
         }
     }
 
-    /// Advances the state machine. Returns `true` exactly once, on the tick
-    /// where the session completes, so the caller knows to fire a notification
-    /// without having to detect the edge itself.
+    /// Return true once when the session finishes so the caller can raise one alert.
     @discardableResult
     public mutating func tick(at now: Date = .now) -> Bool {
         guard case .running(let deadline, let total) = state else { return false }
@@ -132,11 +121,7 @@ public struct FocusTimer: Equatable, Sendable {
         return true
     }
 
-    /// Applies a new configured duration.
-    ///
-    /// A change while a session is running takes effect at the *next* session:
-    /// silently moving a running deadline would be a surprising thing to do to
-    /// someone mid-session.
+    /// Set the duration for the next session. Don't move an active timer's deadline here.
     public mutating func setDuration(minutes: Int) {
         duration = TimeInterval(minutes.clamped(to: 1...240) * 60)
         if case .idle = state { return }

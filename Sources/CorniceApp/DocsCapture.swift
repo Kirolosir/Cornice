@@ -2,15 +2,8 @@ import AppKit
 import SwiftUI
 import CorniceKit
 
-/// Renders the interface to PNG files for the README.
-///
+/// Save screenshots of the views using preview data.
 /// Run with `cornice --capture-docs <directory>`.
-///
-/// Uses `ImageRenderer` against the real view hierarchy fed by
-/// `PreviewServices`, rather than screen capture: the images are deterministic,
-/// reproducible on any machine, regenerable in one command when the design
-/// changes, and produced without granting anything Screen Recording permission.
-/// They are the actual views, not mockups.
 @MainActor
 enum DocsCapture {
 
@@ -130,11 +123,7 @@ enum DocsCapture {
         exit(0)
     }
 
-    /// One of each, with representative values.
-    ///
-    /// The numbers here are the design's own specimen values rather than live
-    /// readings: these images document the layout, and a screenshot of whatever
-    /// the rendering machine's battery happened to be at is not a specification.
+    /// Sample values for each HUD. These screenshots show the layout, not live readings.
     private static func hudGallery(timer: TimerEntry?) -> [HUDContent] { [
         .noInternet,
         .filesReceived(files: ["Debug Report.txt", "Debug Image.png"]),
@@ -160,11 +149,8 @@ enum DocsCapture {
         to directory: URL
     ) {
         let surfaceSize = geometry.size(for: model.surfaceState)
-        // Enough room around the surface for its shadow, and enough above to
-        // show that it is attached to the top edge of the screen. A floor on the
-        // width because the resting state draws its thumbnail and title
-        // *outside* the surface, in the menu-bar margins. Crop to the shape and
-        // the only two things it shows disappear.
+        // Leave room for the shadow and the title beside the notch. Cropping to the panel
+        // would hide the resting content.
         let canvas = CGSize(
             width: max(surfaceSize.width + 120, 520),
             height: surfaceSize.height + 56

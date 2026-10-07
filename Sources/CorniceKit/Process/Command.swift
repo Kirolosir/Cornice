@@ -1,21 +1,14 @@
 import Foundation
 
-/// A fully-specified subprocess invocation.
-///
-/// There is no shell anywhere in this type. `executable` is an absolute path and
-/// `arguments` is an array that is passed to `execve` verbatim, so a branch
-/// named `; rm -rf ~` is just an unusual branch name rather than a command. The
-/// only place a shell is ever involved is `CommandSpec`, where the user has
-/// explicitly configured one, and that path validates its input separately.
+/// An executable path and its arguments, passed directly to the process. Don't run these
+/// through a shell.
 public struct Command: Sendable, Equatable {
     /// Absolute path to the binary. Resolved by `ToolLocator`, never by `$PATH`.
     public var executable: String
     public var arguments: [String]
     /// Directory to run in. Validated by the caller before it gets here.
     public var workingDirectory: String?
-    /// Environment overlay. Merged onto a minimal base environment rather than
-    /// inheriting the app's, so subprocess behaviour does not drift with
-    /// whatever the launching context happened to export.
+    /// Merge these overrides into a small base environment so commands behave consistently.
     public var environment: [String: String]
     /// Wall-clock budget. The process is terminated, then killed, on expiry.
     public var timeout: TimeInterval

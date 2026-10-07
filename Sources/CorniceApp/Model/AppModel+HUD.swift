@@ -2,19 +2,8 @@ import AppKit
 import SwiftUI
 import CorniceKit
 
-/// Raising, replacing and retracting system HUDs.
-///
-/// Every one of these is an *announcement*: it appears because the machine did
-/// something, not because the user asked, and it gets out of the way by itself.
-/// Two rules follow from that and are enforced here rather than at each call
-/// site, because each of them was a bug before it was a rule:
-///
-/// - **A HUD never steals an open panel.** If the user is looking at the player,
-///   the machine can wait.
-/// - **The first reading of anything is not an event.** Launching with the
-///   charger in, or with a VPN already up, is not "the charger was just plugged
-///   in", and announcing state at launch is how a notch app becomes something
-///   people quit.
+/// Handles system notices without taking over an open panel. Most notices appear when a
+/// reading changes, not on every poll.
 @MainActor
 extension AppModel {
 
@@ -68,10 +57,8 @@ extension AppModel {
         }
     }
 
-    /// The live countdown for whichever timer the HUD is showing.
-    ///
-    /// Read from the board on every frame rather than captured into the HUD's
-    /// payload, because the payload is a snapshot and a countdown is not.
+    /// Read the countdown from the timer board. The HUD payload doesn't update every
+    /// second.
     var hudTimerReading: String {
         guard case .timerRunning(let id, _, _, _) = hudContent,
               let entry = timers.entries.first(where: { $0.id == id })
@@ -106,9 +93,8 @@ extension AppModel {
         serviceContainer.downloads.stop()
     }
 
-    /// Watching Downloads is TCC-protected, so it is started only once the user
-    /// has asked for it. Otherwise the app springs a folder-access dialog on
-    /// somebody who never wanted a download HUD.
+    /// Start watching Downloads only after the user enables it, since folder access can ask
+    /// for permission.
     func startDownloadWatching() {
         serviceContainer.downloads.start { [weak self] progress in
             Task { @MainActor in
@@ -131,10 +117,7 @@ extension AppModel {
         if case .download = hudContent { dismissHUD() }
     }
 
-    /// Reacts to a new telemetry sample's battery reading.
-    ///
-    /// Edge-triggered throughout: a HUD fires on the sample where something
-    /// changed, never on the state persisting.
+    /// Check battery changes here so the same reading doesn't keep showing the same notice.
     func handleBatteryChange(from previous: BatteryState?, to current: BatteryState?) {
         guard let current else { return }
 
@@ -173,10 +156,7 @@ extension AppModel {
         dismissHUD()
     }
 
-    /// A readable name for a tunnel interface.
-    ///
-    /// The networking stack knows the interface, not the product, so this says
-    /// what is actually true rather than inventing a vendor.
+    /// Show the tunnel interface name. The interface doesn't tell us which VPN app owns it.
     private static func tunnelName(_ interface: String) -> String {
         "VPN · \(interface)"
     }

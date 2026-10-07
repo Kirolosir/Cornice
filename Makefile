@@ -21,6 +21,6 @@ clean:
 	swift package clean
 	rm -rf dist
 
-# Records idle CPU and memory for the figures quoted in the README.
+# Measure CPU and memory while the panel is closed.
 measure:
 	./Scripts/measure.sh

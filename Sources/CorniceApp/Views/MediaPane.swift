@@ -1,16 +1,8 @@
 import SwiftUI
 import CorniceKit
 
-/// The Now Playing module.
-///
-/// The layout is the Island's: artwork, then title and artist, then a full-width
-/// scrubber with the times beneath it, then chrome-free transport. Putting the
-/// scrubber under everything rather than beside the artwork is what gives it
-/// enough width to be precise enough to actually drag.
-///
-/// The artwork itself is *not* drawn here. It belongs to the travelling layer in
-/// `RootView`, so that it arrives from the peek position rather than appearing;
-/// this pane reserves the space it lands in.
+/// The player controls and track text. RootView draws the moving artwork; this view leaves
+/// room for it and puts the scrubber across the full width.
 struct MediaPane: View {
     @Bindable var model: AppModel
     let geometry: SurfaceGeometry
@@ -22,11 +14,7 @@ struct MediaPane: View {
     private var snapshot: MediaSnapshot? { model.media }
     private var isExpanded: Bool { model.surfaceState == .expanded }
 
-    /// What an engaged toggle is coloured with.
-    ///
-    /// The artwork's own accent rather than plain white: on a surface that is
-    /// already picking up colour from the cover, "on" reading as *slightly
-    /// brighter grey* is not a state anyone notices.
+    /// Use the cover's accent for active controls so their state is easy to spot.
     private var accent: Color { model.artworkTint ?? Theme.Palette.accent }
 
     var body: some View {
@@ -79,9 +67,7 @@ struct MediaPane: View {
         }
     }
 
-    /// Glyph only, no button fills. On the Island the transport has no chrome at
-    /// all (the surface is the chrome), and adding circles behind these turns a
-    /// media surface into a media *player*, which is a different, heavier thing.
+    /// Use plain transport icons to keep the control row light.
     private func transport(_ snapshot: MediaSnapshot) -> some View {
         HStack(spacing: 0) {
             Button { model.toggleShuffle() } label: {
@@ -106,11 +92,8 @@ struct MediaPane: View {
                 .help("Previous")
 
                 Button { model.playPause() } label: {
-                    // A symbol *replace*, not a cross-fade: the outgoing glyph is
-                    // removed and the incoming one pops in from 0.68. Fading two
-                    // glyphs through each other produces a moment where the
-                    // control shows neither state, which is exactly the moment
-                    // the user is looking at it.
+                    // Replace the play/pause icon instead of fading two symbols over each
+                    // other.
                     PlayPauseGlyph(isPlaying: snapshot.state.isPlaying, ink: ink)
                 }
                 .buttonStyle(PressScaleStyle())
@@ -141,9 +124,8 @@ struct MediaPane: View {
                 // Music's is a three-way and nothing on the glyph says so.
                 .help(Self.repeatHelp(snapshot))
 
-                // Where the sound is actually going. Worth a permanent slot: with
-                // wireless audio it is genuinely ambiguous, and it is the question
-                // people open the menu bar to answer.
+                // Show the output device under the controls so the audio destination is
+                // clear.
                 Button { model.openSoundSettings() } label: {
                     TransportGlyph(
                         name: "airplayaudio",
@@ -212,10 +194,8 @@ struct MediaPane: View {
     }
 }
 
-/// The scrubber and its timestamps.
-///
-/// Split out so that the one part of the player that moves every frame is also
-/// the only part that redraws. It reads the frame clock; nothing above it does.
+/// Keep the scrubber in its own view. It reads the frame clock without redrawing the rest
+/// of the player.
 struct ScrubberRow: View {
     @Bindable var model: AppModel
     let clock: FrameClock
@@ -245,10 +225,7 @@ struct ScrubberRow: View {
     }
 }
 
-/// A transport glyph, with the 3.5 pt state dot beneath it.
-///
-/// The dot is how a toggle reads as "on" without a fill: the glyph goes to full
-/// ink and a dot pops in below it, which is the convention across iOS.
+/// A small dot below the icon shows that shuffle or repeat is on.
 struct TransportGlyph: View {
     let name: String
     let size: CGFloat
@@ -263,13 +240,8 @@ struct TransportGlyph: View {
     /// skips) are simply primary.
     var body: some View {
         ZStack(alignment: .bottom) {
-            // The glyph goes to full-strength ink when engaged, and the album's
-            // colour lives in the dot.
-            //
-            // Colouring the *glyph* with the accent was the bug: the accent's
-            // brightness is clamped to 0.46-0.76 while the disengaged state is
-            // white at 52%, so a darker cover made "on" render dimmer than
-            // "off". The button worked and looked as though it had not.
+            // Keep active icons bright. Put the artwork color in the dot so dark covers
+            // don't make an active button look dimmer.
             Image(systemName: name)
                 .font(.system(size: size, weight: isOn ? .semibold : .medium))
                 .foregroundStyle(isOn ? ink.primary : ink.tertiary)
@@ -303,22 +275,8 @@ struct PlayPauseGlyph: View {
     }
 }
 
-/// The progress bar. 6 pt tall, no knob, and you can seek by clicking anywhere
-/// along it.
-///
-/// Three different things move this bar and they should not look alike:
-///
-/// - Playing. The position is extrapolated every frame, so it is already smooth
-///   and gets no animation at all. Animating it would mean starting a new
-///   animation on every frame, which costs CPU and buys nothing.
-/// - Dragging. Follows the pointer exactly, with no animation, because any
-///   easing here reads as the bar lagging behind the mouse.
-/// - Jumping. A seek, a skip, or a track starting over. This one springs, so
-///   you see the playhead travel and know the press landed.
-///
-/// While you are dragging, the position is kept locally and only sent to the
-/// player on release. Otherwise the next poll would snap the bar back to where
-/// the song actually is, halfway through the drag.
+/// Click or drag to seek. Update dragging directly and animate seeks. Send the position on
+/// release so polls do not pull it back during the drag.
 struct Scrubber: View {
     let progress: Double
     let track: Color
@@ -341,10 +299,8 @@ struct Scrubber: View {
         return isHovering ? 8 : 6
     }
 
-    /// Anything bigger than this did not get there by playing.
-    ///
-    /// A frame of playback moves the bar by well under a thousandth, even on a
-    /// very short track, so there is a lot of room between the two cases.
+    /// Treat a large change as a seek or skip. Normal playback moves much less than this
+    /// between frames.
     private static let jumpThreshold = 0.04
 
     var body: some View {

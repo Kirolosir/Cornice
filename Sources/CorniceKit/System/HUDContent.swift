@@ -1,10 +1,7 @@
 import Foundation
 
-/// What a system HUD is actually saying.
-///
-/// The payload is carried with the state rather than read back out of the model
-/// when the view draws, because a HUD outlives the condition that raised it: a
-/// charge notice should not blank out because the next telemetry sample landed.
+/// Store the notice's values with its state so a later reading doesn't change the message
+/// while it's on screen.
 public enum HUDContent: Equatable, Sendable {
     case noInternet
     case filesReceived(files: [String])
@@ -35,10 +32,8 @@ public enum HUDContent: Equatable, Sendable {
         }
     }
 
-    /// Whether a newly-raised HUD should replace this one.
-    ///
-    /// An unanswered alert outranks everything else, because it is waiting on an
-    /// answer; a charge warning outranks the rest of the announcements.
+    /// Keep unanswered alerts above ordinary notices. Battery warnings take priority over
+    /// less urgent updates.
     public var priority: Int {
         switch self {
         case .noInternet, .timerRunning, .filesReceived: 2

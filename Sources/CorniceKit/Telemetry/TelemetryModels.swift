@@ -1,11 +1,6 @@
 import Foundation
 
-/// One instant of machine telemetry.
-///
-/// Deliberately small. This is context you glance at while a build runs ("is
-/// the machine pegged, is memory about to swap, is the network actually doing
-/// anything") not a replacement for Activity Monitor. Anything requiring a
-/// per-process table or historical storage is out of scope on purpose.
+/// One CPU, memory and battery reading with its capture time.
 public struct TelemetrySample: Equatable, Sendable {
     /// Fraction of total CPU capacity in use across all cores, 0...1.
     public let cpuUsage: Double
@@ -98,10 +93,8 @@ public enum BatteryAlertPolicy {
     }
 }
 
-/// A bounded ring of recent samples, for the sparklines.
-///
-/// Fixed capacity so a session left running for days cannot grow this without
-/// bound. The panel only ever draws the last `capacity` points anyway.
+/// Keep only the recent samples needed for the charts, so history doesn't grow for the
+/// whole session.
 public struct TelemetryHistory: Equatable, Sendable {
     public private(set) var samples: [TelemetrySample] = []
     public let capacity: Int

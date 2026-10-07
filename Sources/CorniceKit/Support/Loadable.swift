@@ -1,11 +1,7 @@
 import Foundation
 
-/// The lifecycle of a value that is fetched asynchronously and may fail.
-///
-/// `.refreshing` deliberately carries the previous value so the UI can keep
-/// showing real data (dimmed) while an update is in flight, instead of
-/// flashing a spinner every refresh cycle. `.failed` does the same: a failed
-/// refresh should not erase a good last-known state.
+/// Keep the last value while refreshing or after an error. A failed refresh shouldn't erase
+/// data the app already has.
 public enum Loadable<Value: Sendable>: Sendable {
     case idle
     case loading
@@ -39,9 +35,8 @@ public enum Loadable<Value: Sendable>: Sendable {
         return .loading
     }
 
-    /// Folds a service result into the next state, preserving the last good
-    /// value on failure and ignoring cancellation entirely (a cancelled task
-    /// was superseded, so its result must not overwrite the newer one).
+    /// Keep the last good value on failure. Ignore cancellation so an old task cannot
+    /// replace a newer result.
     public func resolve(_ result: Result<Value, ServiceError>) -> Loadable<Value> {
         switch result {
         case .success(let value):

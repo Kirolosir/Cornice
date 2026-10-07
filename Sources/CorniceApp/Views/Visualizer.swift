@@ -1,11 +1,7 @@
 import SwiftUI
 import CorniceKit
 
-/// Album art that pulses with the beat.
-///
-/// A thin wrapper whose only job is to read `levels` here, in a leaf, rather
-/// than in the view that positions it. Read higher up, every analysed frame
-/// invalidated the whole surface.
+/// Read audio levels in this small view so a beat doesn't redraw the whole panel.
 struct PulsingArtwork: View {
     @Bindable var model: AppModel
     let size: CGFloat

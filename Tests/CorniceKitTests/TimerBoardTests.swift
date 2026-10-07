@@ -1,9 +1,7 @@
 import XCTest
 @testable import CorniceKit
 
-/// Every timer derives its remaining time from the wall clock rather than being
-/// decremented on a tick, so all of this is driven with explicit dates instead
-/// of waiting in real time.
+/// Use explicit dates to check deadlines without waiting for timers in real time.
 final class TimerBoardTests: XCTestCase {
 
     private let start = Date(timeIntervalSince1970: 1_700_000_000)

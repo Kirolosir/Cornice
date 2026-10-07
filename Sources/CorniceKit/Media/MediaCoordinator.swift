@@ -1,12 +1,7 @@
 import Foundation
 
-/// Picks which player to show and fetches artwork.
-///
-/// Several players can be open at once. Spotify paused in the background while
-/// Music plays is ordinary. The selection rule is: whichever is *playing* wins;
-/// if none is playing, the one we last showed wins, so pausing does not make the
-/// panel jump to a different app's stale track; failing that, any player with a
-/// track loaded.
+/// Prefer a player that's playing. If everything is paused, keep the last selected player
+/// so the panel doesn't jump to an old track in another app.
 public actor MediaCoordinator {
 
     private let controllers: [MediaSource: any MediaControlling]
@@ -68,10 +63,7 @@ public actor MediaCoordinator {
                 // A player that is open with nothing loaded raises rather than
                 // returning empty; that is not worth surfacing.
             } catch {
-                // Everything else used to be dropped on the floor, which meant a
-                // script that failed for any reason at all (a syntax error, a
-                // player mid-launch) showed up as an empty surface and nothing
-                // else, which left me with nothing at all to go on.
+                // Log unexpected script failures so an empty panel isn't the only clue.
                 Log.media.error(
                     "\(source.displayName, privacy: .public) poll failed: \(String(describing: error), privacy: .public)"
                 )
@@ -112,12 +104,8 @@ public actor MediaCoordinator {
 
     // MARK: - Artwork
 
-    /// Artwork for a snapshot, cached per track.
-    ///
-    /// Spotify hands over a URL, Music hands over raw bytes; both end up as
-    /// `Data` so the UI never has to care. Failures return `nil` rather than
-    /// throwing. A missing cover is a cosmetic problem, not a reason to show
-    /// an error where the album art goes.
+    /// Cache artwork by track. Return nil if it can't be fetched; the rest of the player
+    /// should still work.
     public func artwork(for snapshot: MediaSnapshot) async -> Data? {
         let key = snapshot.trackIdentity
         if let cached = artworkCache[key] { return cached }

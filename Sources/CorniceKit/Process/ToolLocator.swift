@@ -1,13 +1,7 @@
 import Foundation
 
-/// Finds command-line tools by absolute path.
-///
-/// A GUI app launched from Finder or as a login item inherits a bare
-/// environment (typically `PATH=/usr/bin:/bin:/usr/sbin:/sbin`) not the PATH
-/// from the user's shell profile. Tools installed by Homebrew therefore appear
-/// to be missing even though they work perfectly in Terminal, which is a
-/// classic and very confusing bug class for Mac developer tools. We search the
-/// known install locations explicitly instead of trusting the inherited PATH.
+/// Search known tool locations because apps launched from Finder don't inherit the
+/// Terminal's PATH.
 public actor ToolLocator {
     /// Searched in order. Homebrew on Apple silicon installs to `/opt/homebrew`,
     /// on Intel to `/usr/local`; MacPorts uses `/opt/local`.
@@ -29,13 +23,8 @@ public actor ToolLocator {
         self.fileManager = fileManager
     }
 
-    /// Absolute path for a tool name, or `nil` if it is not installed.
-    ///
-    /// Results are cached, including misses. A tool that was absent at launch
-    /// is very unlikely to appear mid-session, and re-statting eight
-    /// directories on every refresh tick is exactly the kind of idle cost this
-    /// app is supposed to avoid. `forget(_:)` clears an entry when the user
-    /// installs something and asks for a retry.
+    /// Cache tool paths and misses. Call forget when a tool is installed and needs another
+    /// lookup.
     public func locate(_ tool: String) -> String? {
         if let cached = cache[tool] { return cached }
         let found = Self.searchPaths

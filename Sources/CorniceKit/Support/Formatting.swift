@@ -1,9 +1,6 @@
 import Foundation
 
-/// Formatting helpers shared by the UI and by tests.
-///
-/// These live in the kit rather than in views so their edge cases (zero,
-/// negative, absurdly large) are unit-testable without a running app.
+/// Formatting shared by the UI and tests, including edge cases like negative durations.
 public enum Format {
     /// Compact byte-rate string, e.g. `1.4 MB/s`. Always two significant-ish
     /// digits so the value does not jitter in width while it updates.

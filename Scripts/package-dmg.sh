@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-#
-# Packages dist/Cornice.app into a DMG with an Applications symlink, so the
-# install is the drag-and-drop one people expect.
+# Package the app with an Applications shortcut for drag-and-drop installation.
 
 set -euo pipefail
 

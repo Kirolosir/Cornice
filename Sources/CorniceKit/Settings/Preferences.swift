@@ -88,47 +88,24 @@ public struct Preferences: Codable, Equatable, Sendable {
     /// Show the surface only while something is playing.
     public var hideWhenNothingPlaying: Bool
 
-    // Visualiser
-    /// Capture system audio for a spectrum that actually follows the music.
-    /// Off until the user turns it on, because enabling it asks for a
-    /// system-wide audio recording permission.
+    // Audio capture is off until the user enables it, since it needs system audio recording
+    // permission.
     public var audioVisualizerEnabled: Bool
     /// Tint the surface with the album artwork's dominant colour.
     public var tintFromArtwork: Bool
-    /// How strongly the album's colour spills onto the surface, as a multiplier
-    /// on the base tint.
-    ///
-    /// The clamp is what keeps white text readable: the accent is already capped
-    /// at 0.75 saturation and 0.72 brightness before it gets here, so even at the
-    /// top of this range the surface stays dark enough behind its own text.
+    /// Background tint strength. The background's dark overlay keeps the text readable;
+    /// sampled cover colors stay unchanged.
     public var tintStrength: Double
 
-    /// Repeat-one the app is providing for a player that has no such setting.
-    ///
-    /// Persisted because it is a *setting*, and because the player cannot be
-    /// asked to remember it: Spotify has nowhere to store "repeat this track".
-    /// Held only in memory it vanished at every launch, which from the outside
-    /// is indistinguishable from a button that does not work.
+    /// Save the local repeat-one setting so it survives restarting Cornice.
     public var appliesRepeatOne: Bool
 
-    /// The Spotify application's client ID, for the Web API sign-in.
-    ///
-    /// Not a secret. The sign-in uses PKCE precisely because a desktop app has
-    /// nowhere to keep one, so this identifies the application and nothing more.
-    /// It lives here, in plain preferences, where the user can read and change
-    /// it. The refresh token that sign-in produces is the credential, and that
-    /// goes in the Keychain.
-    ///
-    /// Empty until the user pastes one in, in which case Cornice falls back to
-    /// driving Spotify over AppleScript and looping the track itself.
+    /// Public Spotify client ID for PKCE sign-in. Keep it in preferences; the refresh token
+    /// belongs in the Keychain. An empty ID leaves the AppleScript controls available.
     public var spotifyClientID: String
 
-    // System HUDs
-    /// Watch the Downloads folder so a transfer in progress raises a HUD.
-    ///
-    /// Off by default, and deliberately so: reading that folder is
-    /// TCC-protected, and starting the watch at launch would spring a
-    /// permission dialog on somebody who never asked for a download HUD.
+    // Downloads monitoring is off by default because reading that folder can ask for
+    // permission.
     public var downloadHUDEnabled: Bool
 
     // Timers
@@ -176,12 +153,8 @@ public struct Preferences: Codable, Equatable, Sendable {
         self.telemetryRefreshInterval = telemetryRefreshInterval
     }
 
-    /// Decodes every field independently with a fallback to its default.
-    ///
-    /// The synthesised initialiser requires *every* key, so adding one setting
-    /// would make every existing file fail to decode, and since a decode failure
-    /// falls back to defaults, upgrading would silently reset everyone's
-    /// configuration. Decoding key by key makes schema changes additive.
+    /// Decode settings one at a time with defaults for missing keys. Adding a setting
+    /// shouldn't reset an older settings file.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let defaults = Preferences()
@@ -209,9 +182,8 @@ public struct Preferences: Codable, Equatable, Sendable {
         telemetryRefreshInterval = value(.telemetryRefreshInterval, defaults.telemetryRefreshInterval)
     }
 
-    /// Clamps every value into a range the app can actually run with, so a
-    /// hand-edited or partially-corrupted file cannot put it into a state where
-    /// it polls a music player a hundred times a second.
+    /// Keep settings within supported ranges so a damaged or edited file cannot cause
+    /// excessive polling.
     public func sanitized() -> Preferences {
         var copy = self
         copy.hoverDwell = hoverDwell.clamped(to: 0...1.0)

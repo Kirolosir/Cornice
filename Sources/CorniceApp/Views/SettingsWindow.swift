@@ -2,11 +2,8 @@ import AppKit
 import SwiftUI
 import CorniceKit
 
-/// Hosts settings in a conventional window.
-///
-/// A real, focusable window rather than a pane inside the surface: the surface
-/// is non-activating and closes when the pointer leaves it, which is right for
-/// glancing at a track and completely wrong for reading permission explanations.
+/// Settings need a normal window that can take focus. The hover panel closes too easily for
+/// reading and editing settings.
 @MainActor
 final class SettingsWindow {
 
@@ -112,9 +109,7 @@ struct GeneralSettings: View {
                     set: { value in model.updatePreferences { $0.tintFromArtwork = value } }
                 ))
                 if model.preferences.tintFromArtwork {
-                    // The design's own value is 100%, and it is restrained on
-                    // purpose. This dial exists because "a bit more noticeable"
-                    // is a legitimate preference, not because the default is wrong.
+                    // Let the user choose how strongly the cover colors show through.
                     LabeledContent("Tint strength") {
                         HStack(spacing: 8) {
                             Slider(
@@ -203,12 +198,7 @@ struct GeneralSettings: View {
     }
 }
 
-/// Connects Spotify's Web API, for the one thing its scripting interface cannot
-/// express.
-///
-/// Worth the tab rather than a line in General, because it asks the user to do
-/// something (register an application), and an instruction with no explanation
-/// beside it reads as an imposition.
+/// Spotify connection settings and the steps for registering a client ID.
 struct SpotifySettings: View {
     @Bindable var model: AppModel
     @State private var clientID: String = ""
@@ -334,9 +324,8 @@ struct VisualizerSettings: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-                // macOS hands a process tap silence rather than an error when
-                // the permission is missing, so "it started" is not the same as
-                // "it can hear". This is the only way the user finds out.
+                // A running tap does not prove audio permission was granted. Show a warning
+                // if it never receives sound.
                 if model.audioCaptureLooksBlocked {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")

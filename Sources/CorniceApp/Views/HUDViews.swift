@@ -1,12 +1,7 @@
 import SwiftUI
 import CorniceKit
 
-/// Every system HUD, drawn inside the same surface as everything else.
-///
-/// Two layouts cover all eleven. A **short pill** is no taller than the notch
-/// band, so every scrap of it lives in the two margins either side of the hole.
-/// Anything taller reserves that band and starts on the first clear row below
-/// it. Colour appears only on a value or a glyph, never on a block of text.
+/// Short HUDs use the space beside the notch. Taller ones put their content below it.
 struct HUDView: View {
     let content: HUDContent
     let geometry: SurfaceGeometry
@@ -274,9 +269,8 @@ struct HUDView: View {
     private func vpn(name: String, since: Date) -> some View {
         panel {
             HStack(spacing: 14) {
-                // A generic shield rather than an app icon: nothing in the
-                // networking stack says *which* client raised the tunnel, and
-                // guessing at a vendor's logo would be worse than not showing one.
+                // Use a generic shield because the route does not identify which VPN app
+                // owns the tunnel.
                 Image(systemName: "lock.shield.fill")
                     .font(.system(size: 19, weight: .regular))
                     .foregroundStyle(Color(white: 0.12))

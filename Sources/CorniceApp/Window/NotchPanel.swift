@@ -1,21 +1,8 @@
 import AppKit
 
-/// The borderless window the whole interface lives in.
-///
-/// An `NSPanel` rather than an `NSWindow` because a panel can be
-/// non-activating: clicking the surface must never steal focus from whatever
-/// the user is typing in.
-///
-/// The window is created once at its **maximum** size and is never resized
-/// again. That is the single most important decision in this file. Resizing an
-/// `NSWindow` in step with a SwiftUI animation means the window server and
-/// SwiftUI are each animating a different thing at a different cadence, which
-/// is exactly what produces the stuttering, half-a-frame-behind feel that makes
-/// a notch app seem cheap. With a fixed window, the only thing that moves is
-/// SwiftUI drawing inside a stable rectangle, which it can do at display rate.
-///
-/// The cost is that the window is much larger than what is visible, so it would
-/// swallow clicks meant for the desktop, which is what `hitTest` solves.
+/// A non-activating panel so clicks don't steal focus. Keep the window at its largest size
+/// and animate inside it; resizing the window too caused stuttering. Hit testing lets
+/// clicks outside the visible panel pass through.
 final class NotchPanel: NSPanel {
 
     init(contentRect: NSRect) {
@@ -63,17 +50,8 @@ final class NotchPanel: NSPanel {
     var onCancel: (() -> Void)?
 }
 
-/// Hosts the SwiftUI hierarchy, and decides what counts as "on the surface".
-///
-/// Because the window is permanently large and mostly transparent, two things
-/// have to be handled by hand:
-///
-/// 1. **Hit testing.** Anything outside the currently visible shape must fall
-///    through to whatever is underneath, or the app would eat clicks across a
-///    620×400 rectangle of the user's desktop.
-/// 2. **Hover.** `mouseEntered`/`mouseExited` on the whole view would fire as
-///    soon as the pointer crossed the invisible bounds, so hover is computed
-///    from `mouseMoved` against the same rect used for hit testing.
+/// Host SwiftUI and handle hover and clicks against the visible shape. The transparent part
+/// of the fixed-size window mustn't intercept the desktop.
 final class NotchContentView: NSView {
 
     /// The region that accepts clicks, in this view's coordinates. Matches
@@ -145,10 +123,7 @@ final class NotchContentView: NSView {
         onHoverChanged?(hovering)
     }
 
-    /// Only the visible surface is clickable; everything else falls through.
-    ///
-    /// Returning `nil` here is what lets a permanently large window sit over
-    /// the desktop without the user noticing it is there.
+    /// Return nil outside the visible panel so clicks reach the window underneath.
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)
         guard interactiveRect.contains(local) else { return nil }

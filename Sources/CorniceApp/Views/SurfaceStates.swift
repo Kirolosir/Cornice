@@ -3,15 +3,8 @@ import CorniceKit
 
 // MARK: - Resting
 
-/// What the resting surface shows. All of it *outside* the surface.
-///
-/// At rest the surface is exactly the notch: pure black, no tint, seamless. The
-/// notch is a hole in the display, so anything drawn inside its rectangle does
-/// not exist on real hardware. Both pieces of content therefore sit in the
-/// menu-bar margins either side of the hole, which is the only place they can
-/// be seen at all.
-///
-/// With nothing playing there is nothing here. No pill, no placeholder.
+/// Resting content sits beside the notch, since the cutout itself can't display anything.
+/// With no track, leave these margins empty.
 struct RestingMarginView: View {
     @Bindable var model: AppModel
     let geometry: SurfaceGeometry
@@ -59,17 +52,8 @@ struct RestingMarginView: View {
 
 // MARK: - Peek
 
-/// The hover state: enough to recognise the track without committing to the
-/// full panel.
-///
-/// This exists purely so hovering produces an *immediate* response. A dwell
-/// timer with nothing happening during it feels broken no matter how short it
-/// is; growing instantly and then opening reads as fast even though the total
-/// time is the same.
-///
-/// The artwork is not drawn here. It belongs to the travelling layer in
-/// `RootView`, which is what lets it arrive from the resting position rather
-/// than appearing.
+/// Show a quick peek while waiting for the hover delay. RootView moves the artwork into
+/// place.
 struct PeekContentView: View {
     @Bindable var model: AppModel
     let geometry: SurfaceGeometry
@@ -151,13 +135,8 @@ struct ExpandedContentView: View {
         .animation(Theme.Motion.contentSwap, value: model.toast)
     }
 
-    /// The band across the notch. Nothing may be drawn in the middle of it, so
-    /// the source name takes the left margin and the module switcher the right.
-    ///
-    /// The segmented control that used to live below the notch was moved up
-    /// here precisely because the band is otherwise dead space, and it was
-    /// moved to the *right margin* because anything centred would fall inside
-    /// the hole.
+    /// Put the source on the left and the module buttons on the right. Keep the middle
+    /// clear for the notch.
     private var band: some View {
         HStack(spacing: 0) {
             HStack(spacing: 8) {
@@ -166,10 +145,8 @@ struct ExpandedContentView: View {
                     .foregroundStyle(ink.tertiary)
                     .lineLimit(1)
 
-                // The live indicator. In the band rather than beside the artwork
-                // because the band is visible for as long as the panel is. Peek,
-                // where it used to live, is skipped entirely when the hover
-                // dwell is zero, which is the default.
+                // Keep the indicator in the top band so it stays visible when the default
+                // hover setting skips peek.
                 if model.activeModule == .media, model.showsIndicator {
                     EqualizerIndicator(
                         model: model,

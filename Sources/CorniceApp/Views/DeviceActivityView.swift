@@ -1,14 +1,8 @@
 import SwiftUI
 import CorniceKit
 
-/// The announcement shown when a wireless output device connects.
-///
-/// Built like the system HUDs rather than like the player: a glyph, then status
-/// over device name in the left margin, and a charge ring in the right. All
-/// outside the hole. No artwork tint, because this is not about the music.
-///
-/// It is event-driven and self-dismissing. This is a notification, not a state
-/// the user has to close.
+/// The wireless-device notice. Keep its name and battery ring beside the notch, and dismiss
+/// it automatically.
 struct DeviceActivityView: View {
     @Bindable var model: AppModel
     let geometry: SurfaceGeometry
@@ -21,12 +15,8 @@ struct DeviceActivityView: View {
     private var activity: AppModel.DeviceActivity? { model.deviceActivity }
     private var flare: CGFloat { geometry.flareRadius(for: .activity) }
 
-    /// All the room there is on one side of the hole.
-    ///
-    /// Everything here is pinned to this width. The name used to be laid out
-    /// with `fixedSize`, which let it grow to whatever it wanted and run under
-    /// the notch, where it can't be seen because the notch is a hole in the
-    /// display rather than something drawn on top.
+    /// Limit the name to the space beside the notch. Text laid out under the camera cutout
+    /// can't be seen.
     private var margin: CGFloat { geometry.marginWidth(for: .activity) }
 
     var body: some View {
@@ -63,11 +53,8 @@ struct DeviceActivityView: View {
         .onChange(of: activity?.id) { _, _ in animateIn() }
     }
 
-    /// The device glyph, turned once about its Y axis on entry.
-    ///
-    /// Falls back when the named symbol is missing: SF Symbol availability
-    /// varies by macOS version, and a missing symbol renders as nothing at all
-    /// rather than as an obvious placeholder.
+    /// Rotate the device icon on entry. Use a fallback if this macOS version doesn't have
+    /// the requested symbol.
     private var deviceIcon: some View {
         ExtrudedSymbol(
             systemName: Self.resolvedSymbol(activity?.symbol),
@@ -89,10 +76,8 @@ struct DeviceActivityView: View {
     private func animateIn() {
         spin = false
         ringProgress = 0
-        // A beat before spinning, so the surface has finished growing and the
-        // two animations are not competing for the same frames.
-        // Slower than it was. A flat glyph could spin quickly and still read,
-        // but the extruded one has an edge worth looking at as it goes past.
+        // Wait for the panel to open before spinning the icon. Give the thicker edge enough
+        // time to be visible.
         withAnimation(.timingCurve(0.25, 0.6, 0.2, 1, duration: 1.45).delay(0.12)) { spin = true }
         withAnimation(.easeOut(duration: 0.9).delay(0.24)) { ringProgress = 1 }
     }
@@ -128,17 +113,8 @@ struct BatteryRing: View {
     }
 }
 
-/// An SF Symbol with thickness.
-///
-/// A symbol is a flat shape, so rotating one about its Y axis makes it vanish
-/// edge-on at ninety degrees and reads as a picture being squashed rather than
-/// as an object turning. This stacks copies of the same glyph at different
-/// depths, which is what `anchorZ` controls: each copy rotates about an axis a
-/// little further forward or back, so the set separates as it turns and the
-/// gaps between them read as the side of a solid object.
-///
-/// The slices are shaded back to front, dark at the rear and bright at the
-/// face, so the edge catches the light the way an extrusion would.
+/// Stack shaded copies of the symbol to give it some thickness during rotation. A single
+/// flat symbol disappears when it turns sideways.
 private struct ExtrudedSymbol: View {
     let systemName: String
     let size: CGFloat
@@ -167,9 +143,7 @@ private struct ExtrudedSymbol: View {
         }
     }
 
-    /// Rear slices are the shadowed inside of the extrusion; the front face
-    /// takes the light. The curve is weighted so the bright band stays narrow,
-    /// which is what stops it looking like a grey smear.
+    /// Keep the rear slices dark and the front face bright, with a narrow highlight.
     private static func shade(at depth: Double) -> Color {
         Color(white: 0.28 + 0.67 * pow(depth, 1.7))
     }

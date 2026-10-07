@@ -1,13 +1,8 @@
 import Foundation
 import OSLog
 
-/// Central logging facade.
-///
-/// Every subsystem logs through one of these categories so that
-/// `log stream --predicate 'subsystem == "dev.cornice.app"'` gives a coherent
-/// trace of what the app is doing. Nothing here ever receives a secret: call
-/// sites are responsible for passing redacted values, and the helpers in
-/// `Redaction` exist to make that easy.
+/// Log categories for each part of the app. Redact credentials before logging them;
+/// Redaction has helpers for that.
 public enum Log {
     public static let subsystem = "dev.cornice.app"
 
@@ -22,11 +17,8 @@ public enum Log {
 
 /// Helpers for producing log-safe representations of sensitive values.
 public enum Redaction {
-    /// Renders a token as a fingerprint that is stable across a session but
-    /// reveals nothing useful: `ghp_…(len:40,#a91f)`.
-    ///
-    /// Used when we genuinely need to correlate "which credential failed"
-    /// across log lines without ever writing the credential down.
+    /// Use a short fingerprint to compare credentials in logs without printing the full
+    /// token.
     public static func fingerprint(_ secret: String) -> String {
         guard !secret.isEmpty else { return "<empty>" }
         var hash: UInt32 = 2_166_136_261

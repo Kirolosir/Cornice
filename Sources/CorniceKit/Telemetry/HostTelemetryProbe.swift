@@ -6,26 +6,16 @@ public protocol TelemetryProbing: Sendable {
     func sample() async -> TelemetrySample
 }
 
-/// Reads CPU, memory and battery state from the kernel.
-///
-/// Everything here is an in-process Mach or sysctl call. No subprocess, no
-/// `top`, no `ioreg`: the whole point of a telemetry widget that runs every
-/// couple of seconds is that sampling must cost almost nothing, and spawning a
-/// process to read a number costs several milliseconds of CPU plus a process
-/// launch. These calls are microseconds.
-///
-/// An actor because CPU and network figures are *rates*, computed by
-/// differencing against the previous reading, so the probe carries state that
-/// two concurrent samplers must not interleave on.
+/// Read CPU, memory and battery with system APIs. Keep previous CPU counters in this actor
+/// so concurrent samples can't mix them up.
 public actor HostTelemetryProbe: TelemetryProbing {
 
     /// Cumulative CPU tick counters from the previous sample.
     private var previousCPUTicks: CPUCounterReading?
 
     private let totalMemory: UInt64
-    /// VM page size, read once. The global `vm_kernel_page_size` is a mutable
-    /// C global and so is off-limits under strict concurrency; `host_page_size`
-    /// is the supported call and the value never changes at runtime anyway.
+    /// Read the page size once through host_page_size. The mutable C global cannot be used
+    /// under strict concurrency.
     private let pageSize: UInt64
 
     public init() {
@@ -39,10 +29,7 @@ public actor HostTelemetryProbe: TelemetryProbing {
     }
 
     public func sample() async -> TelemetrySample {
-        // Read once and reuse. Calling the reader twice for the used figure and
-        // the fraction meant two kernel round-trips for one number, and for the
-        // rate-based figures it meant the second call differenced against the
-        // first call's own reading, over an interval of zero.
+        // Reuse one memory reading for both the byte count and percentage.
         let used = memoryUsed()
         let cpu = cpuUsage()
         return TelemetrySample(
@@ -59,11 +46,8 @@ public actor HostTelemetryProbe: TelemetryProbing {
 
     // MARK: - CPU
 
-    /// System-wide CPU load, as a fraction of total capacity.
-    ///
-    /// The kernel exposes cumulative tick counters per state, not a percentage,
-    /// so usage is `1 - Δidle/Δtotal` between two readings. The first call has
-    /// nothing to difference against, so the UI shows an unavailable reading.
+    /// CPU usage is 1 - Δidle/Δtotal across two readings. The first sample needs a second
+    /// set of counters before it can show a load.
     private func cpuUsage() -> Double? {
         var info = host_cpu_load_info_data_t()
         var count = mach_msg_type_number_t(
@@ -89,21 +73,10 @@ public actor HostTelemetryProbe: TelemetryProbing {
 
     // MARK: - Memory
 
-    /// Bytes of physical memory in use, by Activity Monitor's definition.
+    /// Follow Activity Monitor's memory categories, excluding reclaimable file cache.
     ///
-    ///     Memory Used = App Memory + Wired + Compressed
-    ///     App Memory  = internal pages − purgeable pages
-    ///
-    /// The page classes matter and are easy to get wrong. `active` is not App
-    /// Memory: it includes file-backed pages the kernel is caching and excludes
-    /// inactive pages an app still owns. Using it read about 250 MB light on
-    /// this machine, and drifted differently depending on how much file cache
-    /// happened to be warm.
-    ///
-    /// Counting inactive *file* pages instead (which is what `top` reports as
-    /// "used") goes the other way and makes every Mac look permanently near
-    /// capacity, because macOS deliberately keeps that cache full and reclaims
-    /// it on demand.
+    /// Memory Used = App Memory + Wired + Compressed
+    /// App Memory = internal pages - purgeable pages
     private func memoryUsed() -> UInt64? {
         var stats = vm_statistics64_data_t()
         var count = mach_msg_type_number_t(

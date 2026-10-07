@@ -1,12 +1,8 @@
 import Foundation
 import CorniceKit
 
-/// Every service the app needs, in one injectable bundle.
-///
-/// Dependency injection by construction rather than by framework: one
-/// composition root, a handful of services, no runtime resolution. The payoff
-/// is `PreviewServices`, where swapping this whole struct runs the entire app
-/// against scripted data with no change to any view.
+/// Keep the services together so previews and checks can replace them without changing the
+/// views.
 struct ServiceContainer: Sendable {
     let media: MediaCoordinator
     let telemetry: any TelemetryProbing

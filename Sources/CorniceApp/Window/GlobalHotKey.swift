@@ -2,18 +2,8 @@ import AppKit
 import Carbon.HIToolbox
 import CorniceKit
 
-/// A system-wide keyboard shortcut.
-///
-/// Uses Carbon's `RegisterEventHotKey` rather than
-/// `NSEvent.addGlobalMonitorForEvents`. The monitor approach requires
-/// Accessibility permission (the same permission that lets an app read every
-/// keystroke you type), which is a wildly disproportionate thing to ask for in
-/// order to open a panel. `RegisterEventHotKey` asks for nothing, because it
-/// registers one specific combination with the window server instead of
-/// observing all input.
-///
-/// The Carbon API is old, but it is not deprecated and it remains the only way
-/// to get a global hot key without the Accessibility prompt.
+/// Register Option-Command-D with Carbon. This gives us one global shortcut without
+/// monitoring the user's keystrokes or asking for Accessibility access.
 @MainActor
 final class GlobalHotKey {
 
@@ -26,9 +16,7 @@ final class GlobalHotKey {
     private var eventHandler: EventHandlerRef?
     private let handler: () -> Void
 
-    /// Carbon hands the callback a C function pointer with no context, so the
-    /// live instance is reached through a file-scope reference. There is one
-    /// hot key in this app, so a registry would be ceremony.
+    /// The C callback looks up the live instance here. The app only registers one shortcut.
     private static var current: GlobalHotKey?
 
     init(handler: @escaping () -> Void) {
@@ -100,9 +88,6 @@ final class GlobalHotKey {
         return characters.reduce(OSType(0)) { ($0 << 8) + OSType($1) }
     }()
 
-    // No `deinit` cleanup: the Carbon handles are non-Sendable and cannot be
-    // touched from a nonisolated deinit under strict concurrency. The hot key
-    // lives for the lifetime of the app and is released explicitly by
-    // `NotchWindowController.tearDown()` on termination, which is a more
-    // predictable place for it than object deallocation anyway.
+    // Release the Carbon handles in tearDown. Their non-Sendable types can't be used from a
+    // nonisolated deinit.
 }

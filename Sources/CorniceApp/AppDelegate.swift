@@ -12,9 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let notificationDelegate = NotificationDelegate()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Documentation mode: render the interface to PNGs and exit without
-        // ever showing a window. Keeps README images reproducible in one
-        // command instead of being hand-captured and slowly going stale.
+        // Save README screenshots using preview data, then exit without opening a window.
         let arguments = CommandLine.arguments
         if let index = arguments.firstIndex(of: "--capture-docs"),
            index + 1 < arguments.count {
@@ -54,13 +52,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Where the Spotify sign-in comes back to.
-    ///
-    /// The browser is handed a `cornice://spotify-callback` redirect, and macOS
-    /// routes it here through the URL type declared in `Info.plist`. The code it
-    /// carries is worthless without the PKCE verifier held in this process, and
-    /// the `state` it carries is checked against the one this process generated,
-    /// so a URL from anywhere else is refused rather than redeemed.
+    /// Handles the Spotify sign-in callback. Check the saved state and PKCE verifier before
+    /// using the code.
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls where url.scheme == "cornice" && url.host == "spotify-callback" {
             model?.completeSpotifySignIn(url)

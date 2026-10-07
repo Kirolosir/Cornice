@@ -1,15 +1,7 @@
 import Foundation
 
-/// Runs the tap, analyses its output, and publishes the latest levels.
-///
-/// The threading model is the interesting part. Audio arrives on Core Audio's
-/// own IO queue, hundreds of times a second; SwiftUI wants to read a value once
-/// per frame. Pushing an observable update from the audio callback would
-/// schedule main-actor work faster than it drains and stutter the whole UI.
-///
-/// So the callback analyses in place and writes the result into a
-/// lock-protected box, and the UI *pulls* the latest value on its own display
-/// timer. Audio never touches the main actor, and the UI never blocks on audio.
+/// Analyze audio on the IO queue and store the latest levels under a lock. The UI reads
+/// once per frame instead of queuing a main-actor update for every audio block.
 public final class AudioVisualizerEngine: @unchecked Sendable {
 
     public enum Status: Equatable, Sendable {
@@ -45,11 +37,8 @@ public final class AudioVisualizerEngine: @unchecked Sendable {
         return false
     }
 
-    /// The most recent analysed frame.
-    ///
-    /// Decays to silence when audio has stopped arriving. A paused track
-    /// should let the bars settle, not leave them frozen at whatever the last
-    /// block happened to contain.
+    /// Return the latest levels, fading to silence if no new audio arrives. Pausing
+    /// shouldn't leave the bars stuck at their last height.
     public func latestLevels() -> AudioLevels {
         lock.lock()
         defer { lock.unlock() }

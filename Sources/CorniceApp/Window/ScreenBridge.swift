@@ -1,11 +1,8 @@
 import AppKit
 import CorniceKit
 
-/// Converts `NSScreen` into the plain-value `ScreenMetrics` the resolver works on.
-///
-/// This is the only place in the app that reads `NSScreen`. Keeping it to one
-/// small function is what allows every interesting display configuration to be
-/// covered by unit tests, since `NSScreen` cannot be constructed.
+/// Convert NSScreen to plain ScreenMetrics values. Tests can create those values without
+/// needing real displays.
 enum ScreenBridge {
 
     static func metrics(for screen: NSScreen) -> ScreenMetrics {
@@ -25,19 +22,13 @@ enum ScreenBridge {
         NSScreen.screens.map(metrics(for:))
     }
 
-    /// Finds the `NSScreen` matching a resolved profile.
-    ///
-    /// Matched by frame rather than by index: `NSScreen.screens` reorders when
-    /// displays are attached or the arrangement changes, so an index captured a
-    /// moment ago can refer to a different display by the time it is used.
+    /// Match by frame because attaching a display can reorder NSScreen.screens.
     static func screen(matching frame: CGRect) -> NSScreen? {
         NSScreen.screens.first { $0.frame == frame } ?? NSScreen.main
     }
 
-    /// Whether this is the laptop's own panel.
-    ///
-    /// `CGDisplayIsBuiltin` needs the display ID, which lives in the screen's
-    /// device description under a key with no typed accessor.
+    /// Get the display ID from the device description to check whether this is the built-in
+    /// screen.
     private static func isBuiltIn(_ screen: NSScreen) -> Bool {
         guard let number = screen.deviceDescription[
             NSDeviceDescriptionKey("NSScreenNumber")

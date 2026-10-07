@@ -2,19 +2,9 @@ import CryptoKit
 import Foundation
 import Security
 
-/// OAuth for a desktop app that cannot keep a secret.
-///
-/// Spotify's scripting dictionary exposes repeat as one boolean, which cannot
-/// express "repeat this track". The Web API can: `PUT /me/player/repeat` takes
-/// `off`, `context` or `track`, so real repeat-one means signing in.
-///
-/// The flow is authorization code with PKCE (RFC 7636), and it is PKCE rather
-/// than the classic exchange for a concrete reason: anything shipped inside an
-/// app bundle is readable by anyone holding the bundle, so a client *secret*
-/// would not be one. Instead the app invents a random `verifier`, sends only its
-/// SHA-256 hash when it opens the browser, and presents the verifier itself when
-/// redeeming the code. Intercepting the redirect yields a code that cannot be
-/// spent without the verifier, which never leaves this process.
+/// PKCE values for Spotify sign-in. Send the verifier's SHA-256 challenge to the browser,
+/// then use the verifier to exchange the returned code. A desktop app can't safely store a
+/// client secret.
 public struct SpotifyPKCE: Sendable, Equatable {
 
     /// The random secret, held until the code is redeemed.
@@ -27,10 +17,8 @@ public struct SpotifyPKCE: Sendable, Equatable {
         self.challenge = Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncoded()
     }
 
-    /// A fresh pair, from 64 bytes of `SecRandomCopyBytes`.
-    ///
-    /// Encoded that lands at 86 characters, inside the 43...128 the spec
-    /// allows and well past the entropy it asks for.
+    /// Generate 64 random bytes. Base64url encoding gives an 86-character verifier, within
+    /// the allowed 43...128 range.
     public static func random() -> SpotifyPKCE {
         var bytes = [UInt8](repeating: 0, count: 64)
         let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
@@ -39,11 +27,8 @@ public struct SpotifyPKCE: Sendable, Equatable {
     }
 }
 
-/// What Cornice asks Spotify for, and nothing more.
-///
-/// Reading playback state is what lets the panel show the player's *real*
-/// repeat and shuffle rather than a guess; modifying it is what the buttons do.
-/// No library, playlist, email, or follower scopes are requested.
+/// Request playback read and control scopes. Library, playlist and account-detail scopes
+/// aren't needed.
 public enum SpotifyScope {
     public static let required = [
         "user-read-playback-state",
@@ -65,21 +50,14 @@ public struct SpotifyTokens: Sendable, Equatable, Codable {
         self.expiresAt = expiresAt
     }
 
-    /// Whether the access token is good for another call.
-    ///
-    /// Thirty seconds of slack, because the token can expire between the check
-    /// and the request arriving, and a request refused for staleness costs a
-    /// round trip to discover.
+    /// Refresh a little early so the token doesn't expire while a request is on its way.
     public func isFresh(at now: Date = .now) -> Bool {
         expiresAt > now.addingTimeInterval(30)
     }
 }
 
-/// Builds the two requests the sign-in needs, and reads their answers.
-///
-/// Deliberately free of networking and of state: every method is a pure
-/// transformation, so the whole handshake can be tested without a socket and
-/// without a Spotify account.
+/// Build sign-in requests and parse responses separately from networking, so tests don't
+/// need a Spotify account.
 public enum SpotifyAuthorization {
 
     public static let authorizeEndpoint = URL(string: "https://accounts.spotify.com/authorize")!
@@ -109,11 +87,7 @@ public enum SpotifyAuthorization {
         return components.url!
     }
 
-    /// The authorization code carried by the redirect.
-    ///
-    /// `state` is compared against what was sent. A redirect that does not
-    /// carry back the value this process generated did not come from the sign-in
-    /// this process started, and is refused rather than redeemed.
+    /// Only accept a redirect whose state matches the sign-in we started.
     public static func code(from url: URL, expectedState: String) throws -> String {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             throw ServiceError.unreadableOutput(tool: "Spotify", hint: "malformed redirect")
@@ -161,11 +135,7 @@ public enum SpotifyAuthorization {
         ])
     }
 
-    /// Reads a token response.
-    ///
-    /// A refresh response may omit `refresh_token`, which means "keep using the
-    /// one you have". Dropping it there would sign the user out roughly every
-    /// hour, so the previous value is carried forward.
+    /// Keep the previous refresh token if Spotify leaves it out of a refresh response.
     public static func tokens(
         from data: Data,
         carryingOver previous: String? = nil,
@@ -206,10 +176,8 @@ public enum SpotifyAuthorization {
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 15
 
-        // Percent-encoding by hand rather than through URLComponents: the token
-        // endpoint takes a form *body*, and a verifier is base64url, which can
-        // contain characters a query encoder would leave alone but a form
-        // decoder would read differently.
+        // Encode this as a form body. Query-string encoding doesn't handle every character
+        // the same way.
         var allowed = CharacterSet.alphanumerics
         allowed.insert(charactersIn: "-._~")
         let body = fields

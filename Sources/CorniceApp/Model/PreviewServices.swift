@@ -2,12 +2,7 @@ import AppKit
 import Foundation
 import CorniceKit
 
-/// A `ServiceContainer` backed entirely by doubles.
-///
-/// Used by `--capture-docs` to render documentation images, and useful for
-/// driving states that are awkward to produce on demand. That this is short is
-/// the payoff from putting every service behind a protocol: the whole app runs
-/// on fake data with no change to any view.
+/// Fake services for screenshots and checks. The views use the same model as the real app.
 enum PreviewServices {
 
     static func container() -> ServiceContainer {
@@ -86,9 +81,8 @@ private actor PreviewMediaController: MediaControlling {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: representation)
 
-        // Several colours in distinct places, because a flat two-tone gradient
-        // would not exercise the per-region palette at all, and the whole point
-        // of the documentation images is that they show what the code does.
+        // Use several colors in different parts of the sample cover to check the region
+        // palette.
         NSGradient(colors: [
             NSColor(calibratedHue: 0.95, saturation: 0.72, brightness: 0.85, alpha: 1),
             NSColor(calibratedHue: 0.72, saturation: 0.68, brightness: 0.45, alpha: 1),

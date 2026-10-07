@@ -1,14 +1,8 @@
 import XCTest
 @testable import CorniceKit
 
-/// Compiles every script the app sends to a player.
-///
-/// Reply parsing is tested elsewhere, but a parser can only be reached by a
-/// script that compiled. AppleScript is compiled as a whole, so one bad line
-/// fails the entire script, and a surrounding `try` does not contain a compile
-/// error, it only catches runtime ones. A single malformed expression therefore
-/// takes out the whole poll and the app shows nothing at all, which is exactly
-/// what `set rep to (if repeating then "all" else "off")` did.
+/// Compile every player script. AppleScript try blocks catch runtime errors, not a syntax
+/// error that prevents the whole script from compiling.
 final class PlayerScriptTests: XCTestCase {
 
     /// `nil` when the source compiles, otherwise the compiler's complaint.
@@ -22,11 +16,8 @@ final class PlayerScriptTests: XCTestCase {
         return (error?[NSAppleScript.errorMessage] as? String) ?? "unknown error"
     }
 
-    /// Whether this machine can resolve the player's scripting terminology.
-    ///
-    /// Compiling `tell application "Spotify"` needs Spotify's dictionary, so on
-    /// a machine without it these tests would fail for a reason that has nothing
-    /// to do with the scripts. The probe separates "not installed" from "wrong".
+    /// Script compilation needs the player's scripting dictionary. Skip this check when the
+    /// player isn't installed.
     @MainActor
     private func terminologyAvailable(for source: MediaSource) -> Bool {
         compilerError("tell application \"\(source.scriptingName)\" to return 1") == nil
@@ -65,9 +56,8 @@ final class PlayerScriptTests: XCTestCase {
         }
     }
 
-    /// AppleScript has no conditional *expression*. Asserted directly as well as
-    /// through the compiler, because the compiler check is skipped on a machine
-    /// without the player installed, including CI.
+    /// Check the script form even when the player is missing and compilation has to be
+    /// skipped.
     func testRepeatIsWrittenAsAStatement() {
         for source in MediaSource.allCases {
             let controller = ScriptedMediaController(source: source, runner: AppleScriptRunner())

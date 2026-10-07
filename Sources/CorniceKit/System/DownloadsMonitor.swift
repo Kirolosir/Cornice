@@ -1,20 +1,8 @@
 import Foundation
 
-/// Watches the Downloads folder for a transfer in progress.
-///
-/// Browsers write to a temporary file while a download runs (`.crdownload` for
-/// Chromium, `.download` for Safari, `.part` for Firefox), and rename it into
-/// place when it finishes. Watching for those is the only way to see a download
-/// without integrating with each browser individually, and it needs no
-/// extension, no helper, and nothing running inside the browser.
-///
-/// Reading the Downloads folder is TCC-protected, so this is **off until the
-/// user turns it on**: starting it at launch would spring a permission dialog on
-/// somebody who never asked for a download HUD.
-///
-/// The progress fraction is published only when the source states an expected
-/// size. Chromium does not, so for a Chrome download the transferred size is all
-/// there is, and it is reported as such rather than invented.
+/// Watch browser download files such as .crdownload, .download and .part. Start only when
+/// enabled because Downloads access can ask for permission. Only show a percentage if the
+/// expected size is known.
 public final class DownloadsMonitor: @unchecked Sendable {
 
     public struct Progress: Equatable, Sendable {
@@ -59,10 +47,8 @@ public final class DownloadsMonitor: @unchecked Sendable {
         handler = onChange
         lock.unlock()
 
-        // Polled rather than watched with a file-system event source, because
-        // the interesting quantity is a *rate*, which needs two readings a known
-        // interval apart. A change notification tells you the file grew, not how
-        // fast, and a growing file fires continuously.
+        // Poll at a known interval to calculate speed from file growth. A file-change event
+        // alone doesn't give a transfer rate.
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now(), repeating: 1.0)
         timer.setEventHandler { [weak self] in self?.sample() }
@@ -169,11 +155,8 @@ public final class DownloadsMonitor: @unchecked Sendable {
         return total
     }
 
-    /// The download's eventual size, when the browser wrote it down.
-    ///
-    /// Safari records it in the `.download` package; Chromium and Firefox keep
-    /// it in their own databases, so for those this is `nil` and the HUD shows
-    /// what has arrived rather than a fraction it would have to guess at.
+    /// Read expected size from Safari's download package. For browsers that don't expose it
+    /// here, show bytes received instead of guessing a percentage.
     private static func expectedSize(of url: URL) -> Int64? {
         guard url.pathExtension.lowercased() == "download" else { return nil }
         let plist = url.appendingPathComponent("Info.plist")

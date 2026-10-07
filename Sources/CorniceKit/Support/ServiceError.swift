@@ -1,11 +1,6 @@
 import Foundation
 
-/// The single error type surfaced by every `CorniceKit` service.
-///
-/// Modules in the UI are rendered independently, and each one renders its own
-/// error. Keeping one exhaustive enum means the presentation layer can map an
-/// error to a headline, a detail line, and a recovery affordance without every
-/// view knowing about every service's private failure modes.
+/// Shared service errors so the views can show a useful message and recovery action.
 public enum ServiceError: Error, Equatable, Sendable {
     /// A required command-line tool is not installed or not on the search path.
     case toolUnavailable(tool: String)

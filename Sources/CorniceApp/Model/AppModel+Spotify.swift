@@ -2,13 +2,8 @@ import AppKit
 import Foundation
 import CorniceKit
 
-/// The Spotify Web API half of the media controls.
-///
-/// Everything here is about one thing the scripting interface cannot do. Spotify
-/// exposes repeat as a single boolean, so "repeat this track" has to be either
-/// faked (watch for the end, seek to zero), or asked for properly over the Web
-/// API. When a sign-in is present this asks; when it is not, the loop in
-/// `AppModel` still covers it, so the button behaves the same either way.
+/// Spotify Web API controls, mainly for repeat-one. Without a connection, AppModel uses its
+/// local repeat loop.
 extension AppModel {
 
     /// Whether repeat can be asked for rather than imitated.
@@ -25,20 +20,15 @@ extension AppModel {
         guard status == .signedIn else { return }
         Log.media.notice("spotify: web api connected")
 
-        // Stand the imitation down. Leaving it running alongside a real
-        // repeat-one would mean two things seeking the same track back to zero,
-        // one of them a second after the other had already done it.
+        // Stop our local loop when Spotify takes over repeat-one so both do not seek the
+        // same song.
         if appliesRepeatOne {
             setAppliesRepeatOne(false)
             Log.media.notice("repeat one: handing over to spotify")
         }
     }
 
-    /// Opens the browser for the sign-in.
-    ///
-    /// The consent screen is Spotify's own page and has to be: an app that
-    /// collected the password itself would be asking to be trusted with it, and
-    /// this way Cornice never sees it.
+    /// Open Spotify's sign-in page in the browser. Cornice doesn't collect the password.
     func beginSpotifySignIn() {
         Task { [weak self] in
             guard let self else { return }
@@ -84,17 +74,10 @@ extension AppModel {
         }
     }
 
-    /// Asks Spotify for a repeat mode outright.
-    ///
-    /// On success the app's own loop is stood down. There is nothing left for
-    /// it to do, and running both would mean seeking a track that Spotify was
-    /// already going to repeat. On failure it is stood back up, so a refusal
-    /// (no Premium, no active device) degrades to the behaviour that worked
-    /// before rather than to a button that does nothing.
+    /// Use Spotify's repeat setting and stop our loop when it succeeds. If it fails, keep
+    /// the local loop available.
     func sendSpotifyRepeat(_ mode: RepeatMode) {
-        // Shown before it is confirmed, and the confirming read held off for a
-        // moment. Without this the next poll would overlay the *old* mode on
-        // top of the optimistic one and the glyph would flick back and forth.
+        // Hold the new repeat mode briefly so an older API reading does not undo the click.
         spotifyRepeat = mode
         lastSpotifyRead = .now
 
@@ -121,13 +104,8 @@ extension AppModel {
         }
     }
 
-    /// The player's real repeat mode, re-read on a slow cadence.
-    ///
-    /// Slower than the media poll on purpose. The panel is redrawn about once a
-    /// second, and this is a network round trip against a rate-limited API to
-    /// read a value that only changes when somebody presses a button. Polling
-    /// it at the panel's rate would spend a hundred requests a minute learning
-    /// nothing.
+    /// Check the Web API less often than the local player. Repeat mode changes infrequently
+    /// and the API has a request limit.
     func refreshSpotifyRepeat(for snapshot: MediaSnapshot?) async {
         guard spotifyCanSetRepeat, snapshot?.source == .spotify else { return }
         if let last = lastSpotifyRead, Date.now.timeIntervalSince(last) < 5 { return }

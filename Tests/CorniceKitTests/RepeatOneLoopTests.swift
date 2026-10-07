@@ -9,9 +9,7 @@ final class RepeatOneLoopTests: XCTestCase {
         XCTAssertEqual(delay ?? 0, 200 - 30 - RepeatOneLoop.baseMargin, accuracy: 0.001)
     }
 
-    /// The margin has to beat the round trip to the player: a command is an
-    /// Apple event to another process. Seeking late means the player has already
-    /// moved on and the loop is simply broken.
+    /// Schedule the seek early enough to allow for the command reaching the player.
     func testTheMarginBeatsACommandRoundTrip() {
         XCTAssertGreaterThan(RepeatOneLoop.baseMargin, 0.2)
         XCTAssertLessThan(RepeatOneLoop.baseMargin, 3.0, "a noticeably clipped tail")
@@ -44,10 +42,8 @@ final class RepeatOneLoopTests: XCTestCase {
 /// Recovering when the player moves on before the track's reported end.
 final class RepeatOneRecoveryTests: XCTestCase {
 
-    /// Spotify can be set to crossfade, which starts the next track seconds
-    /// before the current one reaches the length it reports, and that setting
-    /// lives on Spotify's servers, so it cannot be read. Measured here, a 230.5
-    /// second track was abandoned at about 226.
+    /// A crossfade can change tracks before the reported duration. Check that repeat-one
+    /// recognizes an early automatic advance.
     func testATrackChangeNearTheEndReadsAsThePlayerMovingOn() {
         XCTAssertTrue(RepeatOneLoop.looksAutomatic(previousPosition: 226, previousDuration: 230.5))
         XCTAssertTrue(RepeatOneLoop.looksAutomatic(previousPosition: 230.4, previousDuration: 230.5))

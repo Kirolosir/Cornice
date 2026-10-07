@@ -22,11 +22,8 @@ public enum MediaSource: String, Sendable, Codable, CaseIterable, Identifiable {
         }
     }
 
-    /// Whether the *player* can be asked to repeat a single track.
-    ///
-    /// Music can, through `song repeat`. Spotify's dictionary has only a boolean
-    /// `repeating`, so repeat-one there is the app's own doing (see
-    /// `RepeatOneLoop`), which is why the button offers it either way.
+    /// Music supports repeat-one through AppleScript. Spotify needs the Web API or
+    /// Cornice's local loop.
     public var nativelyRepeatsOne: Bool {
         switch self {
         case .appleMusic: true
@@ -56,11 +53,8 @@ public enum RepeatMode: String, Sendable, Equatable, CaseIterable {
     case all
     case one
 
-    /// The next mode the button moves to.
-    ///
-    /// All three on both players. Spotify cannot be *asked* for repeat-one, so
-    /// the app produces it by looping the track itself; from the button's point
-    /// of view the cycle is the same either way.
+    /// Cycle through all three repeat modes. Cornice can handle repeat-one when the
+    /// scripting interface can't.
     public func next(on source: MediaSource) -> RepeatMode {
         switch self {
         case .off: return .all
@@ -70,12 +64,8 @@ public enum RepeatMode: String, Sendable, Equatable, CaseIterable {
     }
 }
 
-/// One instant of what is playing.
-///
-/// Deliberately a value type with no reference to the source application, so the
-/// UI never has to branch on which player produced it. Everything that differs
-/// between Music and Spotify (units, key names, how shuffle is spelled) is
-/// normalised in the provider.
+/// A player reading in common units, so the UI doesn't need separate Music and Spotify
+/// layouts.
 public struct MediaSnapshot: Sendable, Equatable {
     public let source: MediaSource
     public let state: PlaybackState
@@ -126,12 +116,8 @@ public struct MediaSnapshot: Sendable, Equatable {
         self.capturedAt = capturedAt
     }
 
-    /// A copy with one field replaced.
-    ///
-    /// Used to reflect a command locally before the player has been re-read, so
-    /// a toggle responds on the frame it was pressed rather than on the next
-    /// poll. The next real snapshot overwrites it either way, so an optimistic
-    /// value that turns out to be wrong corrects itself within a second.
+    /// Copy the snapshot with updated fields so button clicks can show immediately. Later
+    /// player readings confirm or correct them.
     public func with(
         state: PlaybackState? = nil,
         position: TimeInterval? = nil,
@@ -155,23 +141,14 @@ public struct MediaSnapshot: Sendable, Equatable {
         )
     }
 
-    /// Identity of the *track*, ignoring playhead movement.
-    ///
-    /// Used to decide when artwork must be refetched and when the UI should
-    /// treat this as a new song rather than a progress update. Without it,
-    /// every one-second poll would look like a track change and the artwork
-    /// would reload constantly.
+    /// Track identity without the playhead position. Use this to avoid reloading the cover
+    /// on every poll.
     public var trackIdentity: String {
         "\(source.rawValue)|\(title)|\(artist)|\(album)|\(Int(duration))"
     }
 
-    /// Position extrapolated to `now`.
-    ///
-    /// The provider is polled on the order of once a second, but the scrubber
-    /// updates every frame. Rather than poll faster (which means spawning an
-    /// AppleScript call per frame) the playhead is advanced locally from the
-    /// last known position and corrected whenever a real sample arrives. This
-    /// keeps the scrubber gliding instead of ticking once a second.
+    /// Advance the playhead locally between player readings. This keeps the scrubber smooth
+    /// without sending an AppleScript call every frame.
     public func extrapolatedPosition(at now: Date = .now) -> TimeInterval {
         guard state.isPlaying else { return position }
         let elapsed = now.timeIntervalSince(capturedAt)

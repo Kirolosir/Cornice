@@ -2,13 +2,8 @@ import AppKit
 import SwiftUI
 import CorniceKit
 
-/// Places the surface and drives its state.
-///
-/// The window is created once at its maximum size and never resized. All motion
-/// happens inside it, in SwiftUI, at display rate. The controller's remaining
-/// jobs are: keep the window over the right notch on the right display, keep
-/// the interactive region in step with what is drawn, and translate pointer
-/// activity into state changes.
+/// Place the panel over the notch and handle pointer and screen changes. SwiftUI animates
+/// inside the fixed window.
 @MainActor
 final class NotchWindowController {
 
@@ -52,8 +47,7 @@ final class NotchWindowController {
         let hosting = NSHostingView(rootView: RootView(model: model, geometry: geometry))
         hosting.frame = container.bounds
         hosting.autoresizingMask = [.width, .height]
-        // The hosting view must not paint a background: everything outside the
-        // surface shape has to be genuinely transparent.
+        // Everything outside the panel shape needs to stay transparent.
         hosting.layer?.backgroundColor = .clear
         container.addSubview(hosting)
 
@@ -87,9 +81,7 @@ final class NotchWindowController {
         geometry = SurfaceGeometry(
             notchSize: resolved.rect.size,
             notchCornerRadius: resolved.cornerRadius,
-            // Wider than the widest surface, because the resting state draws its
-            // thumbnail and track title in the menu bar *outside* the shape. The
-            // notch is a hole, so that is the only place they can go.
+            // Leave room beside the notch for the resting artwork and song title.
             windowWidth: min(SurfaceGeometry.expandedWidth + 80, resolved.screenFrame.width)
         )
     }
@@ -105,11 +97,7 @@ final class NotchWindowController {
         return NSRect(x: x, y: profile.rect.maxY - height, width: width, height: height)
     }
 
-    /// Keeps the hit-test and hover region in step with what is drawn.
-    ///
-    /// Called on every state change. This is the counterpart to the fixed
-    /// window: SwiftUI knows what it drew, but AppKit does not, so the rect is
-    /// published to the content view explicitly.
+    /// Update AppKit's interactive area whenever the panel changes state.
     private func syncInteractiveRect() {
         guard let geometry, let contentView else { return }
         contentView.interactiveRect = geometry.appKitRect(
@@ -122,11 +110,8 @@ final class NotchWindowController {
         )
     }
 
-    /// Re-measures after a display change and moves the window.
-    ///
-    /// Screen parameters change on attaching or detaching a display, changing
-    /// resolution or scaling, rotation, and lid open/close. Several of which
-    /// change the notch's size *in points* with no hardware change at all.
+    /// Measure again after display changes. Resolution and scaling can change the notch's
+    /// size in points without changing the hardware.
     private func handleScreenChange() {
         let hadProfile = profile != nil
         resolveGeometry()
@@ -173,17 +158,8 @@ final class NotchWindowController {
         hotKey?.register()
     }
 
-    /// Translates pointer presence into surface state.
-    ///
-    /// The sequence is what makes hover feel instantaneous:
-    ///
-    /// 1. On entry, go to `peek` **immediately**, with no delay whatsoever.
-    ///    Something visibly happens the moment the pointer arrives.
-    /// 2. After a short dwell, commit to `expanded`. Because the surface has
-    ///    already responded, this reads as the second half of one gesture
-    ///    rather than as a delayed reaction.
-    /// 3. On exit, close after a short grace period, so crossing a gap between
-    ///    controls or overshooting the edge by a few pixels does not dismiss it.
+    /// Peek immediately, then open after the hover delay. On exit, wait briefly before
+    /// closing so a small pointer overshoot doesn't dismiss the panel.
     private func pointerChanged(hovering: Bool) {
         model.setHovering(hovering)
 
@@ -232,10 +208,8 @@ final class NotchWindowController {
 
     private func present(_ state: SurfaceState) {
         model.present(state)
-        // The drawn shape changes with the state, so the interactive region has
-        // to follow it. Done immediately rather than after the animation: the
-        // target rect is where the pointer will be interacting, and waiting
-        // would leave a window where clicks land nowhere.
+        // Update the clickable area straight away so the new controls can receive input
+        // during the animation.
         syncInteractiveRect()
     }
 

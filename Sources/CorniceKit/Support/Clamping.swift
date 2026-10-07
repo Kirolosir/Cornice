@@ -1,11 +1,6 @@
 import Foundation
 
-/// Shared numeric helpers.
-///
-/// These live in one file rather than being redeclared beside each use: three
-/// copies of `clamped(to:)` in the same module is a compile error, and the
-/// version that survives is otherwise a matter of which file the compiler saw
-/// first.
+/// Shared number helpers, kept here so each file doesn't need its own copy.
 extension Comparable {
     /// Constrains a value to a range.
     public func clamped(to range: ClosedRange<Self>) -> Self {

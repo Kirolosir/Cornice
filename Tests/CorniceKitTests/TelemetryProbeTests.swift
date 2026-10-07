@@ -1,12 +1,8 @@
 import XCTest
 @testable import CorniceKit
 
-/// The probe against the machine running the tests.
-///
-/// Bounds rather than fixed values, because the readings are real. These catch
-/// the failures that actually happen: a zero reading from a call that quietly
-/// failed, a fraction that disagrees with the bytes it came from, and a load
-/// figure outside the range a fraction can occupy.
+/// Check real readings against sensible bounds. Fixed expected values wouldn't work on
+/// every test machine.
 final class TelemetryProbeTests: XCTestCase {
 
     func testMemoryIsPlausibleAndSelfConsistent() async {
@@ -22,10 +18,8 @@ final class TelemetryProbeTests: XCTestCase {
                        "the fraction has to describe the same reading as the bytes")
     }
 
-    /// App Memory is the anonymous pages an app owns, not the pages the kernel
-    /// happens to have marked active. That set includes file cache and excludes
-    /// inactive pages the app still holds. Used memory must exclude the file
-    /// cache, or every Mac reads as permanently near capacity.
+    /// Used memory should exclude file cache that macOS can reclaim. Active pages alone
+    /// don't describe app memory.
     func testUsedMemoryExcludesFileCache() async {
         let probe = HostTelemetryProbe()
         let sample = await probe.sample()

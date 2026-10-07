@@ -23,29 +23,12 @@ public enum AudioTapUnavailable: Error, Equatable, Sendable {
     }
 }
 
-/// Captures the audio the Mac is playing, using a Core Audio process tap.
-///
-/// This is the public API Apple added in macOS 14.2 for exactly this purpose.
-/// The alternative approaches are worse in ways that matter: installing a
-/// virtual audio device requires an installer and a reboot and permanently
-/// alters the user's audio chain, and ScreenCaptureKit's audio capture demands
-/// full Screen Recording permission (the right to read the screen) to read a
-/// waveform.
-///
-/// The tap is created with `muteBehavior = .unmuted`, so audio continues to
-/// play normally while it is being observed, and `isPrivate = true`, so it does
-/// not appear in other applications' device lists.
-///
-/// Nothing is ever written to disk. Samples are analysed in the IO callback's
-/// own buffer and discarded.
+/// Read system audio through the public process-tap API, available from macOS 14.2. Keep
+/// playback unmuted and the tap private. Samples are processed in memory and aren't saved.
 public final class SystemAudioTap: @unchecked Sendable {
 
-    /// Called on the audio IO queue with a block of separate channel samples.
-    ///
-    /// Deliberately not hopping to another actor first: this fires at the audio
-    /// device's cadence and hopping per block would queue work faster than it
-    /// drains. The callback does the analysis and hands on only the finished
-    /// levels.
+    /// Analyze each channel on the audio IO queue. Hopping to another actor for every block
+    /// would build up work.
     public typealias SampleHandler = @Sendable ([[Float]], Double) -> Void
 
     private let lock = NSLock()
@@ -64,11 +47,8 @@ public final class SystemAudioTap: @unchecked Sendable {
         return isRunning
     }
 
-    /// Starts capturing. Throws `AudioTapUnavailable` if it cannot.
-    ///
-    /// The permission prompt appears on `AudioDeviceStart`, not on tap
-    /// creation, so a failure at that last step is the signal that the user
-    /// declined, and is reported as such rather than as an opaque status code.
+    /// Start capturing and report setup or permission failures as AudioTapUnavailable.
+    /// AudioDeviceStart is where the permission prompt can appear.
     public func start(handler: @escaping SampleHandler) throws {
         guard #available(macOS 14.2, *) else { throw AudioTapUnavailable.unsupportedSystem }
 

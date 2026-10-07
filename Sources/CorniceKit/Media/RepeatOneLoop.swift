@@ -1,35 +1,15 @@
 import Foundation
 
-/// Repeating a single track on a player that cannot be asked to.
-///
-/// Spotify's scripting interface exposes `repeating` as a boolean and nothing
-/// else: it can be told to repeat the album or playlist, and there is no way to
-/// ask it for the track. Apple Music's `song repeat` is a real three-way and
-/// needs none of this.
-///
-/// So the app does it: while a track is playing with repeat-one set, it seeks
-/// back to the start a moment before the end, and the player never reaches the
-/// point where it would move on. Pre-empting the end rather than reacting to it
-/// is what keeps the loop seamless. Waiting for the track to change means the
-/// next one has already started playing, and correcting after the fact is both
-/// audible and slower.
+/// Local repeat-one fallback for Spotify's scripting interface. Seek back just before the
+/// end so the next track doesn't start. Music and connected Spotify can use their own
+/// repeat-one settings.
 public enum RepeatOneLoop {
 
-    /// How far before the end to seek back, before anything has been learned.
-    ///
-    /// Long enough to beat the round trip to the player (a command is an Apple
-    /// event to another process, measured at roughly 100 ms), and short enough
-    /// that the clipped tail is not noticeable. Too late is much worse than too
-    /// early: the player has already advanced and the loop is broken.
+    /// Leave time for the seek command to reach the player before the song ends.
     public static let baseMargin: TimeInterval = 1.2
 
-    /// How close to the end a track change has to be to read as the player
-    /// moving on by itself rather than the user skipping.
-    ///
-    /// Generous, because crossfade can be set as high as twelve seconds and the
-    /// cost of being wrong is small: a deliberate skip made within a few seconds
-    /// of the end gets treated as an advance and the track restarts, which is
-    /// what repeat-one means anyway.
+    /// Treat track changes near the end as possible automatic advances. Leave room for
+    /// Spotify's crossfade.
     public static let advanceWindow: TimeInterval = 20
 
     /// Whether a track change looks like the player advancing on its own.
@@ -41,25 +21,18 @@ public enum RepeatOneLoop {
         return previousDuration - previousPosition <= advanceWindow
     }
 
-    /// The margin to use, given how early this player has been seen to move on.
-    ///
-    /// Spotify can be set to crossfade, which starts the next track seconds
-    /// before the current one reaches the length it reports, and that setting
-    /// lives on Spotify's servers, so it cannot be asked for. Measured here, a
-    /// 230.5 second track was abandoned at about 226. So the margin is learned:
-    /// the first loop that gets away sets the distance for the next one, and
-    /// after that the loop lands ahead of the crossfade instead of behind it.
+    /// Increase the seek margin if the player has advanced early before. That lets the next
+    /// loop get ahead of the crossfade.
     public static func margin(observedEarlyAdvance: TimeInterval) -> TimeInterval {
         max(baseMargin, observedEarlyAdvance + 0.6)
     }
 
-    /// How long to wait before looping the track, or `nil` when there is nothing
-    /// to schedule.
+    /// Delay before looping, or nil if no loop is needed.
     ///
     /// - Parameters:
-    ///   - duration: track length in seconds.
-    ///   - position: the playhead now.
-    ///   - isPlaying: a paused track is not approaching its end.
+    ///   - duration: Track length in seconds.
+    ///   - position: Current playhead position.
+    ///   - isPlaying: A paused track doesn't need a scheduled seek.
     public static func delay(
         duration: TimeInterval,
         position: TimeInterval,

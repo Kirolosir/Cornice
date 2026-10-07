@@ -1,12 +1,7 @@
 import Foundation
 import Accelerate
 
-/// Real forward FFT via vDSP.
-///
-/// Accelerate rather than a hand-rolled transform: this runs on every audio
-/// block, and vDSP uses the vector units. A naive Swift DFT at this rate would
-/// be a measurable share of a core, which for a decorative visualiser is
-/// indefensible.
+/// Use vDSP for the FFT since it runs on every audio block.
 public enum FFT {
 
     /// Setup objects are expensive to create and safe to share for reads, so
@@ -29,10 +24,9 @@ public enum FFT {
 
     private static let cache = SetupCache()
 
-    /// Magnitude spectrum of `samples`, Hann-windowed and zero-padded or
-    /// truncated to `size`.
+    /// Apply a Hann window, then pad or truncate the samples to size.
     ///
-    /// - Returns: `size / 2` magnitudes, bin 0 being DC.
+    /// - Returns: size / 2 magnitudes, with DC in bin 0.
     public static func magnitudes(of samples: [Float], size: Int) -> [Float] {
         let fftSize = max(64, nextPowerOfTwo(size))
         let halfSize = fftSize / 2
@@ -42,9 +36,7 @@ public enum FFT {
             return Array(repeating: 0, count: halfSize)
         }
 
-        // Window then pad. A rectangular window would smear every tone across
-        // neighbouring bins (spectral leakage), which shows up as bars that all
-        // move together instead of independently.
+        // Apply a Hann window before padding to reduce leakage between frequency bins.
         var windowed = [Float](repeating: 0, count: fftSize)
         let count = min(samples.count, fftSize)
         var window = [Float](repeating: 0, count: count)

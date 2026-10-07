@@ -1,9 +1,7 @@
 import XCTest
 @testable import CorniceKit
 
-/// These run real processes. The behaviours under test (timeout escalation,
-/// cancellation, pipe draining) only exist at the boundary with the OS, so a
-/// mock would test nothing.
+/// Use real processes to check timeouts, cancellation and pipe draining.
 final class SubprocessRunnerTests: XCTestCase {
 
     private let runner = SubprocessRunner()
@@ -59,9 +57,7 @@ final class SubprocessRunnerTests: XCTestCase {
     }
 
     func testCancellationTerminatesTheProcess() async {
-        // Captured explicitly rather than through `self`: the child task needs
-        // the runner, not the test case, and sending the test case across an
-        // isolation boundary is what the compiler objects to.
+        // Capture the runner instead of the test case so the child task respects isolation.
         let runner = runner
         let task = Task {
             try await runner.run(Command(executable: "/bin/sleep", arguments: ["30"], timeout: 30))

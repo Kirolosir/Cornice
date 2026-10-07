@@ -321,11 +321,8 @@ final class SpotifyWebTests: XCTestCase {
     }
 
     func testARepeatedRedirectDoesNotTearDownASignInThatWorked() async throws {
-        // Observed in the wild: the browser delivered the same redirect
-        // thirteen times. The first consumed the verifier and the rest found
-        // nothing waiting, which was being read as a failed sign-in, so a
-        // connection that had just succeeded was immediately revoked, and the
-        // repeat button silently fell back to imitating repeat-one.
+        // A callback can be delivered more than once. Replaying it shouldn't undo the
+        // connection established by the first copy.
         let store = EphemeralTokenStore()
         let transport = StubTransport([tokenReply(refresh: "refresh-new")])
         let remote = SpotifyWebRemote(clientID: "abc", store: store, transport: transport)

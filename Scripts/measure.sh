@@ -1,13 +1,7 @@
 #!/usr/bin/env bash
-#
-# Samples Cornice's own CPU and memory while it runs, so the figures quoted in
-# the README are measured rather than estimated.
-#
+# Sample CPU and memory while Cornice is running.
 # Usage: ./Scripts/measure.sh [duration_seconds] [sample_interval_seconds]
-#
-# Run it with the panel collapsed and left alone — that is the state the app
-# spends effectively all of its time in, and the only one where idle cost means
-# anything.
+# Leave the panel closed when measuring idle usage.
 
 set -euo pipefail
 

@@ -1,9 +1,7 @@
 import XCTest
 @testable import CorniceKit
 
-/// The reply from a player is a delimited string, and every difference between
-/// Music and Spotify lives in how it is parsed. Each of these is a case that
-/// produces a plausible-looking but wrong UI when it is got wrong.
+/// Check the different reply formats and units used by Music and Spotify.
 final class MediaParsingTests: XCTestCase {
 
     private let separator = "\u{1f}"
@@ -69,9 +67,7 @@ final class MediaParsingTests: XCTestCase {
         XCTAssertNil(ScriptedMediaController.parse("", source: .spotify))
     }
 
-    /// AppleScript renders reals in the *user's* locale, so a machine set to a
-    /// comma-decimal locale returns "182,813". Parsing that as zero would make
-    /// the playhead sit at the start for a large fraction of the world.
+    /// Accept comma decimals from AppleScript on machines that use that number format.
     func testNumbersParseInCommaDecimalLocales() {
         XCTAssertEqual(ScriptedMediaController.number("182,813"), 182.813, accuracy: 0.001)
         XCTAssertEqual(ScriptedMediaController.number("182.813"), 182.813, accuracy: 0.001)
@@ -87,9 +83,8 @@ final class MediaParsingTests: XCTestCase {
 
     // MARK: - The cheap poll
 
-    /// Profiling put one Spotify round-trip at ~100 ms of CPU, so the frequent
-    /// poll carries only what changes between reads. It still has to get the
-    /// millisecond conversion right, because the playhead depends on it.
+    /// The light poll reads changing values. Check position and the conversion from
+    /// milliseconds to seconds.
     func testLightReadParsesLiveValues() {
         let raw = row(["playing", "Do I Wanna Know?", "272394", "182.813", "96"])
 
@@ -133,9 +128,7 @@ final class MediaSnapshotTests: XCTestCase {
                       duration: duration, position: position, capturedAt: start)
     }
 
-    /// The player is polled about once a second but the scrubber redraws every
-    /// frame, so the playhead is advanced locally between samples. Without
-    /// this the bar ticks once a second instead of gliding.
+    /// Advance the playhead between polls so the scrubber moves smoothly.
     func testPositionIsExtrapolatedWhilePlaying() {
         let playing = snapshot()
 
