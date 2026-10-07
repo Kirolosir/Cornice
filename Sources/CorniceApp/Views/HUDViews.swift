@@ -159,7 +159,9 @@ struct HUDView: View {
         panel {
             HStack(spacing: 0) {
                 HStack(spacing: 10) {
-                    Button { model.toggleTimer(id) } label: {
+                    Button {
+                        if isFinished { model.repeatTimer(id) } else { model.toggleTimer(id) }
+                    } label: {
                         Image(systemName: isFinished ? "arrow.clockwise" : (isRunning ? "pause.fill" : "play.fill"))
                             .font(.system(size: 12, weight: .bold))
                     }

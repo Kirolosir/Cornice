@@ -96,6 +96,22 @@ public struct FocusTimer: Equatable, Sendable {
         state = .idle
     }
 
+    /// Extends the countdown without losing time already spent or paused.
+    public mutating func addTime(minutes: Int, at now: Date = .now) {
+        let seconds = TimeInterval(minutes.clamped(to: 1...600) * 60)
+        switch state {
+        case .running(let deadline, let total):
+            duration += seconds
+            state = .running(deadline: max(now, deadline).addingTimeInterval(seconds), total: total + seconds)
+        case .paused(let remaining, let total):
+            duration += seconds
+            state = .paused(remaining: remaining + seconds, total: total + seconds)
+        case .idle, .finished:
+            duration = seconds
+            start(at: now)
+        }
+    }
+
     /// Toggles between running and paused; starts from idle or finished.
     public mutating func toggle(at now: Date = .now) {
         switch state {

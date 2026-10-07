@@ -16,7 +16,7 @@ enum PreviewServices {
             telemetry: PreviewTelemetryProbe(),
             preferences: EphemeralPreferencesStore(previewPreferences()),
             hardware: HardwareIdentityProvider(runner: SubprocessRunner()),
-            visualizer: AudioVisualizerEngine(bandCount: 8),
+            visualizer: AudioVisualizerEngine(bandCount: 6),
             outputDevices: OutputDeviceMonitor(),
             outputVolume: OutputVolumeReader(),
             reachability: NetworkReachability(),

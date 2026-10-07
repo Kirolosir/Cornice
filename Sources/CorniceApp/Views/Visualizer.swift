@@ -56,92 +56,61 @@ struct ArtworkThumbnail: View {
     }
 }
 
-/// The three-bar playing indicator beside a track title.
-///
-/// This is a *playing* indicator first and a spectrum second, which is the
-/// distinction that decides how it behaves when system audio capture is off:
-/// it keeps the standard staggered bob, because what it is reporting then is
-/// "this is playing", not "the music sounds like this". When capture is on it
-/// is driven by the analyser instead and reports both.
-///
-/// Sized exactly as the handoff draws it: three 2 pt bars, 2 pt apart, 13 pt
-/// tall, standing on their baseline.
+/// Six frequency bands, growing around the centre like the Dynamic Island.
 struct EqualizerIndicator: View {
     @Bindable var model: AppModel
-    /// Whether the track is actually playing. A paused track stands still.
     let isLive: Bool
     let tint: Color
-    /// How many bars to draw. The panel has room for more resolution than the
-    /// resting strip beside the menu bar clock does.
-    var barCount: Int = 3
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @State private var bobbing = false
-
-    private var levels: AudioLevels { model.levels }
-
-    /// Whether the bars follow the analyser or fall back to the standard bob.
-    ///
-    /// A *stable* answer, not a per-second one: switching between the two
-    /// motions is jarring, and the band values already go to zero on their own
-    /// when there is nothing to show.
+    private let barCount = 6
+    private let barHeight: CGFloat = 14
+    private let resting: Float = 2.0 / 14.0
     private var audioDriven: Bool { model.barsFollowAudio }
 
-    /// Deliberately co-prime-ish, so the three bars never fall into step and
-    /// start reading as one block moving up and down.
-    private static let durations: [Double] = [0.80, 0.93, 1.06, 0.87, 1.00]
-    private static let phases: [Double] = [0, 0.17, 0.34, 0.09, 0.26]
+    var body: some View {
+        // Only use a display clock for the playback indicator shown when audio
+        // capture is off. Captured audio already has its own sampling clock.
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !isLive || audioDriven || reduceMotion)) { context in
+            let heights = heights(at: context.date)
+            WaveformBars(heights: heights, tint: tint, height: barHeight)
+                .animation(reduceMotion || !audioDriven ? nil : .linear(duration: 1.0 / 30), value: heights)
+                .accessibilityHidden(true)
+        }
+    }
 
-    private let barWidth: CGFloat = 2
-    private let barHeight: CGFloat = 13
-    private let resting: CGFloat = 0.3
+    private func heights(at date: Date) -> [Float] {
+        guard isLive else { return Array(repeating: resting, count: barCount) }
+        if audioDriven {
+            return model.levels.barHeights(count: barCount, resting: resting, outputVolume: model.outputVolume)
+        }
+        guard !reduceMotion else { return Array(repeating: resting, count: barCount) }
+
+        // A playback indicator until capture is enabled. Different periods and
+        // phases keep the bars from moving together or restarting on a redraw.
+        let periods = [0.83, 1.07, 0.71, 0.97, 0.79, 1.13]
+        let time = date.timeIntervalSinceReferenceDate
+        return (0..<barCount).map { index in
+            let phase = time.truncatingRemainder(dividingBy: periods[index]) / periods[index]
+            let wave = Float((sin(phase * 2 * .pi + Double(index) * 0.9) + 1) / 2)
+            return resting + (0.86 - resting) * wave
+        }
+    }
+}
+
+struct WaveformBars: View {
+    let heights: [Float]
+    let tint: Color
+    var height: CGFloat = 14
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 2) {
-            ForEach(0..<barCount, id: \.self) { index in
+        HStack(alignment: .center, spacing: 1.5) {
+            ForEach(heights.indices, id: \.self) { index in
                 Capsule(style: .continuous)
                     .fill(tint)
-                    .frame(width: barWidth, height: barHeight)
-                    .scaleEffect(y: scale(at: index), anchor: .bottom)
-                    .animation(animation(at: index), value: animationKey(at: index))
+                    .frame(width: 2, height: max(2, CGFloat(heights[index]) * height))
             }
         }
-        .frame(
-            width: barWidth * CGFloat(barCount) + 2 * CGFloat(barCount - 1),
-            height: barHeight,
-            alignment: .bottom
-        )
-        .onAppear { bobbing = true }
-        .accessibilityHidden(true)
+        .frame(width: 2 * CGFloat(heights.count) + 1.5 * CGFloat(max(0, heights.count - 1)), height: height)
     }
-
-    /// How tall a bar stands, 0...1 of its full height. The mapping itself lives
-    /// in `AudioLevels`, where it can be tested against known spectra.
-    private func scale(at index: Int) -> CGFloat {
-        guard isLive else { return resting }
-        guard audioDriven else { return bobbing ? 1 : resting }
-        let heights = levels.barHeights(
-            count: barCount,
-            resting: Float(resting),
-            outputVolume: model.outputVolume
-        )
-        guard index < heights.count else { return resting }
-        return CGFloat(heights[index])
-    }
-
-    private func animationKey(at index: Int) -> Double {
-        guard isLive else { return -1 }
-        return audioDriven ? Double(scale(at: index)) : (bobbing ? 1 : 0)
-    }
-
-    private func animation(at index: Int) -> Animation? {
-        guard isLive else { return .easeOut(duration: 0.18) }
-        // The analyzer already smooths attack and release. A short linear
-        // interpolation avoids easing toward a target that changes every frame.
-        if audioDriven { return .linear(duration: 1.0 / 30) }
-        let slot = index % Self.durations.count
-        return .easeInOut(duration: Self.durations[slot])
-            .repeatForever(autoreverses: true)
-            .delay(Self.phases[slot])
-    }
-
 }

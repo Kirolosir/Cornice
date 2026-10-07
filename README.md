@@ -44,7 +44,7 @@ written from scratch. No Electron, no private APIs, no helper daemon.
 |---|---|
 | **Now Playing** | Apple Music and Spotify: artwork, title, artist, a draggable scrubber, shuffle, repeat, output device. |
 | **System** | CPU and memory as filled sparklines over the last 48 samples. |
-| **Timers** | Up to four at once, with presets and an alarm. |
+| **Timers** | Presets add time to the current countdown, with pause, repeat and an alarm. |
 | **AirPods** | A live activity when a wireless device connects, with its charge. |
 | **System HUDs** | Charging, battery low, full battery, no internet, VPN, downloads. Each gets its own size. |
 
@@ -131,8 +131,9 @@ make app-debug
 dist/Cornice.app/Contents/MacOS/Cornice --probe-timers
 ```
 
-The probe plays the alarm for eight seconds, checks overlapping timers and
-Escape, then exits. It needs an audio output and a logged-in macOS session.
+The probe plays the alarm for eight seconds, checks adding time, repeating,
+overlapping alarms and Escape, then exits. It needs an audio output and a
+logged-in macOS session.
 
 ### Connecting Spotify (optional)
 

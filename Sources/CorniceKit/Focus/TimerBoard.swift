@@ -75,6 +75,26 @@ public struct TimerBoard: Equatable, Sendable {
         entries.removeAll { $0.id == id }
     }
 
+    /// Presets add to the current countdown. A finished timer starts fresh.
+    @discardableResult
+    public mutating func addTime(minutes: Int, at now: Date = .now) -> UUID? {
+        guard let index = entries.firstIndex(where: { !$0.isFinished }) ?? entries.indices.first else {
+            return add(minutes: minutes, at: now)
+        }
+        let oldLabel = "\(Int(entries[index].timer.duration / 60)) min"
+        entries[index].timer.addTime(minutes: minutes, at: now)
+        if entries[index].label == oldLabel {
+            entries[index].label = "\(Int(entries[index].timer.duration / 60)) min"
+        }
+        return entries[index].id
+    }
+
+    /// Repeated clicks on Repeat must not pause the newly started countdown.
+    public mutating func repeatTimer(_ id: UUID, at now: Date = .now) {
+        guard let index = entries.firstIndex(where: { $0.id == id }), entries[index].isFinished else { return }
+        entries[index].timer.start(at: now)
+    }
+
     public mutating func removeAll() {
         entries.removeAll()
     }

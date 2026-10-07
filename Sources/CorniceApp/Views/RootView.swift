@@ -131,6 +131,9 @@ struct RootView: View {
         .onChange(of: state) { _, _ in
             if needsFrameTimer { startFrameTimer() } else { stopFrameTimer() }
         }
+        .onChange(of: model.isVisualizerLive) { _, _ in
+            if needsFrameTimer { startFrameTimer() } else { stopFrameTimer() }
+        }
     }
 
     /// A HUD that waits to be dealt with (an alert with buttons, a ringing
@@ -288,9 +291,12 @@ struct RootView: View {
     private func startFrameTimer() {
         frameTimer?.invalidate()
         guard needsFrameTimer else { return }
-        // Display rate while open. Otherwise the only moving things are a few
-        // 13-point bars and a countdown, where 10 Hz is indistinguishable.
-        let interval = state.isOpen ? 1.0 / 60.0 : 1.0 / 10.0
+        // The compact waveform also needs smooth updates. A timer on its own
+        // can keep the slower cadence.
+        let visibleWaveform = model.isVisualizerLive && (
+            state == .peek || (state == .collapsed && model.preferences.idleDisplay == .artworkAndSpectrum)
+        )
+        let interval = state.isOpen ? 1.0 / 60.0 : (visibleWaveform ? 1.0 / 30.0 : 1.0 / 10.0)
         let timer = Timer(timeInterval: interval, repeats: true) { _ in
             MainActor.assumeIsolated {
                 model.sampleLevels()

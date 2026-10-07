@@ -10,9 +10,9 @@ func tone(_ frequency: Double, rate: Double = 48_000, count: Int = 24_576) -> [F
     (0..<count).map { Float(sin(2 * .pi * frequency * Double($0) / rate)) * 0.12 }
 }
 
-func analyze(_ channels: [[Float]], chunks: [Int], rate: Double = 48_000) -> AudioLevels {
-    var analyzer = StreamingSpectrumAnalyzer()
-    var latest = AudioLevels.silent(bandCount: 8)
+func analyze(_ channels: [[Float]], chunks: [Int], rate: Double = 48_000, bandCount: Int = 8) -> AudioLevels {
+    var analyzer = StreamingSpectrumAnalyzer(bandCount: bandCount)
+    var latest = AudioLevels.silent(bandCount: bandCount)
     var offset = 0
     var chunk = 0
     while offset < channels[0].count {
@@ -58,4 +58,17 @@ check(analyzer.consume([[Float](repeating: 0, count: 128)], sampleRate: 96_000) 
       "sample-rate changes discard old partial windows")
 let invalid = analyze([[Float](repeating: .nan, count: 2048)], chunks: [256])
 check(invalid.bands.allSatisfy { $0.isFinite } && invalid.level == 0, "invalid samples do not poison the analyzer")
+
+// Each visible bar gets its own range, from bass through treble.
+for rate in [44_100.0, 48_000, 96_000] {
+    for (band, frequency) in [90.0, 230, 580, 1500, 3800, 9500].enumerated() {
+        let result = analyze([tone(frequency, rate: rate)], chunks: [71, 333, 2048, 19], rate: rate, bandCount: 6)
+        let peak = result.bands.enumerated().max { $0.element < $1.element }!.offset
+        let bars = result.barHeights(count: 6, resting: 2.0 / 14.0)
+        check(peak == band, "\(Int(frequency)) Hz drives bar \(band + 1) at \(Int(rate)) Hz")
+        check(bars.count == 6 && bars[band] > 0.4, "six-bar waveform responds to its frequency range")
+        check(result.barHeights(count: 6, resting: 2.0 / 14.0, outputVolume: 0)
+              .allSatisfy { abs($0 - 2.0 / 14.0) < 0.0001 }, "muted waveform rests")
+    }
+}
 print("Audio checks passed")

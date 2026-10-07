@@ -268,19 +268,34 @@ extension AppModel {
     // MARK: - Timers
 
     func addTimer(minutes: Int) {
+        var updatedID: UUID?
         mutateTimers { board in
-            if board.add(minutes: minutes) == nil {
-                self.flashToast("Up to \(TimerBoard.maximumTimers) timers")
-            }
+            updatedID = board.addTime(minutes: minutes)
         }
+        guard let id = updatedID else { return }
+        TimerAlarm.shared.acknowledge(id)
+        refreshTimerHUD(id)
+    }
+
+    func repeatTimer(_ id: UUID) {
+        guard timers.entries.contains(where: { $0.id == id && $0.isFinished }) else { return }
+        TimerAlarm.shared.acknowledge(id)
+        mutateTimers { $0.repeatTimer(id) }
+        refreshTimerHUD(id)
     }
 
     func toggleTimer(_ id: UUID) {
         TimerAlarm.shared.acknowledge(id)
         mutateTimers { $0.toggle(id) }
+        refreshTimerHUD(id)
+    }
+
+    private func refreshTimerHUD(_ id: UUID) {
         if case .timerRunning(let shownID, _, _, _) = hudContent, shownID == id,
            let entry = timers.entries.first(where: { $0.id == id }) {
-            presentTimerHUD(for: entry)
+            // Update the existing alert even if the panel is now open.
+            applyHUD(.timerRunning(id: id, label: entry.label,
+                                   isRunning: entry.isRunning, isFinished: entry.isFinished))
         }
     }
 

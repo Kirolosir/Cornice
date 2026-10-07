@@ -52,7 +52,7 @@ enum DocsCapture {
             try? await Task.sleep(for: .milliseconds(12))
         }
         model.addTimer(minutes: 25)
-        model.addTimer(minutes: 5)
+        model.addTimer(minutes: 25)
         try? await Task.sleep(for: .milliseconds(600))
 
         for (state, module, name) in [

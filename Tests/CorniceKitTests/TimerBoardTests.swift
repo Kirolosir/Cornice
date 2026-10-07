@@ -8,6 +8,52 @@ final class TimerBoardTests: XCTestCase {
 
     private let start = Date(timeIntervalSince1970: 1_700_000_000)
 
+    func testPresetsExtendOneCountdownWithoutResettingElapsedTime() {
+        var board = TimerBoard()
+        let id = board.addTime(minutes: 25, at: start)
+        let later = start.addingTimeInterval(10)
+        XCTAssertEqual(board.addTime(minutes: 25, at: later), id)
+        XCTAssertEqual(board.entries.count, 1)
+        XCTAssertEqual(board.entries[0].remaining(at: later), 2990, accuracy: 0.01)
+        XCTAssertEqual(board.entries[0].label, "50 min")
+        XCTAssertEqual(board.entries[0].timer.duration, 3000)
+    }
+
+    func testPresetsExtendPausedTimeWithoutResuming() {
+        var board = TimerBoard()
+        let id = board.addTime(minutes: 25, at: start)!
+        board.toggle(id, at: start.addingTimeInterval(10))
+        board.addTime(minutes: 25, at: start.addingTimeInterval(3600))
+        XCTAssertFalse(board.entries[0].isRunning)
+        XCTAssertEqual(board.entries[0].remaining(at: start.addingTimeInterval(3600)), 2990, accuracy: 0.01)
+    }
+
+    func testDuplicateRepeatKeepsTheTimerRunningAndRepeatsTheExtendedDuration() {
+        var board = TimerBoard()
+        let id = board.addTime(minutes: 25, at: start)!
+        board.addTime(minutes: 25, at: start)
+        let finishedAt = start.addingTimeInterval(3000)
+        XCTAssertEqual(board.tick(at: finishedAt).count, 1)
+        board.repeatTimer(id, at: finishedAt)
+        board.repeatTimer(id, at: finishedAt.addingTimeInterval(1))
+        XCTAssertTrue(board.entries[0].isRunning)
+        XCTAssertEqual(board.entries[0].remaining(at: finishedAt.addingTimeInterval(1)), 2999, accuracy: 0.01)
+        XCTAssertTrue(board.tick(at: finishedAt.addingTimeInterval(3000)).first?.isFinished == true)
+    }
+
+    func testAddingAPresetToAFinishedTimerStartsFresh() {
+        var board = TimerBoard()
+        let id = board.addTime(minutes: 25, at: start)!
+        let later = start.addingTimeInterval(1500)
+        board.tick(at: later)
+        XCTAssertEqual(board.addTime(minutes: 5, at: later), id)
+        XCTAssertEqual(board.entries.count, 1)
+        XCTAssertEqual(board.entries[0].timer.duration, 300)
+        XCTAssertEqual(board.entries[0].remaining(at: later), 300)
+        XCTAssertEqual(board.entries[0].label, "5 min")
+        XCTAssertTrue(board.entries[0].isRunning)
+    }
+
     func testAddedTimersStartImmediately() {
         var board = TimerBoard()
 

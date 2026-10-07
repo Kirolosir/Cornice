@@ -45,7 +45,7 @@ struct RestingMarginView: View {
             EqualizerIndicator(
                 model: model,
                 isLive: model.surfaceState == .collapsed && snapshot.state.isPlaying,
-                tint: Theme.Ink.dark.secondary
+                tint: model.artworkTint ?? Theme.Ink.dark.secondary
             )
         } else {
             Text(snapshot.title)
@@ -98,7 +98,7 @@ struct PeekContentView: View {
                 EqualizerIndicator(
                     model: model,
                     isLive: model.surfaceState == .peek && snapshot.state.isPlaying,
-                    tint: Theme.Ink.dark.secondary
+                    tint: model.artworkTint ?? Theme.Ink.dark.secondary
                 )
             } else {
                 Text("Nothing playing")
@@ -174,8 +174,7 @@ struct ExpandedContentView: View {
                     EqualizerIndicator(
                         model: model,
                         isLive: model.surfaceState == .expanded,
-                        tint: model.artworkTint ?? ink.secondary,
-                        barCount: 5
+                        tint: model.artworkTint ?? ink.secondary
                     )
                 }
             }

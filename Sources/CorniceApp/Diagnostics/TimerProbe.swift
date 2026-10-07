@@ -28,6 +28,29 @@ extension Probes {
             return entry
         }
 
+        // Fixed dates check elapsed time and the next session without waiting.
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        var board = TimerBoard()
+        let combinedID = board.addTime(minutes: 25, at: start)!
+        board.addTime(minutes: 25, at: start.addingTimeInterval(10))
+        check(board.entries[0].remaining(at: start.addingTimeInterval(10)) == 2990,
+              "adding time preserves elapsed seconds")
+        board.toggle(combinedID, at: start.addingTimeInterval(10))
+        board.addTime(minutes: 5, at: start.addingTimeInterval(3600))
+        check(board.entries[0].remaining(at: start.addingTimeInterval(3600)) == 3290,
+              "an hour paused does not consume added time")
+        board.toggle(combinedID, at: start.addingTimeInterval(3600))
+        let end = start.addingTimeInterval(6890)
+        check(board.tick(at: end).count == 1, "extended timer finishes at its new deadline")
+        board.repeatTimer(combinedID, at: end)
+        board.repeatTimer(combinedID, at: end.addingTimeInterval(1))
+        check(board.entries[0].isRunning && board.entries[0].remaining(at: end.addingTimeInterval(1)) == 3299,
+              "duplicate repeat preserves the extended session")
+        board.tick(at: end.addingTimeInterval(3300))
+        board.addTime(minutes: 5, at: end.addingTimeInterval(3300))
+        check(board.entries.count == 1 && board.entries[0].timer.duration == 300,
+              "a preset after completion starts a fresh timer")
+
         // Two completions on the same tick must share one alarm.
         let first = expiredTimer("First")
         let second = expiredTimer("Second")
@@ -88,7 +111,8 @@ extension Probes {
         let repeated = expiredTimer("Repeat")
         model.applyTimers(TimerBoard(entries: [repeated]))
         model.tickTimers()
-        model.toggleTimer(repeated.id)
+        model.repeatTimer(repeated.id)
+        model.repeatTimer(repeated.id)
         check(!TimerAlarm.shared.isRinging, "repeating a finished timer stops its alarm")
         check(model.timers.entries.count == 1, "repeat reuses the existing timer")
         check(model.timers.entries.first?.id == repeated.id, "repeat keeps the timer identity")
@@ -100,6 +124,52 @@ extension Probes {
             check(false, "repeated timer HUD is present")
         }
         model.removeTimer(repeated.id)
+
+        // Adding presets extends one countdown, including while paused.
+        model.present(.expanded)
+        model.addTimer(minutes: 25)
+        let extendedID = model.timers.entries[0].id
+        model.addTimer(minutes: 25)
+        check(model.timers.entries.count == 1, "25 + 25 keeps one timer")
+        check(model.timers.entries[0].id == extendedID, "adding time keeps the timer identity")
+        check(model.timers.entries[0].label == "50 min", "adding time updates the label")
+        check(model.timers.entries[0].remaining() > 2998, "25 + 25 makes 50 minutes")
+        model.toggleTimer(extendedID)
+        model.addTimer(minutes: 5)
+        check(!model.timers.entries[0].isRunning, "adding time keeps a paused timer paused")
+        check(model.timers.entries[0].remaining() > 3298, "paused timer gains the full five minutes")
+        model.toggleTimer(extendedID)
+        check(model.timers.entries[0].isRunning, "extended timer resumes")
+        model.removeTimer(extendedID)
+
+        // Repeat from the panel must refresh a retained HUD without reopening it.
+        model.present(.collapsed)
+        let panelRepeat = expiredTimer("Panel repeat")
+        model.applyTimers(TimerBoard(entries: [panelRepeat]))
+        model.tickTimers()
+        model.present(.expanded)
+        model.repeatTimer(panelRepeat.id)
+        check(model.surfaceState == .expanded, "repeat keeps the panel open")
+        if case .timerRunning(_, _, let running, let finished) = model.hudContent {
+            check(running && !finished, "repeat updates the retained HUD")
+        } else {
+            check(false, "retained timer HUD is present")
+        }
+        check(!TimerAlarm.shared.isRinging, "panel repeat stops its alarm")
+        model.removeTimer(panelRepeat.id)
+
+        // A pending retraction cannot clear a newer timer completion.
+        model.present(.collapsed)
+        let dismissing = expiredTimer("Dismissing")
+        model.applyTimers(TimerBoard(entries: [dismissing]))
+        model.tickTimers()
+        model.dismissHUD()
+        model.repeatTimer(dismissing.id)
+        check(model.surfaceState == .collapsed, "repeat does not reopen a retracting HUD")
+        try? await Task.sleep(for: .milliseconds(400))
+        check(model.hudContent == nil, "retraction still clears the old HUD")
+        model.removeTimer(dismissing.id)
+
         print("Timer probe passed")
         NSApp.terminate(nil)
     }

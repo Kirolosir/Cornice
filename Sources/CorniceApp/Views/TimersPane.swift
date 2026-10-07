@@ -1,7 +1,7 @@
 import SwiftUI
 import CorniceKit
 
-/// The Timers module: presets on top, running timers beneath.
+/// Presets on top, the current countdown beneath.
 ///
 /// Each running timer is the system timer HUD *wholesale*. The same orange
 /// pause, the same grey dismiss, the same oversized count. A timer should look
@@ -25,7 +25,8 @@ struct TimersPane: View {
                             .font(Theme.Typeface.status)
                     }
                     .buttonStyle(SoftButtonStyle())
-                    .disabled(model.timers.entries.count >= TimerBoard.maximumTimers)
+                    .help(model.timers.entries.isEmpty ? "Start a \(minutes) minute timer" : "Add \(minutes) minutes")
+                    .accessibilityLabel("Add \(minutes) minutes")
                 }
             }
 
@@ -35,20 +36,26 @@ struct TimersPane: View {
                     .foregroundStyle(ink.tertiary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.top, 22)
+            } else if model.timers.entries.count <= 2 {
+                timerRows
             } else {
                 ScrollView {
-                    VStack(spacing: 10) {
-                        ForEach(model.timers.entries) { entry in
-                            TimerRow(entry: entry, clock: clock, model: model)
-                        }
-                    }
-                    .padding(.vertical, 3)
+                    timerRows
                 }
                 .scrollIndicators(.hidden)
             }
 
             Spacer(minLength: 0)
         }
+    }
+
+    private var timerRows: some View {
+        VStack(spacing: 10) {
+            ForEach(model.timers.entries) { entry in
+                TimerRow(entry: entry, clock: clock, model: model)
+            }
+        }
+        .padding(.vertical, 3)
     }
 }
 
@@ -73,7 +80,7 @@ struct TimerRow: View {
         let reading = TimerCountdown.reading(entry, tick: clock.tick)
         return HStack(spacing: 12) {
             Button {
-                model.toggleTimer(id)
+                if isFinished { model.repeatTimer(id) } else { model.toggleTimer(id) }
             } label: {
                 Image(systemName: isFinished ? "arrow.clockwise" : (isRunning ? "pause.fill" : "play.fill"))
                     .font(.system(size: 12, weight: .bold))

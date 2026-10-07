@@ -29,7 +29,7 @@ struct ServiceContainer: Sendable {
             telemetry: HostTelemetryProbe(),
             preferences: PreferencesStore(),
             hardware: HardwareIdentityProvider(runner: runner),
-            visualizer: AudioVisualizerEngine(bandCount: 8),
+            visualizer: AudioVisualizerEngine(bandCount: 6),
             outputDevices: OutputDeviceMonitor(),
             outputVolume: OutputVolumeReader(),
             reachability: NetworkReachability(),
