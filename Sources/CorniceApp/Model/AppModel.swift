@@ -17,10 +17,39 @@ final class AppModel {
 
     private(set) var surfaceState: SurfaceState = .collapsed
     private(set) var isHovering = false
+    var isPresentingPopover = false
     var activeModule: ModuleKind = .media
 
     private(set) var notchProfile: NotchProfile?
     private(set) var hardware: HardwareIdentity?
+
+    func enablePlayerConnection() {
+        updatePreferences { $0.mediaAccessEnabled = true }
+        refreshNow("media")
+    }
+
+    func finishSetup() {
+        updatePreferences { $0.hasCompletedSetup = true }
+        refreshNow("media")
+    }
+
+    private func startMediaWatchdog() {
+        mediaWatchdog?.cancel()
+        mediaWatchdog = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(5)) } catch { return }
+                guard let self else { return }
+                guard self.allowsMediaAutomation, !self.mediaPermissionDenied,
+                      let source = self.media?.source, let updated = self.lastMediaUpdate,
+                      Date().timeIntervalSince(updated) > max(15, self.preferences.mediaRefreshInterval * 4) else { continue }
+                let health = await self.serviceContainer.media.connectionHealth()[source]
+                guard health?.lastRecovery.map({ Date().timeIntervalSince($0) >= 15 }) ?? true else { continue }
+                self.musicNeedsRecovery = true
+                await self.serviceContainer.media.recover(source)
+                self.restartLoop("media")
+            }
+        }
+    }
 
     // MARK: - Media
 
@@ -59,6 +88,8 @@ final class AppModel {
     /// Whether the user has already been told the tap cannot hear. One message
     /// per grant, not one per frame.
     private var warnedTapIsDeaf = false
+    private let audioLifecycle = DispatchQueue(label: "dev.cornice.audio-lifecycle", qos: .userInitiated)
+    private var audioRequest: UInt64 = 0
     private var repeatOneTask: Task<Void, Never>?
     /// The last track seen, so an advance the app did not ask for can be caught.
     private var lastSeenTrack: (identity: String, position: TimeInterval, duration: TimeInterval)?
@@ -124,6 +155,12 @@ final class AppModel {
     /// At least one open player refused Automation permission.
     private(set) var mediaPermissionDenied = false
     private(set) var runningPlayers: [MediaSource] = []
+    private(set) var mediaHealth: [MediaSource: MediaConnectionHealth] = [:]
+    private(set) var musicNeedsRecovery = false
+    private(set) var lastMediaUpdate: Date?
+    private var playbackFreshness = PlaybackFreshness()
+    private var allowsMediaAutomation = false
+    private var mediaWatchdog: Task<Void, Never>?
 
     // MARK: - Output device
 
@@ -166,6 +203,12 @@ final class AppModel {
 
     private(set) var telemetry = TelemetryHistory(capacity: 48)
     private(set) var timers = TimerBoard()
+    private(set) var focusSession = FocusSession()
+    private var sessionRevision: UInt64 = 0
+    var timerModeIsFocus = false
+    var focusNotice: String?
+    var onCheckForUpdates: (() -> Void)?
+    var onShowSetup: (() -> Void)?
 
     // MARK: - Dependencies
 
@@ -186,6 +229,12 @@ final class AppModel {
 
     func start() async {
         preferences = await serviceContainer.preferences.load()
+        allowsMediaAutomation = preferences.mediaAccessEnabled
+        let saved = await serviceContainer.sessions.load()
+        timers = saved.timers
+        focusSession = saved.focus
+        sessionRevision = saved.revision
+        startMediaWatchdog()
         // Restored, so the setting survives a relaunch the way a setting should.
         appliesRepeatOne = preferences.appliesRepeatOne
         if appliesRepeatOne { Log.media.notice("repeat one: restored") }
@@ -220,11 +269,12 @@ final class AppModel {
 
     func shutDown() {
         stopRefreshLoops()
+        mediaWatchdog?.cancel()
         artworkTask?.cancel()
         activityDismissTask?.cancel()
         hudDismissTask?.cancel()
         stopHUDSources()
-        serviceContainer.visualizer.stop()
+        stopVisualizer()
         serviceContainer.outputDevices.stop()
     }
 
@@ -326,7 +376,8 @@ final class AppModel {
     }
 
     var indicatorMode: AudioIndicatorMode {
-        .resolve(captureEnabled: preferences.audioVisualizerEnabled,
+        guard !musicNeedsRecovery else { return .resting }
+        return .resolve(captureEnabled: preferences.audioVisualizerEnabled,
                  captureRunning: visualizerStatus == .running,
                  hasTrack: media?.hasTrack == true,
                  isPlaying: media?.state.isPlaying == true,
@@ -501,6 +552,7 @@ final class AppModel {
         readOutputVolume()
         let coordinator = serviceContainer.media
         let sources = await coordinator.runningSources()
+        guard allowsMediaAutomation else { runningPlayers = sources; return }
         let polled = await coordinator.snapshot()
         let denied = await coordinator.deniedRunningSources()
         // A hover can replace the polling task while an Apple event is still
@@ -508,6 +560,20 @@ final class AppModel {
         guard !Task.isCancelled, sequence == mediaRefreshSequence else { return }
         runningPlayers = sources
         mediaPermissionDenied = !denied.isEmpty
+        mediaHealth = await coordinator.connectionHealth()
+        guard !Task.isCancelled, sequence == mediaRefreshSequence else { return }
+        let failures = sources.contains { (mediaHealth[$0]?.failures ?? 0) > 0 }
+        musicNeedsRecovery = failures && polled == nil && denied.isEmpty
+        if let polled {
+            lastMediaUpdate = .now
+            let shouldRecover = playbackFreshness.needsRecovery(polled, threshold: max(12, preferences.mediaRefreshInterval * 4))
+            musicNeedsRecovery = musicNeedsRecovery || playbackFreshness.isStale
+            if shouldRecover {
+                musicNeedsRecovery = true
+                await coordinator.recover(polled.source)
+                guard !Task.isCancelled, sequence == mediaRefreshSequence else { return }
+            }
+        }
 
         var snapshot = reconcile(polled)
         // Keep our local repeat-one mode until the user changes it. The player's repeat
@@ -622,12 +688,14 @@ final class AppModel {
     /// Start capture in a background task. Building the tap and waiting for permission
     /// mustn't freeze the panel.
     func startVisualizer() {
+        audioRequest &+= 1
+        let request = audioRequest
         let engine = serviceContainer.visualizer
-        Task.detached(priority: .utility) {
+        audioLifecycle.async { [weak self] in
             let status = engine.start()
-            // Apply the result on the main actor after the slow setup finishes.
-            await MainActor.run { [weak self] in
-                self?.applyVisualizerStatus(status)
+            Task { @MainActor [weak self] in
+                guard let self, self.audioRequest == request, self.preferences.audioVisualizerEnabled else { return }
+                self.applyVisualizerStatus(status)
             }
         }
     }
@@ -648,7 +716,9 @@ final class AppModel {
     }
 
     func stopVisualizer() {
-        serviceContainer.visualizer.stop()
+        audioRequest &+= 1
+        let engine = serviceContainer.visualizer
+        audioLifecycle.async { engine.stop() }
         visualizerStatus = .stopped
         levels = .silent(bandCount: serviceContainer.visualizer.bandCount)
     }
@@ -657,8 +727,17 @@ final class AppModel {
 
     func applyPreferences(_ updated: Preferences) {
         let tintChanged = preferences.tintFromArtwork != updated.tintFromArtwork
+        let accessChanged = preferences.mediaAccessEnabled != updated.mediaAccessEnabled
+        if accessChanged { mediaRefreshSequence &+= 1 }
         preferences = updated
+        allowsMediaAutomation = updated.mediaAccessEnabled
+        if !allowsMediaAutomation {
+            media = nil
+            refreshArtwork(for: nil)
+            musicNeedsRecovery = false
+        }
         if tintChanged { updateArtworkPalette() }
+        if accessChanged { restartLoop("media") }
     }
 
     func applyArtwork(_ image: NSImage?) {
@@ -672,8 +751,31 @@ final class AppModel {
         artworkTint = artworkAccents.first.map { ArtworkPalette.indicatorColor($0.color) }
     }
 
+    func applyFocusSession(_ session: FocusSession) { focusSession = session; saveSessionState() }
+
     func applyTimers(_ updated: TimerBoard) {
         timers = updated
+        saveSessionState()
+    }
+
+    private func currentSessionSnapshot() -> SessionSnapshot {
+        sessionRevision &+= 1
+        return SessionSnapshot(timers: timers, focus: focusSession, revision: sessionRevision)
+    }
+
+    private func saveSessionState() {
+        let snapshot = currentSessionSnapshot()
+        let store = serviceContainer.sessions
+        Task {
+            do { try await store.save(snapshot) }
+            catch { Log.settings.error("could not save timer sessions") }
+        }
+    }
+
+    func persistForRelaunch() async {
+        let snapshot = currentSessionSnapshot()
+        do { try await serviceContainer.sessions.save(snapshot) }
+        catch { Log.settings.error("could not save sessions before relaunch") }
     }
 
     func applyTelemetry(_ history: TelemetryHistory) {

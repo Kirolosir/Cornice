@@ -6,6 +6,7 @@ struct StatsPane: View {
     private var latest: TelemetrySample { model.telemetry.latest ?? .empty }
 
     var body: some View {
+        VStack(spacing: 8) {
         HStack(spacing: Theme.Metrics.cardGap) {
             SystemMetricCard(
                 name: "CPU", symbol: "cpu", color: Theme.Palette.cpu,
@@ -26,6 +27,8 @@ struct StatsPane: View {
             )
         }
         .frame(maxWidth: .infinity, alignment: .top)
+        SystemReadingsFooter(model: model, sample: latest)
+        }
     }
 
     private func gibibytes(_ bytes: UInt64) -> String {

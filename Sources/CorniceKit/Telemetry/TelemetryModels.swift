@@ -14,6 +14,7 @@ public struct TelemetrySample: Equatable, Sendable {
     public let capturedAt: Date
     public let cpuAvailable: Bool
     public let memoryAvailable: Bool
+    public let memoryPressure: MemoryPressure?
 
     public init(
         cpuUsage: Double,
@@ -23,7 +24,8 @@ public struct TelemetrySample: Equatable, Sendable {
         battery: BatteryState?,
         capturedAt: Date,
         cpuAvailable: Bool = true,
-        memoryAvailable: Bool = true
+        memoryAvailable: Bool = true,
+        memoryPressure: MemoryPressure? = nil
     ) {
         self.cpuUsage = cpuUsage
         self.memoryUsage = memoryUsage
@@ -33,6 +35,7 @@ public struct TelemetrySample: Equatable, Sendable {
         self.capturedAt = capturedAt
         self.cpuAvailable = cpuAvailable
         self.memoryAvailable = memoryAvailable
+        self.memoryPressure = memoryPressure
     }
 
     /// Before sampling, values are placeholders and both metrics are unavailable.
@@ -65,6 +68,30 @@ public struct CPUCounterReading: Sendable {
     }
 }
 
+public enum MemoryPressure: Int, Equatable, Sendable {
+    case normal = 1, warning = 2, critical = 4
+    public var title: String {
+        switch self { case .normal: "Normal"; case .warning: "Elevated"; case .critical: "High" }
+    }
+}
+
+public enum BatteryCondition: String, Equatable, Sendable {
+    case normal, reducedCapacity, serviceRecommended, unavailable
+    public var title: String {
+        switch self {
+        case .normal: "Normal"
+        case .reducedCapacity: "Reduced capacity"
+        case .serviceRecommended: "Service recommended"
+        case .unavailable: "Unavailable"
+        }
+    }
+    public static func resolve(health: String?, condition: String?) -> Self {
+        if condition == "Check Battery" || condition == "Permanent Battery Failure" { return .serviceRecommended }
+        switch health { case "Good": return .normal; case "Fair": return .reducedCapacity
+        case "Poor": return .serviceRecommended; default: return .unavailable }
+    }
+}
+
 public struct BatteryState: Equatable, Sendable {
     /// Charge remaining, 0...1.
     public let level: Double
@@ -73,12 +100,23 @@ public struct BatteryState: Equatable, Sendable {
     /// Minutes remaining, when the system is confident enough to estimate.
     /// `nil` right after plugging or unplugging, while it recalculates.
     public let minutesRemaining: Int?
+    public let condition: BatteryCondition
 
-    public init(level: Double, isCharging: Bool, isPluggedIn: Bool, minutesRemaining: Int?) {
+    public init(level: Double, isCharging: Bool, isPluggedIn: Bool, minutesRemaining: Int?,
+                condition: BatteryCondition = .unavailable) {
         self.level = level
         self.isCharging = isCharging
         self.isPluggedIn = isPluggedIn
         self.minutesRemaining = minutesRemaining
+        self.condition = condition
+    }
+}
+
+public extension BatteryState {
+    var powerDescription: String {
+        if isCharging { return minutesRemaining.map { "Charging · about \($0)m to full" } ?? "Charging" }
+        if isPluggedIn { return level >= 0.99 ? "Charged · on power" : "On power · not charging" }
+        return minutesRemaining.map { "About \($0)m remaining" } ?? "On battery"
     }
 }
 

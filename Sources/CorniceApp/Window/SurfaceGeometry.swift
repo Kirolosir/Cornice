@@ -56,8 +56,8 @@ struct SurfaceGeometry: Equatable {
     static let activityDrop: CGFloat = 16
     /// Overall width of the expanded panel, including the flared shoulders.
     static let expandedWidth: CGFloat = 604
-    /// Height of the expanded panel below the notch band: 226 − 38.
-    static let expandedDrop: CGFloat = 188
+    /// Height of the expanded panel below the notch band.
+    static let expandedDrop: CGFloat = 220
 
     /// The band across the top of any surface taller than the notch. Its middle
     /// is the hole, so content lives in the two margins or below the band.

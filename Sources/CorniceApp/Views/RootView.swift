@@ -111,7 +111,7 @@ struct RootView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(animation(for: state), value: state)
-        .animation(Theme.Motion.contentSwap, value: model.activeModule)
+        .animation(reduceMotion ? nil : Theme.Motion.contentSwap, value: model.activeModule)
         .environment(\.colorScheme, scheme)
         .onAppear { startFrameTimer() }
         .onDisappear { frameTimer?.invalidate() }
@@ -123,6 +123,9 @@ struct RootView: View {
         .onChange(of: state) { _, _ in
             if needsFrameTimer { startFrameTimer() } else { stopFrameTimer() }
         }
+        .onChange(of: reduceMotion) { _, _ in
+            if needsFrameTimer { startFrameTimer() }
+        }
         .onChange(of: model.isVisualizerLive) { _, _ in
             if needsFrameTimer { startFrameTimer() } else { stopFrameTimer() }
         }
@@ -131,8 +134,8 @@ struct RootView: View {
     /// Alerts with buttons need to accept clicks. Notices that dismiss themselves should
     /// let clicks reach the desktop.
     private var isInteractiveHUD: Bool {
-        guard let kind = state.hud else { return false }
-        return kind.dismissAfter == nil
+        guard state.hud != nil else { return false }
+        return model.hudContent?.isInteractive == true
     }
 
     private var surfaceShape: SurfaceShape {
@@ -223,12 +226,12 @@ struct RootView: View {
         }
         .frame(width: size.width, height: size.height)
         .allowsHitTesting(false)
-        .animation(.easeInOut(duration: 0.5), value: model.artworkAccents)
-        .animation(.easeInOut(duration: 0.5), value: model.artwork.map(ObjectIdentifier.init))
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.5), value: model.artworkAccents)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.5), value: model.artwork.map(ObjectIdentifier.init))
     }
 
-    private func animation(for state: SurfaceState) -> Animation {
-        if reduceMotion { return .easeOut(duration: 0.12) }
+    private func animation(for state: SurfaceState) -> Animation? {
+        if reduceMotion { return nil }
         return switch state {
         case .collapsed: Theme.Motion.collapse
         case .peek, .activity: Theme.Motion.peek
@@ -242,7 +245,7 @@ struct RootView: View {
     /// Only run the frame timer when something visible needs to move.
     private var needsFrameTimer: Bool {
         // Countdowns move wherever they are drawn, including while resting.
-        if model.timers.anyRunning { return true }
+        if model.timers.anyRunning || model.focusSession.isRunning { return true }
 
         // Keep sampling where the waveform is visible. Browser audio can drive it even when
         // no supported player reports playback.
@@ -270,7 +273,7 @@ struct RootView: View {
         let visibleWaveform = model.isVisualizerLive && (
             state == .peek || (state == .collapsed && model.preferences.idleDisplay == .artworkAndSpectrum)
         )
-        let interval = state.isOpen ? 1.0 / 60.0 : (visibleWaveform ? 1.0 / 30.0 : 1.0 / 10.0)
+        let interval = reduceMotion ? 1.0 : state.isOpen ? 1.0 / 60.0 : (visibleWaveform ? 1.0 / 30.0 : 1.0 / 10.0)
         let timer = Timer(timeInterval: interval, repeats: true) { _ in
             MainActor.assumeIsolated {
                 model.sampleLevels()

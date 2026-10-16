@@ -64,7 +64,7 @@ public enum IdleDisplay: String, Codable, Sendable, CaseIterable, Identifiable {
 
 /// Everything the user can configure.
 public struct Preferences: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 3
+    public static let currentSchemaVersion = 4
 
     /// The point past which the accent stops being a tint and starts competing
     /// with the album art it came from.
@@ -112,6 +112,11 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var timerPresetsMinutes: [Int]
     public var notifyOnTimerComplete: Bool
 
+    public var mediaAccessEnabled: Bool
+    public var hasCompletedSetup: Bool
+    public var quietTimerCompletion: Bool
+    public var focusPlan: FocusPlan
+
     // Stats
     public var telemetryRefreshInterval: Double
 
@@ -132,7 +137,11 @@ public struct Preferences: Codable, Equatable, Sendable {
         downloadHUDEnabled: Bool = false,
         timerPresetsMinutes: [Int] = [5, 10, 15, 25],
         notifyOnTimerComplete: Bool = true,
-        telemetryRefreshInterval: Double = 2
+        telemetryRefreshInterval: Double = 2,
+        mediaAccessEnabled: Bool = false,
+        hasCompletedSetup: Bool = false,
+        quietTimerCompletion: Bool = false,
+        focusPlan: FocusPlan = FocusPlan()
     ) {
         self.schemaVersion = schemaVersion
         self.enabledModules = enabledModules
@@ -151,6 +160,10 @@ public struct Preferences: Codable, Equatable, Sendable {
         self.timerPresetsMinutes = timerPresetsMinutes
         self.notifyOnTimerComplete = notifyOnTimerComplete
         self.telemetryRefreshInterval = telemetryRefreshInterval
+        self.mediaAccessEnabled = mediaAccessEnabled
+        self.hasCompletedSetup = hasCompletedSetup
+        self.quietTimerCompletion = quietTimerCompletion
+        self.focusPlan = focusPlan
     }
 
     /// Decode settings one at a time with defaults for missing keys. Adding a setting
@@ -180,6 +193,10 @@ public struct Preferences: Codable, Equatable, Sendable {
         timerPresetsMinutes = value(.timerPresetsMinutes, defaults.timerPresetsMinutes)
         notifyOnTimerComplete = value(.notifyOnTimerComplete, defaults.notifyOnTimerComplete)
         telemetryRefreshInterval = value(.telemetryRefreshInterval, defaults.telemetryRefreshInterval)
+        mediaAccessEnabled = value(.mediaAccessEnabled, schemaVersion < 4)
+        hasCompletedSetup = value(.hasCompletedSetup, defaults.hasCompletedSetup)
+        quietTimerCompletion = value(.quietTimerCompletion, defaults.quietTimerCompletion)
+        focusPlan = value(.focusPlan, defaults.focusPlan)
     }
 
     /// Keep settings within supported ranges so a damaged or edited file cannot cause
@@ -195,10 +212,12 @@ public struct Preferences: Codable, Equatable, Sendable {
         // The upper bound is the point past which the accent stops being a tint
         // and starts competing with the album art it came from.
         copy.tintStrength = tintStrength.clamped(to: 0...Preferences.maximumTintStrength)
+        copy.focusPlan = focusPlan.sanitized
         copy.timerPresetsMinutes = timerPresetsMinutes
             .filter { (1...600).contains($0) }
             .reduplicated(by: \.self)
             .sorted()
+            .prefix(6).map { $0 }
         if copy.timerPresetsMinutes.isEmpty {
             copy.timerPresetsMinutes = Preferences().timerPresetsMinutes
         }

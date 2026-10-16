@@ -163,6 +163,7 @@ extension AppModel {
     /// Re-asks for automation permission after the user has granted it in
     /// System Settings.
     func retryMediaPermission() {
+        enablePlayerConnection()
         Task { [services = self.serviceContainer] in
             await services.media.resetAvailability()
             self.refreshNow("media")
@@ -265,6 +266,7 @@ extension AppModel {
     /// repaint trigger. Remaining time comes from the wall clock, so a missed
     /// tick changes nothing.
     func tickTimers() {
+        tickFocusSession()
         guard timers.hasTimers else { return }
         var board = timers
         let completed = board.tick()
@@ -273,7 +275,9 @@ extension AppModel {
         guard preferences.notifyOnTimerComplete else { return }
         // The sound is the point: a banner alone is no use for something you set
         // a timer precisely so you could stop watching.
-        TimerAlarm.shared.start(for: completed.map(\.id))
+        if !preferences.quietTimerCompletion {
+            TimerAlarm.shared.start(for: completed.map(\.id))
+        }
         for entry in completed {
             NotificationPresenter.shared.timerComplete(label: entry.label)
         }

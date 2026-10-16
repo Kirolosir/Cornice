@@ -1,7 +1,7 @@
 import Foundation
 
 /// One countdown.
-public struct TimerEntry: Identifiable, Equatable, Sendable {
+public struct TimerEntry: Codable, Identifiable, Equatable, Sendable {
     public let id: UUID
     public var label: String
     public var timer: FocusTimer
@@ -23,7 +23,7 @@ public struct TimerEntry: Identifiable, Equatable, Sendable {
 
 /// Each timer keeps its own deadline. The UI reads remaining time from the clock instead of
 /// decrementing counters.
-public struct TimerBoard: Equatable, Sendable {
+public struct TimerBoard: Codable, Equatable, Sendable {
 
     /// Limit the number of timers so their rows fit in the panel.
     public static let maximumTimers = 4

@@ -6,6 +6,7 @@ import CorniceKit
 struct DeviceActivityView: View {
     @Bindable var model: AppModel
     let geometry: SurfaceGeometry
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Drives the entry spin. Kept local so the animation runs from the moment
     /// the view becomes visible rather than from some shared clock.
@@ -78,6 +79,7 @@ struct DeviceActivityView: View {
         ringProgress = 0
         // Wait for the panel to open before spinning the icon. Give the thicker edge enough
         // time to be visible.
+        if reduceMotion { spin = true; ringProgress = 1; return }
         withAnimation(.timingCurve(0.25, 0.6, 0.2, 1, duration: 1.45).delay(0.12)) { spin = true }
         withAnimation(.easeOut(duration: 0.9).delay(0.24)) { ringProgress = 1 }
     }

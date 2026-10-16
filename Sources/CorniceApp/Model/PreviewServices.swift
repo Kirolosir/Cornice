@@ -9,6 +9,7 @@ enum PreviewServices {
         ServiceContainer(
             media: media ?? MediaCoordinator(controllers: [PreviewMediaController()]),
             telemetry: PreviewTelemetryProbe(),
+            sessions: EphemeralSessionStore(),
             preferences: EphemeralPreferencesStore(previewPreferences()),
             hardware: HardwareIdentityProvider(runner: SubprocessRunner()),
             visualizer: AudioVisualizerEngine(bandCount: 6),
@@ -24,6 +25,8 @@ enum PreviewServices {
 
     static func previewPreferences() -> Preferences {
         var preferences = Preferences()
+        preferences.hasCompletedSetup = true
+        preferences.mediaAccessEnabled = true
         preferences.enabledModules = Set(ModuleKind.allCases)
         preferences.tintFromArtwork = true
         // Left off: the documentation build must not trigger a system audio

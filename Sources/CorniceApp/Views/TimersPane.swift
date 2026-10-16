@@ -12,6 +12,15 @@ struct TimersPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            Picker("Timer mode", selection: $model.timerModeIsFocus) {
+                Text("Timer").tag(false)
+                Text("Focus").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .accessibilityLabel("Timer mode")
+            if model.timerModeIsFocus {
+                FocusPane(model: model, clock: clock)
+            } else {
             HStack(spacing: 8) {
                 ForEach(model.preferences.timerPresetsMinutes, id: \.self) { minutes in
                     Button {
@@ -41,6 +50,8 @@ struct TimersPane: View {
                 .scrollIndicators(.hidden)
             }
 
+            }
+
             Spacer(minLength: 0)
         }
     }
@@ -66,6 +77,7 @@ struct TimerRow: View {
     private var isFinished: Bool { entry.isFinished }
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var ink: Theme.Ink { .of(scheme) }
 
     var body: some View {
@@ -97,6 +109,7 @@ struct TimerRow: View {
                 hoverFill: ink.at(0.26)
             ))
             .help(isFinished ? "Stop the alarm" : "Dismiss")
+            .accessibilityLabel(isFinished ? "Dismiss finished timer" : "Dismiss timer")
 
             Spacer(minLength: 0)
 
@@ -112,10 +125,10 @@ struct TimerRow: View {
                     // it, and finishing is the one state worth a different hue.
                     .foregroundStyle(isFinished ? Theme.Palette.green : Theme.Palette.orange)
                     .contentTransition(.numericText(countsDown: true))
-                    .animation(.easeOut(duration: 0.18), value: reading)
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: reading)
             }
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("\(label), \(reading) remaining")
     }
 }

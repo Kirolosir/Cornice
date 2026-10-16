@@ -4,6 +4,7 @@ import Foundation
 /// while it's on screen.
 public enum HUDContent: Equatable, Sendable {
     case noInternet
+    case focusPhase(message: String)
     case filesReceived(files: [String])
     case timerRunning(id: UUID, label: String, isRunning: Bool, isFinished: Bool)
     case charging(level: Double)
@@ -19,6 +20,7 @@ public enum HUDContent: Equatable, Sendable {
 
     public var kind: HUDKind {
         switch self {
+        case .focusPhase: .focusPhase
         case .noInternet: .noInternet
         case .filesReceived: .filesReceived
         case .timerRunning: .timerRunning
@@ -45,7 +47,7 @@ public enum HUDContent: Equatable, Sendable {
     /// Whether this HUD is waiting on the user rather than counting down.
     public var isInteractive: Bool {
         switch self {
-        case .noInternet, .filesReceived, .timerRunning: true
+        case .noInternet, .filesReceived, .timerRunning, .focusPhase: true
         default: false
         }
     }

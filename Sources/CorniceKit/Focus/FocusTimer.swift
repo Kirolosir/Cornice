@@ -2,7 +2,7 @@ import Foundation
 
 /// Store deadlines instead of subtracting a second on each tick. Remaining time stays
 /// correct after sleep or a delayed redraw.
-public enum FocusTimerState: Equatable, Sendable {
+public enum FocusTimerState: Codable, Equatable, Sendable {
     case idle
     /// Running, with the instant the session should end.
     case running(deadline: Date, total: TimeInterval)
@@ -54,7 +54,7 @@ public enum FocusTimerState: Equatable, Sendable {
 
 /// Timer state changes with a supplied time, so tests can check pause and resume without
 /// waiting.
-public struct FocusTimer: Equatable, Sendable {
+public struct FocusTimer: Codable, Equatable, Sendable {
     public private(set) var state: FocusTimerState
     /// Configured session length in seconds.
     public var duration: TimeInterval

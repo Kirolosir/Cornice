@@ -9,13 +9,7 @@ final class NotificationPresenter {
 
     static let shared = NotificationPresenter()
 
-    private var authorizationState: AuthorizationState = .unknown
-
-    private enum AuthorizationState {
-        case unknown
-        case granted
-        case denied
-    }
+    private var authorizationRequest: Task<Bool, Never>?
 
     private init() {}
 
@@ -29,6 +23,13 @@ final class NotificationPresenter {
             playsSound: false
         )
     }
+
+    func focusTransition(_ message: String, quiet: Bool) {
+        post(identifier: "focus-\(UUID().uuidString)", title: message,
+             body: "Open Cornice to see your session.", url: nil, playsSound: !quiet)
+    }
+
+    func requestAccess() async -> Bool { await ensureAuthorized() }
 
     func lowBattery(level: Double) {
         let percent = Int((level * 100).rounded())
@@ -73,26 +74,27 @@ final class NotificationPresenter {
     }
 
     private func ensureAuthorized() async -> Bool {
-        switch authorizationState {
-        case .granted: return true
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral: return true
         case .denied: return false
-        case .unknown: break
+        default: break
         }
-
-        do {
-            let granted = try await UNUserNotificationCenter.current()
-                .requestAuthorization(options: [.alert])
-            authorizationState = granted ? .granted : .denied
-            return granted
-        } catch {
-            // Happens when the app is not running from a signed bundle, which
-            // is the normal state for a local development build. Not an error
-            // worth surfacing to the user.
-            Log.app.notice("notifications unavailable: \(error.localizedDescription, privacy: .public)")
-            authorizationState = .denied
-            return false
+        if let authorizationRequest { return await authorizationRequest.value }
+        let request = Task { () -> Bool in
+            do {
+                return try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
+            } catch {
+                Log.app.notice("notifications unavailable")
+                return false
+            }
         }
+        authorizationRequest = request
+        let granted = await request.value
+        authorizationRequest = nil
+        return granted
     }
+
 }
 
 /// Opens the linked run when a notification is clicked.
@@ -104,7 +106,7 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        [.banner, .list]
+        notification.request.content.sound == nil ? [.banner, .list] : [.banner, .list, .sound]
     }
 
     func userNotificationCenter(

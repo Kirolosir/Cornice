@@ -20,6 +20,20 @@ struct HUDView: View {
     var body: some View {
         Group {
             switch content {
+            case .focusPhase(let message):
+                panel {
+                    HStack(spacing: 12) {
+                        Image(systemName: "leaf.fill").foregroundStyle(Theme.Palette.green)
+                        Text(message).font(Theme.Typeface.hudTitle)
+                        Spacer()
+                        Button("Open") {
+                            model.dismissHUD()
+                            model.select(module: .timers)
+                            model.timerModeIsFocus = true
+                            model.present(.expanded)
+                        }.buttonStyle(SoftButtonStyle(height: 28)).frame(width: 58)
+                    }
+                }
             case .noInternet: noInternet
             case .filesReceived(let files): filesReceived(files)
             case .timerRunning(let id, let label, let isRunning, let isFinished):

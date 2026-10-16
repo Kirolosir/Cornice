@@ -100,7 +100,7 @@ final class NotchWindowController {
     /// Update AppKit's interactive area whenever the panel changes state.
     private func syncInteractiveRect() {
         guard let geometry, let contentView else { return }
-        contentView.interactiveRect = geometry.appKitRect(
+        contentView.interactiveRect = model.surfaceState.hud != nil && model.hudContent?.isInteractive != true ? .zero : geometry.appKitRect(
             for: model.surfaceState,
             windowHeight: geometry.windowHeight
         )
@@ -194,13 +194,13 @@ final class NotchWindowController {
                 present(.collapsed)
                 return
             }
-            guard model.surfaceState == .expanded else { return }
+            guard model.surfaceState == .expanded, !model.isPresentingPopover else { return }
             guard model.preferences.activationStyle == .hover else { return }
 
             closeTask?.cancel()
             closeTask = Task { [weak self] in
                 try? await Task.sleep(for: .milliseconds(220))
-                guard !Task.isCancelled, let self, !self.model.isHovering else { return }
+                guard !Task.isCancelled, let self, !self.model.isHovering, !self.model.isPresentingPopover else { return }
                 self.present(.collapsed)
             }
         }
@@ -217,6 +217,7 @@ final class NotchWindowController {
         openTask?.cancel()
         closeTask?.cancel()
         present(model.surfaceState.isOpen ? .collapsed : .expanded)
+        if model.surfaceState.isOpen { panel?.makeKey() }
     }
 
     func close() {

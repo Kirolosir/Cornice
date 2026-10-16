@@ -1,0 +1,42 @@
+name: Check Cornice
+on:
+  push:
+    branches: [main, feature/setup-focus-updates]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Show tool versions
+        run: |
+          swift --version
+          xcodebuild -version
+      - name: Run XCTest suite
+        run: swift test
+      - name: Run focused checks
+        run: |
+          ./Scripts/check-audio.sh
+          ./Scripts/check-system.sh
+          ./Scripts/check-battery.sh
+          ./Scripts/check-media.sh
+          ./Scripts/check-features.sh
+      - name: Build the app bundle
+        run: ./Scripts/bundle.sh release
+      - name: Verify the bundle
+        run: |
+          codesign --verify --deep --strict dist/Cornice.app
+          test -f dist/Cornice.app/Contents/Resources/AppIcon.icns
+          test -f dist/Cornice.app/Contents/Frameworks/Sparkle.framework/Sparkle
+          plutil -lint dist/Cornice.app/Contents/Info.plist

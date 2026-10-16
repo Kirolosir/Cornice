@@ -9,6 +9,7 @@ final class HUDTests: XCTestCase {
             .noInternet: (604, 152, 28, 24),
             .filesReceived: (604, 196, 28, 24),
             .timerRunning: (480, 92, 24, 20),
+            .focusPhase: (480, 92, 24, 20),
             .charging: (425, 44, 14, 12),
             .batteryLow: (352, 126, 24, 20),
             .fullBattery: (352, 104, 24, 20),

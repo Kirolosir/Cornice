@@ -13,3 +13,6 @@ preferences-corrupt-*.json
 *.p12
 *.cer
 *.mobileprovision
+
+sessions.json
+sessions-corrupt-*.json

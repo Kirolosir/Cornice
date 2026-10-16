@@ -4,6 +4,7 @@ import CorniceKit
 /// The player controls and track text. RootView draws the moving artwork; this view leaves
 /// room for it and puts the scrubber across the full width.
 struct MediaPane: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable var model: AppModel
     let geometry: SurfaceGeometry
     let clock: FrameClock
@@ -41,7 +42,7 @@ struct MediaPane: View {
                 transport(snapshot)
             }
             .opacity(isExpanded ? 1 : 0)
-            .animation(Theme.Motion.contentLate, value: isExpanded)
+            .animation(reduceMotion ? nil : Theme.Motion.contentLate, value: isExpanded)
         }
     }
 
@@ -81,7 +82,7 @@ struct MediaPane: View {
                 )
             }
             .buttonStyle(PressScaleStyle(pressedScale: 0.94))
-            .help("Shuffle")
+            .help("Shuffle").accessibilityLabel("Shuffle").accessibilityValue(snapshot.isShuffling ? "On" : "Off")
 
             Spacer(minLength: 0)
 
@@ -89,7 +90,7 @@ struct MediaPane: View {
                 SkipButton(direction: -1) { model.previousTrack() } label: {
                     TransportGlyph(name: "backward.fill", size: 21, diameter: 32, isOn: true, ink: ink)
                 }
-                .help("Previous")
+                .help("Previous").accessibilityLabel("Previous track")
 
                 Button { model.playPause() } label: {
                     // Replace the play/pause icon instead of fading two symbols over each
@@ -97,13 +98,13 @@ struct MediaPane: View {
                     PlayPauseGlyph(isPlaying: snapshot.state.isPlaying, ink: ink)
                 }
                 .buttonStyle(PressScaleStyle())
-                .help(snapshot.state.isPlaying ? "Pause" : "Play")
+                .help(snapshot.state.isPlaying ? "Pause" : "Play").accessibilityLabel(snapshot.state.isPlaying ? "Pause" : "Play")
                 .keyboardShortcut(.space, modifiers: [])
 
                 SkipButton(direction: 1) { model.nextTrack() } label: {
                     TransportGlyph(name: "forward.fill", size: 21, diameter: 32, isOn: true, ink: ink)
                 }
-                .help("Next")
+                .help("Next").accessibilityLabel("Next track")
             }
 
             Spacer(minLength: 0)
@@ -122,7 +123,7 @@ struct MediaPane: View {
                 .buttonStyle(PressScaleStyle(pressedScale: 0.94))
                 // Spells out the state, because Spotify's is a two-way where
                 // Music's is a three-way and nothing on the glyph says so.
-                .help(Self.repeatHelp(snapshot))
+                .help(Self.repeatHelp(snapshot)).accessibilityLabel("Repeat").accessibilityValue(Self.repeatHelp(snapshot))
 
                 // Show the output device under the controls so the audio destination is
                 // clear.
@@ -136,7 +137,7 @@ struct MediaPane: View {
                     )
                 }
                 .buttonStyle(PressScaleStyle(pressedScale: 0.94))
-                .help(model.outputDevice.map { "Output: \($0.name)" } ?? "Output device")
+                .help(model.outputDevice.map { "Output: \($0.name)" } ?? "Output device").accessibilityLabel("Open sound output settings")
             }
         }
     }
@@ -157,10 +158,16 @@ struct MediaPane: View {
             Image(systemName: "music.note")
                 .font(.system(size: 22, weight: .light))
                 .foregroundStyle(ink.tertiary)
-            Text(model.runningPlayers.isEmpty ? "No player running" : "Nothing playing")
+            Text(!model.preferences.mediaAccessEnabled ? "Connect your music" : model.musicNeedsRecovery ? "Reconnecting to your player…" : model.runningPlayers.isEmpty ? "No player running" : "Nothing playing")
                 .font(Theme.Typeface.body)
                 .foregroundStyle(ink.secondary)
-            if model.runningPlayers.isEmpty {
+            if !model.preferences.mediaAccessEnabled {
+                Button("Connect Player") { model.retryMediaPermission() }
+                    .buttonStyle(SoftButtonStyle(height: 30)).frame(width: 130)
+            } else if model.musicNeedsRecovery {
+                Button("Reconnect Players") { model.retryMediaPermission() }
+                    .buttonStyle(SoftButtonStyle(height: 30)).frame(width: 150)
+            } else if model.runningPlayers.isEmpty {
                 Text("Open Music or Spotify and press play.")
                     .font(Theme.Typeface.hudBody)
                     .foregroundStyle(ink.tertiary)
@@ -227,6 +234,7 @@ struct ScrubberRow: View {
 
 /// A small dot below the icon shows that shuffle or repeat is on.
 struct TransportGlyph: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let name: String
     let size: CGFloat
     let diameter: CGFloat
@@ -253,12 +261,13 @@ struct TransportGlyph: View {
             }
         }
         .frame(width: diameter, height: diameter)
-        .animation(Theme.Motion.symbolReplace, value: isOn)
+        .animation(reduceMotion ? nil : Theme.Motion.symbolReplace, value: isOn)
     }
 }
 
 /// Play and pause, swapped by replacement rather than by cross-fade.
 struct PlayPauseGlyph: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let isPlaying: Bool
     let ink: Theme.Ink
 
@@ -271,13 +280,14 @@ struct PlayPauseGlyph: View {
                 .transition(.scale(scale: 0.68).combined(with: .opacity))
         }
         .frame(width: 34, height: 34)
-        .animation(Theme.Motion.symbolReplace, value: isPlaying)
+        .animation(reduceMotion ? nil : Theme.Motion.symbolReplace, value: isPlaying)
     }
 }
 
 /// Click or drag to seek. Update dragging directly and animate seeks. Send the position on
 /// release so polls do not pull it back during the drag.
 struct Scrubber: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let progress: Double
     let track: Color
     let fill: Color
@@ -314,7 +324,7 @@ struct Scrubber: View {
             }
             .frame(height: barHeight)
             .frame(maxHeight: .infinity, alignment: .center)
-            .animation(Theme.Motion.scrubGrab, value: barHeight)
+            .animation(reduceMotion ? nil : Theme.Motion.scrubGrab, value: barHeight)
             .contentShape(Rectangle())
             .onHover { isHovering = $0 }
             .gesture(
@@ -338,11 +348,14 @@ struct Scrubber: View {
         .onChange(of: progress) { previous, current in
             guard !isDragging else { return }
             if abs(current - previous) > Self.jumpThreshold {
-                withAnimation(Theme.Motion.scrubJump) { shown = current }
+                withAnimation(reduceMotion ? nil : Theme.Motion.scrubJump) { shown = current }
             } else {
                 shown = current
             }
         }
+        .focusable()
+        .onKeyPress(.leftArrow) { onSeek((displayed - 0.02).clamped(to: 0...1)); return .handled }
+        .onKeyPress(.rightArrow) { onSeek((displayed + 0.02).clamped(to: 0...1)); return .handled }
         .accessibilityElement()
         .accessibilityLabel("Playback position")
         .accessibilityValue("\(Int(displayed * 100)) percent")

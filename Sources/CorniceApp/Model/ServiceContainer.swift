@@ -6,6 +6,7 @@ import CorniceKit
 struct ServiceContainer: Sendable {
     let media: MediaCoordinator
     let telemetry: any TelemetryProbing
+    let sessions: any SessionPersisting
     let preferences: any PreferencesPersisting
     let hardware: HardwareIdentityProvider
     let visualizer: AudioVisualizerEngine
@@ -23,6 +24,7 @@ struct ServiceContainer: Sendable {
         return ServiceContainer(
             media: MediaCoordinator.live(),
             telemetry: HostTelemetryProbe(),
+            sessions: SessionStore(),
             preferences: PreferencesStore(),
             hardware: HardwareIdentityProvider(runner: runner),
             visualizer: AudioVisualizerEngine(bandCount: 6),

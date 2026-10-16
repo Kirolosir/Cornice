@@ -10,6 +10,7 @@ public final class AudioVisualizerEngine: @unchecked Sendable {
         case failed(AudioTapUnavailable)
     }
 
+    private let lifecycleLock = NSLock()
     private let lock = NSLock()
     private var levels: AudioLevels
     private var analyzer: StreamingSpectrumAnalyzer
@@ -56,6 +57,7 @@ public final class AudioVisualizerEngine: @unchecked Sendable {
     /// because every caller wants to display the failure rather than propagate it.
     @discardableResult
     public func start() -> Status {
+        lifecycleLock.lock(); defer { lifecycleLock.unlock() }
         lock.lock()
         if case .running = status {
             lock.unlock()
@@ -88,6 +90,7 @@ public final class AudioVisualizerEngine: @unchecked Sendable {
     }
 
     public func stop() {
+        lifecycleLock.lock(); defer { lifecycleLock.unlock() }
         tap.stop()
         lock.lock()
         status = .stopped

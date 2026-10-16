@@ -19,6 +19,7 @@ struct PulsingArtwork: View {
 
 /// Album art, with a placeholder that never leaves an empty hole.
 struct ArtworkThumbnail: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let image: NSImage?
     let size: CGFloat
     var cornerRadius: CGFloat = 8
@@ -47,8 +48,8 @@ struct ArtworkThumbnail: View {
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         // A restrained pulse: 3% at full beat. Anything larger turns album art
         // into a throbbing distraction two feet from your eyes.
-        .scaleEffect(1 + CGFloat(beatIntensity) * 0.03)
-        .animation(.easeOut(duration: 0.12), value: beatIntensity)
+        .scaleEffect(1 + (reduceMotion ? 0 : CGFloat(beatIntensity) * 0.03))
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: beatIntensity)
     }
 }
 
@@ -77,6 +78,7 @@ struct EqualizerIndicator: View {
 
     private func heights(at date: Date) -> [Float] {
         guard mode != .resting else { return Array(repeating: resting, count: barCount) }
+        if reduceMotion { return [0.3, 0.5, 0.7, 0.45, 0.6, 0.3] }
         if mode == .spectrum {
             return model.levels.barHeights(count: barCount, resting: resting, outputVolume: model.outputVolume)
         }

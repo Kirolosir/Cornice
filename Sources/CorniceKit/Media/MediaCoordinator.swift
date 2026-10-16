@@ -6,6 +6,7 @@ public actor MediaCoordinator {
 
     private let controllers: [MediaSource: any MediaControlling]
     private var lastActiveSource: MediaSource?
+    private var health: [MediaSource: MediaConnectionHealth] = [:]
 
     /// Artwork cache keyed by track identity, so the image is fetched once per
     /// song rather than once per poll.
@@ -50,9 +51,13 @@ public actor MediaCoordinator {
             guard !unavailableSources.contains(source) else { continue }
             guard await controller.isRunning() else { continue }
             do {
+                health[source, default: MediaConnectionHealth()].lastAttempt = .now
                 if let snapshot = try await controller.snapshot(), snapshot.hasTrack {
                     candidates.append(snapshot)
                 }
+                health[source, default: MediaConnectionHealth()].lastSuccess = .now
+                health[source, default: MediaConnectionHealth()].failures = 0
+                health[source, default: MediaConnectionHealth()].permissionDenied = false
             } catch is CancellationError {
                 return nil
             } catch let error as ServiceError {
@@ -60,13 +65,16 @@ public actor MediaCoordinator {
                     // Do not keep re-asking. The user said no; respect it until
                     // they say otherwise.
                     unavailableSources.insert(source)
+                    health[source, default: MediaConnectionHealth()].permissionDenied = true
                     Log.media.notice("automation refused for \(source.displayName, privacy: .public)")
                 } else {
+                    await recordFailure(source, controller: controller)
                     Log.media.notice("\(source.displayName, privacy: .public) read failed: \(error.headline, privacy: .public)")
                 }
                 // A player that is open with nothing loaded raises rather than
                 // returning empty; that is not worth surfacing.
             } catch {
+                await recordFailure(source, controller: controller)
                 // Log unexpected script failures so an empty panel isn't the only clue.
                 Log.media.error(
                     "\(source.displayName, privacy: .public) poll failed: \(String(describing: error), privacy: .public)"
@@ -114,6 +122,26 @@ public actor MediaCoordinator {
             await controller.resetAuthorization()
         }
         unavailableSources.removeAll()
+        for source in health.keys {
+            health[source]?.permissionDenied = false
+            health[source]?.failures = 0
+        }
+    }
+
+    public func connectionHealth() -> [MediaSource: MediaConnectionHealth] { health }
+
+    public func recover(_ source: MediaSource, at now: Date = .now) async {
+        guard !unavailableSources.contains(source), let controller = controllers[source] else { return }
+        let previous = health[source] ?? MediaConnectionHealth()
+        guard previous.lastRecovery.map({ now.timeIntervalSince($0) >= 15 }) ?? true else { return }
+        health[source, default: MediaConnectionHealth()].lastRecovery = now
+        health[source, default: MediaConnectionHealth()].recoveries += 1
+        await controller.resetAuthorization()
+    }
+
+    private func recordFailure(_ source: MediaSource, controller: any MediaControlling) async {
+        health[source, default: MediaConnectionHealth()].failures += 1
+        if health[source]?.shouldRecover(at: .now) == true { await recover(source) }
     }
 
     // MARK: - Artwork

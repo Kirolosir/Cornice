@@ -145,6 +145,11 @@ struct ExpandedContentView: View {
                     .foregroundStyle(ink.tertiary)
                     .lineLimit(1)
 
+                if model.musicNeedsRecovery {
+                    Button { model.retryMediaPermission() } label: {
+                        Image(systemName: "arrow.clockwise").frame(width: 24, height: 24)
+                    }.buttonStyle(PressScaleStyle()).help("Reconnect player").accessibilityLabel("Reconnect player")
+                }
                 // Keep the indicator in the top band so it stays visible when the default
                 // hover setting skips peek.
                 if model.activeModule == .media, model.showsIndicator {
@@ -239,6 +244,7 @@ struct ModuleButton: View {
         .buttonStyle(PressScaleStyle(pressedScale: 0.94))
         .animation(Theme.Motion.contentSwap, value: isActive)
         .help(module.title)
+        .keyboardShortcut(KeyEquivalent(module == .media ? "1" : module == .timers ? "2" : "3"), modifiers: .command)
         .accessibilityLabel(module.title)
         .accessibilityAddTraits(isActive ? [.isButton, .isSelected] : .isButton)
     }
@@ -248,6 +254,7 @@ struct ModuleButton: View {
 
 /// A small press dip and a quiet hover highlight.
 struct PressScaleStyle: ButtonStyle {
+    @Environment(\.isFocused) private var focused
     var pressedScale: CGFloat = 0.94
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -257,6 +264,7 @@ struct PressScaleStyle: ButtonStyle {
         configuration.label
             .background(.primary.opacity(isHovering && isEnabled ? 0.07 : 0), in: Capsule())
             .contentShape(Rectangle())
+            .overlay(Capsule().strokeBorder(Color.accentColor.opacity(focused ? 0.9 : 0), lineWidth: 2))
             .scaleEffect(configuration.isPressed && !reduceMotion ? pressedScale : 1)
             .opacity(isEnabled ? (configuration.isPressed ? 0.75 : 1) : 0.4)
             .animation(configuration.isPressed ? .easeOut(duration: 0.08) : Theme.Motion.release,
@@ -304,6 +312,7 @@ private struct SkipFeedback: ViewModifier {
 
 /// A filled round button, as used by the timer controls.
 struct FilledCircleButtonStyle: ButtonStyle {
+    @Environment(\.isFocused) private var focused
     var fill: Color
     var hoverFill: Color
     var diameter: CGFloat = 30
@@ -318,6 +327,7 @@ struct FilledCircleButtonStyle: ButtonStyle {
             .frame(width: diameter, height: diameter)
             .background(Circle().fill((isHovering || configuration.isPressed) && enabled ? hoverFill : fill))
             .contentShape(Circle())
+            .overlay(Circle().strokeBorder(Color.accentColor.opacity(focused ? 0.9 : 0), lineWidth: 2))
             .opacity(enabled ? 1 : 0.4)
             .scaleEffect(configuration.isPressed && !reducedMotion ? 0.94 : 1)
             .animation(
@@ -331,6 +341,7 @@ struct FilledCircleButtonStyle: ButtonStyle {
 
 /// A soft-filled rectangular button: the timer presets, and the actions in a HUD.
 struct SoftButtonStyle: ButtonStyle {
+    @Environment(\.isFocused) private var focused
     var height: CGFloat = 28
     var cornerRadius: CGFloat = 8
     var fill: Color?
@@ -361,6 +372,7 @@ struct SoftButtonStyle: ButtonStyle {
                     .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             )
             .contentShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .overlay(RoundedRectangle(cornerRadius: cornerRadius).strokeBorder(Color.accentColor.opacity(focused ? 0.9 : 0), lineWidth: 2))
             .opacity(enabled ? 1 : 0.4)
             .scaleEffect(configuration.isPressed && !reducedMotion ? pressedScale : 1)
             .animation(

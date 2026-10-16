@@ -40,7 +40,8 @@ public actor HostTelemetryProbe: TelemetryProbing {
             battery: Self.batteryState(),
             capturedAt: Date(),
             cpuAvailable: cpu != nil,
-            memoryAvailable: used != nil && totalMemory > 0
+            memoryAvailable: used != nil && totalMemory > 0,
+            memoryPressure: Self.memoryPressure()
         )
     }
 
@@ -98,6 +99,13 @@ public actor HostTelemetryProbe: TelemetryProbing {
         return ((appMemory.overflow ? 0 : appMemory.partialValue) + wired + compressed) * pageSize
     }
 
+    static func memoryPressure() -> MemoryPressure? {
+        var value: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        guard sysctlbyname("kern.memorystatus_vm_pressure_level", &value, &size, nil, 0) == 0 else { return nil }
+        return MemoryPressure(rawValue: Int(value))
+    }
+
     // MARK: - Battery
 
     /// Battery state via IOKit power sources, or `nil` on a desktop Mac.
@@ -127,7 +135,9 @@ public actor HostTelemetryProbe: TelemetryProbing {
                 level: maximum > 0 ? Double(current) / Double(maximum) : 0,
                 isCharging: isCharging,
                 isPluggedIn: isPluggedIn,
-                minutesRemaining: minutes > 0 ? minutes : nil
+                minutesRemaining: minutes > 0 ? minutes : nil,
+                condition: BatteryCondition.resolve(health: description[kIOPSBatteryHealthKey] as? String,
+                                                     condition: description[kIOPSBatteryHealthConditionKey] as? String)
             )
         }
         return nil

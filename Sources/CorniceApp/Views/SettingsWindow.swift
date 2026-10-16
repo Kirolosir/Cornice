@@ -1,30 +1,38 @@
 import AppKit
 import SwiftUI
+import Observation
 import CorniceKit
 
 /// Settings need a normal window that can take focus. The hover panel closes too easily for
 /// reading and editing settings.
+enum SettingsTab: Hashable { case general, audio, spotify, timers, updates, about }
+
+@MainActor @Observable
+final class SettingsNavigation { var tab: SettingsTab = .general }
+
 @MainActor
 final class SettingsWindow {
 
     static let shared = SettingsWindow()
 
     private var window: NSWindow?
+    private let navigation = SettingsNavigation()
 
     private init() {}
 
-    func show(model: AppModel) {
+    func show(model: AppModel, tab: SettingsTab = .general) {
+        navigation.tab = tab
         if let window {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
 
-        let hosting = NSHostingController(rootView: SettingsView(model: model))
+        let hosting = NSHostingController(rootView: SettingsView(model: model, navigation: navigation))
         let window = NSWindow(contentViewController: hosting)
         window.title = "Cornice Settings"
         window.styleMask = [.titled, .closable, .miniaturizable]
-        window.setContentSize(NSSize(width: 480, height: 470))
+        window.setContentSize(NSSize(width: 580, height: 560))
         window.isReleasedWhenClosed = false
         window.center()
         window.delegate = WindowCloseObserver.shared
@@ -46,19 +54,24 @@ final class SettingsWindow {
 
 struct SettingsView: View {
     @Bindable var model: AppModel
+    @Bindable var navigation: SettingsNavigation
 
     var body: some View {
-        TabView {
+        TabView(selection: $navigation.tab) {
             GeneralSettings(model: model)
-                .tabItem { Label("General", systemImage: "gearshape") }
+                .tabItem { Label("General", systemImage: "gearshape") }.tag(SettingsTab.general)
             VisualizerSettings(model: model)
-                .tabItem { Label("Visualiser", systemImage: "waveform") }
+                .tabItem { Label("Audio", systemImage: "waveform") }.tag(SettingsTab.audio)
             SpotifySettings(model: model)
-                .tabItem { Label("Spotify", systemImage: "music.note") }
+                .tabItem { Label("Spotify", systemImage: "music.note") }.tag(SettingsTab.spotify)
+            TimerSettings(model: model)
+                .tabItem { Label("Timers", systemImage: "timer") }.tag(SettingsTab.timers)
+            UpdateSettings()
+                .tabItem { Label("Updates", systemImage: "arrow.down.circle") }.tag(SettingsTab.updates)
             AboutSettings(model: model)
-                .tabItem { Label("About", systemImage: "info.circle") }
+                .tabItem { Label("About", systemImage: "info.circle") }.tag(SettingsTab.about)
         }
-        .frame(width: 480, height: 470)
+        .frame(width: 580, height: 560)
     }
 }
 
@@ -68,6 +81,11 @@ struct GeneralSettings: View {
 
     var body: some View {
         Form {
+            Section("Getting started") {
+                Button("Set Up Cornice…") { model.onShowSetup?() }
+                Toggle("Allow music controls", isOn: Binding(get: { model.preferences.mediaAccessEnabled },
+                    set: { value in model.updatePreferences { $0.mediaAccessEnabled = value }; if value { model.retryMediaPermission() } }))
+            }
             Section("Opening") {
                 Picker("Open on", selection: Binding(
                     get: { model.preferences.activationStyle },
@@ -353,7 +371,7 @@ struct VisualizerSettings: View {
 
                 switch model.visualizerStatus {
                 case .running:
-                    Label("Capturing system audio", systemImage: "checkmark.circle.fill")
+                    Label(model.hasLiveAudio ? "Receiving audio" : "Waiting for audio", systemImage: model.hasLiveAudio ? "checkmark.circle.fill" : "waveform")
                         .foregroundStyle(.green)
                         .font(.caption)
                 case .stopped:
@@ -370,22 +388,6 @@ struct VisualizerSettings: View {
                             Button("Open Privacy Settings") { model.openAudioRecordingSettings() }
                         }
                     }
-                }
-            }
-
-            Section("Timers") {
-                Text("Presets shown in the Timers panel.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                HStack {
-                    ForEach(model.preferences.timerPresetsMinutes, id: \.self) { minutes in
-                        Text(verbatim: "\(minutes)m")
-                            .font(.caption.monospacedDigit())
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Capsule().fill(Color.secondary.opacity(0.15)))
-                    }
-                    Spacer()
                 }
             }
 
@@ -410,6 +412,12 @@ struct VisualizerSettings: View {
             }
         }
         .formStyle(.grouped)
+        .task {
+            while !Task.isCancelled {
+                if model.preferences.audioVisualizerEnabled { model.sampleLevels() }
+                do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
+            }
+        }
     }
 }
 
@@ -420,6 +428,7 @@ struct AboutSettings: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Cornice")
                 .font(.title2.weight(.semibold))
+            Text("Version \(AppUpdater.version)").font(.callout.monospacedDigit()).foregroundStyle(.secondary)
             Text("A media surface for the MacBook notch.")
                 .foregroundStyle(.secondary)
 
@@ -451,9 +460,11 @@ struct AboutSettings: View {
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
 
+            ConnectionSummary(model: model)
+
             Spacer()
 
-            Text("Keyboard shortcut: ⌥⌘D")
+            Text("Keyboard: ⌥⌘D to open · ⌘1–3 to switch panels · Esc to close")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

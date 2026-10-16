@@ -21,7 +21,15 @@ BUILD_DIR="$(swift build "${BUILD_ARGS[@]}" --show-bin-path)"
 
 echo "==> Assembling $APP_NAME.app  version $VERSION ($BUILD_NUMBER)"
 rm -rf "$APP_DIR"
-mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
+mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources" "$APP_DIR/Contents/Frameworks"
+SPARKLE="$ROOT/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+if [ ! -d "$SPARKLE" ]; then
+    echo "Sparkle framework is missing. Run swift package resolve first." >&2
+    exit 1
+fi
+ditto "$SPARKLE" "$APP_DIR/Contents/Frameworks/Sparkle.framework"
+UPDATE_PUBLIC_KEY="$(cat "$ROOT/Resources/Updates/public-key.txt")"
+cp "$ROOT/Resources/Updates/Sparkle-LICENSE.txt" "$APP_DIR/Contents/Resources/"
 
 cp "$BUILD_DIR/cornice" "$APP_DIR/Contents/MacOS/$APP_NAME"
 chmod +x "$APP_DIR/Contents/MacOS/$APP_NAME"
@@ -51,6 +59,20 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
     <string>$BUILD_NUMBER</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
+    <key>SUFeedURL</key>
+    <string>https://raw.githubusercontent.com/Kirolosir/Cornice/main/Resources/Updates/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>$UPDATE_PUBLIC_KEY</string>
+    <key>SUEnableAutomaticChecks</key>
+    <false/>
+    <key>SUAutomaticallyUpdate</key>
+    <false/>
+    <key>SURequireSignedFeed</key>
+    <true/>
+    <key>SUVerifyUpdateBeforeExtraction</key>
+    <true/>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.utilities</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <!-- Accessory app: lives in the menu bar, no Dock icon, no app menu. -->
@@ -91,10 +113,17 @@ if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
     cp "$ROOT/Resources/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
 fi
 
-# Sign locally. This isn't notarization; downloaded copies may need the README's
-# first-launch step, and rebuilding can affect permission grants.
-echo "==> Ad-hoc signing"
-codesign --force --deep --sign - "$APP_DIR" 2>/dev/null \
-    || echo "    (codesign unavailable; the bundle will still run locally)"
+# Sign the nested helpers first, keeping their required entitlements.
+echo "==> Signing"
+IDENTITY="${CORNICE_SIGN_IDENTITY:--}"
+FRAMEWORK="$APP_DIR/Contents/Frameworks/Sparkle.framework"
+for helper in "$FRAMEWORK/Versions/B/XPCServices/Installer.xpc" \
+              "$FRAMEWORK/Versions/B/XPCServices/Downloader.xpc" \
+              "$FRAMEWORK/Versions/B/Autoupdate" "$FRAMEWORK/Versions/B/Updater.app"; do
+    codesign --force --sign "$IDENTITY" --options runtime --preserve-metadata=entitlements "$helper"
+done
+codesign --force --sign "$IDENTITY" --options runtime "$FRAMEWORK"
+codesign --force --sign "$IDENTITY" "$APP_DIR"
+codesign --verify --deep --strict "$APP_DIR"
 
 echo "==> Built $APP_DIR"

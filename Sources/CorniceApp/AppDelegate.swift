@@ -34,6 +34,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         UNUserNotificationCenter.current().delegate = notificationDelegate
 
+        AppUpdater.shared.start()
+        AppUpdater.shared.beforeRelaunch = { [weak model] in await model?.persistForRelaunch() }
+        model.onCheckForUpdates = { AppUpdater.shared.check() }
+        model.onShowSetup = { [weak model] in
+            guard let model else { return }
+            SetupWindow.shared.show(model: model)
+        }
         installStatusItem(model: model, controller: controller)
 
         Probes.runAttached(arguments, model: model, controller: controller)
@@ -42,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         Task {
             await model.start()
+            if !model.preferences.hasCompletedSetup { SetupWindow.shared.show(model: model) }
             // Launch-at-login can be changed from System Settings, so the
             // stored preference is reconciled with the system's actual state
             // rather than trusted.
@@ -62,7 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         TimerAlarm.shared.stop()
-        model?.stopRefreshLoops()
+        model?.shutDown()
         windowController?.tearDown()
         Log.app.notice("Cornice terminating")
     }
@@ -92,6 +100,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ).keyEquivalentModifierMask = [.command, .option]
         menu.addItem(.separator())
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        menu.addItem(withTitle: "Set Up Cornice…", action: #selector(openSetup), keyEquivalent: "")
+        menu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Cornice", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
@@ -106,6 +116,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func togglePanel() {
         windowController?.toggle()
     }
+
+    @objc private func openSetup() {
+        guard let model else { return }
+        SetupWindow.shared.show(model: model)
+    }
+
+    @objc private func checkForUpdates() { AppUpdater.shared.check() }
 
     @objc private func openSettings() {
         guard let model else { return }
