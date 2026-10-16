@@ -29,6 +29,22 @@ final class NotificationPresenter {
              body: "Open Cornice to see your session.", url: nil, playsSound: !quiet)
     }
 
+    enum Access: Equatable, Sendable { case allowed, denied, notAsked }
+
+    nonisolated static func accessStatus() async -> Access {
+        await withCheckedContinuation { continuation in
+            UNUserNotificationCenter.current().getNotificationSettings { settings in
+                let access: Access
+                switch settings.authorizationStatus {
+                case .authorized, .provisional, .ephemeral: access = .allowed
+                case .denied: access = .denied
+                default: access = .notAsked
+                }
+                continuation.resume(returning: access)
+            }
+        }
+    }
+
     func requestAccess() async -> Bool { await ensureAuthorized() }
 
     func lowBattery(level: Double) {
@@ -74,11 +90,10 @@ final class NotificationPresenter {
     }
 
     private func ensureAuthorized() async -> Bool {
-        let settings = await UNUserNotificationCenter.current().notificationSettings()
-        switch settings.authorizationStatus {
-        case .authorized, .provisional, .ephemeral: return true
+        switch await Self.accessStatus() {
+        case .allowed: return true
         case .denied: return false
-        default: break
+        case .notAsked: break
         }
         if let authorizationRequest { return await authorizationRequest.value }
         let request = Task { () -> Bool in

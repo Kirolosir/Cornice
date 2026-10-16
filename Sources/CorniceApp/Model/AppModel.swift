@@ -12,12 +12,16 @@ final class AppModel {
     // MARK: - Configuration
 
     private(set) var preferences = Preferences()
+    private(set) var preferencesSaveError: String?
+    private(set) var isShuttingDown = false
+    private var preferenceSaveTask: Task<Void, Never>?
 
     // MARK: - Surface
 
     private(set) var surfaceState: SurfaceState = .collapsed
     private(set) var isHovering = false
     var isPresentingPopover = false
+    var onPopoverClosed: (() -> Void)?
     var activeModule: ModuleKind = .media
 
     private(set) var notchProfile: NotchProfile?
@@ -268,6 +272,7 @@ final class AppModel {
     }
 
     func shutDown() {
+        isShuttingDown = true
         stopRefreshLoops()
         mediaWatchdog?.cancel()
         artworkTask?.cancel()
@@ -628,7 +633,7 @@ final class AppModel {
 
     /// Pulls the newest audio frame. Called from the UI's display timer.
     func sampleLevels() {
-        guard preferences.audioVisualizerEnabled else { return }
+        guard !isShuttingDown, preferences.audioVisualizerEnabled else { return }
         let now = Date()
         readOutputVolume(at: now)
 
@@ -772,10 +777,28 @@ final class AppModel {
         }
     }
 
+    func queuePreferenceSave(_ preferences: Preferences) {
+        preferenceSaveTask?.cancel()
+        preferenceSaveTask = Task { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
+            guard let self else { return }
+            do {
+                try await self.serviceContainer.preferences.save(preferences)
+                self.preferencesSaveError = nil
+            } catch {
+                self.preferencesSaveError = "Couldn't save settings. Check access to Cornice's Application Support folder."
+                Log.settings.error("could not save preferences")
+            }
+        }
+    }
+
     func persistForRelaunch() async {
+        preferenceSaveTask?.cancel()
         let snapshot = currentSessionSnapshot()
-        do { try await serviceContainer.sessions.save(snapshot) }
-        catch { Log.settings.error("could not save sessions before relaunch") }
+        do {
+            try await serviceContainer.preferences.save(preferences)
+            try await serviceContainer.sessions.save(snapshot)
+        } catch { Log.settings.error("could not save state before relaunch") }
     }
 
     func applyTelemetry(_ history: TelemetryHistory) {

@@ -81,6 +81,7 @@ struct GeneralSettings: View {
 
     var body: some View {
         Form {
+            if let error = model.preferencesSaveError { Text(error).font(.caption).foregroundStyle(.orange) }
             Section("Getting started") {
                 Button("Set Up Cornice…") { model.onShowSetup?() }
                 Toggle("Allow music controls", isOn: Binding(get: { model.preferences.mediaAccessEnabled },

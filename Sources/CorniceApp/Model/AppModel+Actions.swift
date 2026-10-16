@@ -21,12 +21,7 @@ extension AppModel {
 
         applyPreferences(sanitized)
 
-        Task { [services = self.serviceContainer] in
-            do { try await services.preferences.save(sanitized) }
-            catch {
-                Log.settings.error("could not save preferences: \(error.localizedDescription, privacy: .public)")
-            }
-        }
+        queuePreferenceSave(sanitized)
 
         if visualizerChanged {
             sanitized.audioVisualizerEnabled ? startVisualizer() : stopVisualizer()
@@ -266,6 +261,7 @@ extension AppModel {
     /// repaint trigger. Remaining time comes from the wall clock, so a missed
     /// tick changes nothing.
     func tickTimers() {
+        guard !isShuttingDown else { return }
         tickFocusSession()
         guard timers.hasTimers else { return }
         var board = timers

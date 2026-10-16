@@ -64,6 +64,7 @@ final class NotchWindowController {
 
         model.updateGeometry(profile)
         model.onSurfaceStateChanged = { [weak self] in self?.syncInteractiveRect() }
+        model.onPopoverClosed = { [weak self] in self?.contentView?.reevaluateHover() }
         syncInteractiveRect()
     }
 
@@ -100,6 +101,7 @@ final class NotchWindowController {
     /// Update AppKit's interactive area whenever the panel changes state.
     private func syncInteractiveRect() {
         guard let geometry, let contentView else { return }
+        if !model.surfaceState.isOpen && panel?.isKeyWindow == true { panel?.resignKey() }
         contentView.interactiveRect = model.surfaceState.hud != nil && model.hudContent?.isInteractive != true ? .zero : geometry.appKitRect(
             for: model.surfaceState,
             windowHeight: geometry.windowHeight

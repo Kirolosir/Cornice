@@ -176,12 +176,12 @@ struct SetupView: View {
     }
     private func move(_ amount: Int) { withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) { page += amount } }
     private func refreshNotifications() async {
-        let settings = await UNUserNotificationCenter.current().notificationSettings()
-        notificationsDenied = settings.authorizationStatus == .denied
-        switch settings.authorizationStatus {
-        case .authorized, .provisional, .ephemeral: notificationStatus = "Allowed"
+        let access = await NotificationPresenter.accessStatus()
+        notificationsDenied = access == .denied
+        switch access {
+        case .allowed: notificationStatus = "Allowed"
         case .denied: notificationStatus = "Not allowed — change this in System Settings"
-        default: notificationStatus = "Optional — allow alerts when you want them"
+        case .notAsked: notificationStatus = "Optional — allow alerts when you want them"
         }
     }
 }

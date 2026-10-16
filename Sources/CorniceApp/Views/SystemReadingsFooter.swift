@@ -33,7 +33,7 @@ struct SystemReadingsFooter: View {
         .frame(height: 26)
         .onChange(of: showingDetails) { _, visible in
             model.isPresentingPopover = visible
-            if !visible && !model.isHovering && model.preferences.activationStyle == .hover { model.present(.collapsed) }
+            if !visible { model.onPopoverClosed?() }
         }
         .onDisappear { model.isPresentingPopover = false }
     }

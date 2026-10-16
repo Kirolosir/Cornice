@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var model: AppModel?
     private var windowController: NotchWindowController?
     private var statusItem: NSStatusItem?
+    private var awaitingQuit = false
     private let notificationDelegate = NotificationDelegate()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -25,7 +26,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         Log.app.notice("Cornice starting")
 
-        let services = ServiceContainer.live()
+        let preview = arguments.contains("--preview-ui")
+        let services = preview ? PreviewServices.container() : ServiceContainer.live()
         let model = AppModel(services: services)
         let controller = NotchWindowController(model: model)
 
@@ -34,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         UNUserNotificationCenter.current().delegate = notificationDelegate
 
-        AppUpdater.shared.start()
+        if !preview { AppUpdater.shared.start() }
         AppUpdater.shared.beforeRelaunch = { [weak model] in await model?.persistForRelaunch() }
         model.onCheckForUpdates = { AppUpdater.shared.check() }
         model.onShowSetup = { [weak model] in
@@ -66,6 +68,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for url in urls where url.scheme == "cornice" && url.host == "spotify-callback" {
             model?.completeSpotifySignIn(url)
         }
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let model else { return .terminateNow }
+        guard !awaitingQuit else { return .terminateLater }
+        awaitingQuit = true
+        model.shutDown()
+        Task {
+            await model.persistForRelaunch()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     func applicationWillTerminate(_ notification: Notification) {

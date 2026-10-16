@@ -19,6 +19,9 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Select Swift 6 on macOS 14
+        if: matrix.os == 'macos-14'
+        run: sudo xcode-select --switch /Applications/Xcode_16.2.app/Contents/Developer
       - name: Show tool versions
         run: |
           swift --version
