@@ -48,9 +48,31 @@ enum DocsCapture {
             history.append(TelemetrySample(
                 cpuUsage: 0.24 + 0.12 * sin(Double(index) * 0.45) + (index > 19 && index < 24 ? 0.25 : 0),
                 memoryUsage: Double(used) / Double(total), memoryUsedBytes: used,
-                memoryTotalBytes: total, battery: nil,
-                capturedAt: historyEnd.addingTimeInterval(Double(index - 30) * 2)
+                memoryTotalBytes: total,
+                battery: BatteryState(level: 0.72, isCharging: false, isPluggedIn: false,
+                                      minutesRemaining: 214, condition: .normal),
+                capturedAt: historyEnd.addingTimeInterval(Double(index - 30) * 2),
+                memoryPressure: .normal
             ))
+        }
+
+        model.select(module: .timers)
+        model.timerModeIsFocus = true
+        model.startFocusSession()
+        model.toggleFocusSession()
+        model.present(.expanded)
+        capture(model: model, geometry: geometry, name: "focus", to: directory)
+        model.stopFocusSession()
+        model.timerModeIsFocus = false
+
+        for page in 0..<3 {
+            captureView(SetupView(model: model, close: {}, page: page), name: "setup-\(page + 1)", to: directory)
+        }
+        for (tab, name) in [(SettingsTab.general, "general"), (.audio, "audio"), (.spotify, "spotify"),
+                            (.timers, "timers"), (.updates, "updates"), (.about, "about")] {
+            let navigation = SettingsNavigation()
+            navigation.tab = tab
+            captureView(SettingsView(model: model, navigation: navigation), name: "settings-\(name)", to: directory)
         }
         model.stopRefreshLoops()
         model.applyTelemetry(history)
@@ -140,7 +162,20 @@ enum DocsCapture {
         .download(name: "ReallyVeryExtremelyImportBigNameForFile.mov", progress: 0.6, bytesPerSecond: 13_421_772),
         .doNotDisturb,
         .handoff,
+        .focusPhase(message: "Time for a break"),
     ] }
+
+    private static func captureView<V: View>(_ view: V, name: String, to directory: URL) {
+        let renderer = ImageRenderer(content: view.environment(\.colorScheme, .dark))
+        renderer.scale = scale
+        guard let tiff = renderer.nsImage?.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff),
+              let png = bitmap.representation(using: .png, properties: [:]) else {
+            print("could not render \(name)"); return
+        }
+        try? png.write(to: directory.appendingPathComponent("\(name).png"))
+        print("  \(name).png")
+    }
 
     private static func capture(
         model: AppModel,

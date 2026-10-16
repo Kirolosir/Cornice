@@ -808,7 +808,8 @@ final class AppModel {
     func mutateTimers(_ mutate: (inout TimerBoard) -> Void) {
         var copy = timers
         mutate(&copy)
-        timers = copy
+        guard copy != timers else { return }
+        applyTimers(copy)
     }
 
     func applyMedia(_ snapshot: MediaSnapshot?) {

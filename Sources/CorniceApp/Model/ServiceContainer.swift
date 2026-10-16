@@ -4,6 +4,7 @@ import CorniceKit
 /// Keep the services together so previews and checks can replace them without changing the
 /// views.
 struct ServiceContainer: Sendable {
+    let notices: any NoticePresenting
     let media: MediaCoordinator
     let telemetry: any TelemetryProbing
     let sessions: any SessionPersisting
@@ -19,9 +20,10 @@ struct ServiceContainer: Sendable {
     /// express. Idle (and asking for nothing) until a client ID is entered.
     let spotify: SpotifyWebRemote
 
-    static func live() -> ServiceContainer {
+    @MainActor static func live() -> ServiceContainer {
         let runner = SubprocessRunner()
         return ServiceContainer(
+            notices: NotificationPresenter.shared,
             media: MediaCoordinator.live(),
             telemetry: HostTelemetryProbe(),
             sessions: SessionStore(),

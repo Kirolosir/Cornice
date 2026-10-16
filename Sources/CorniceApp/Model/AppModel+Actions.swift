@@ -275,7 +275,7 @@ extension AppModel {
             TimerAlarm.shared.start(for: completed.map(\.id))
         }
         for entry in completed {
-            NotificationPresenter.shared.timerComplete(label: entry.label)
+            serviceContainer.notices.timerComplete(label: entry.label)
         }
         // And a face to go with the noise, so it can be silenced from the notch
         // rather than by hunting for the panel.

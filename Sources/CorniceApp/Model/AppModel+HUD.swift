@@ -123,7 +123,7 @@ extension AppModel {
 
         if BatteryAlertPolicy.shouldWarn(previous: previous, current: current) {
             presentHUD(.batteryLow(level: current.level))
-            NotificationPresenter.shared.lowBattery(level: current.level)
+            serviceContainer.notices.lowBattery(level: current.level)
             return
         }
 

@@ -1,4 +1,5 @@
 import XCTest
+import AppKit
 @testable import CorniceKit
 
 /// Compile every player script. AppleScript try blocks catch runtime errors, not a syntax
@@ -20,7 +21,10 @@ final class PlayerScriptTests: XCTestCase {
     /// player isn't installed.
     @MainActor
     private func terminologyAvailable(for source: MediaSource) -> Bool {
-        compilerError("tell application \"\(source.scriptingName)\" to return 1") == nil
+        // AppleScript can compile a generic tell block even when the app is missing.
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: source.bundleIdentifier),
+              FileManager.default.fileExists(atPath: url.path) else { return false }
+        return compilerError("tell application \"\(source.scriptingName)\" to return 1") == nil
     }
 
     @MainActor

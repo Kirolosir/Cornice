@@ -5,12 +5,15 @@ import CorniceKit
 /// Fake services for screenshots and checks. The views use the same model as the real app.
 enum PreviewServices {
 
-    static func container(media: MediaCoordinator? = nil) -> ServiceContainer {
+    @MainActor static func container(media: MediaCoordinator? = nil,
+                                     preferences: (any PreferencesPersisting)? = nil,
+                                     sessions: (any SessionPersisting)? = nil) -> ServiceContainer {
         ServiceContainer(
+            notices: PreviewNotices(),
             media: media ?? MediaCoordinator(controllers: [PreviewMediaController()]),
             telemetry: PreviewTelemetryProbe(),
-            sessions: EphemeralSessionStore(),
-            preferences: EphemeralPreferencesStore(previewPreferences()),
+            sessions: sessions ?? EphemeralSessionStore(),
+            preferences: preferences ?? EphemeralPreferencesStore(previewPreferences()),
             hardware: HardwareIdentityProvider(runner: SubprocessRunner()),
             visualizer: AudioVisualizerEngine(bandCount: 6),
             outputDevices: OutputDeviceMonitor(),

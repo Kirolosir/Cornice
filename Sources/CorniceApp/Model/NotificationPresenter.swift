@@ -5,7 +5,7 @@ import CorniceKit
 /// Ask for notification permission when the first notice is sent, rather than during
 /// startup.
 @MainActor
-final class NotificationPresenter {
+final class NotificationPresenter: NoticePresenting {
 
     static let shared = NotificationPresenter()
 

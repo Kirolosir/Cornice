@@ -26,7 +26,7 @@ final class SetupWindow {
 struct SetupView: View {
     @Bindable var model: AppModel
     let close: () -> Void
-    @State private var page = 0
+    @State var page = 0
     @State private var automaticUpdates = true
     @State private var notificationStatus = "Optional"
     @State private var requestingNotifications = false

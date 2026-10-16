@@ -426,6 +426,7 @@ struct AboutSettings: View {
     @Bindable var model: AppModel
 
     var body: some View {
+        ScrollView {
         VStack(alignment: .leading, spacing: 12) {
             Text("Cornice")
                 .font(.title2.weight(.semibold))
@@ -471,6 +472,7 @@ struct AboutSettings: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     @ViewBuilder
