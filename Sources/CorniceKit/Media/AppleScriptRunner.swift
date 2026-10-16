@@ -11,6 +11,17 @@ public actor AppleScriptRunner {
         var scripts: [String: NSAppleScript] = [:]
     }
 
+    private final class Request: @unchecked Sendable {
+        private let lock = NSLock()
+        private var cancelled = false
+
+        func cancel() { lock.lock(); cancelled = true; lock.unlock() }
+        var isCancelled: Bool {
+            lock.lock(); defer { lock.unlock() }
+            return cancelled
+        }
+    }
+
     private let box = ScriptBox()
     private let queue = DispatchQueue(label: "dev.cornice.applescript", qos: .userInitiated)
 
@@ -38,46 +49,66 @@ public actor AppleScriptRunner {
     ///
     /// - Parameter target: Player name used when reporting an automation denial.
     public func run(_ source: String, target: String) async throws -> ScriptResult {
+        try Task.checkCancellation()
         if deniedTargets.contains(target) {
             throw ServiceError.unauthorized(
                 detail: "Cornice is not allowed to control \(target). Grant it in System Settings › Privacy & Security › Automation."
             )
         }
 
+        let request = Request()
         do {
-            return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<ScriptResult, any Error>) in
-                queue.async { [box] in
-                    let script: NSAppleScript
-                    if let cached = box.scripts[source] {
-                        script = cached
-                    } else {
-                        guard let compiled = NSAppleScript(source: source) else {
-                            continuation.resume(throwing: ServiceError.invalidConfiguration(
-                                reason: "could not compile script"
-                            ))
+            return try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<ScriptResult, any Error>) in
+                    queue.async { [box] in
+                        // Hovering can cancel a poll while another script is still running.
+                        // Skip that queued work instead of building up old player reads.
+                        guard !request.isCancelled else {
+                            continuation.resume(throwing: CancellationError())
                             return
                         }
-                        box.scripts[source] = compiled
-                        script = compiled
-                    }
-
-                    var errorInfo: NSDictionary?
-                    let descriptor = script.executeAndReturnError(&errorInfo)
-                    if let errorInfo {
-                        continuation.resume(throwing: Self.mapError(errorInfo, target: target))
-                    } else {
-                        let data = descriptor.descriptorType == typeNull ? nil : descriptor.data
-                        continuation.resume(returning: ScriptResult(
-                            string: descriptor.stringValue,
-                            data: (data?.isEmpty ?? true) ? nil : data
-                        ))
+                        let result = autoreleasepool {
+                            Result { try Self.execute(source, target: target, box: box) }
+                        }
+                        if request.isCancelled {
+                            continuation.resume(throwing: CancellationError())
+                        } else {
+                            continuation.resume(with: result)
+                        }
                     }
                 }
+            } onCancel: {
+                request.cancel()
             }
         } catch let error as ServiceError {
             if case .unauthorized = error { deniedTargets.insert(target) }
             throw error
         }
+    }
+
+    private static func execute(_ source: String, target: String, box: ScriptBox) throws -> ScriptResult {
+        let script: NSAppleScript
+        if let cached = box.scripts[source] {
+            script = cached
+        } else {
+            guard let compiled = NSAppleScript(source: source) else {
+                throw ServiceError.invalidConfiguration(reason: "could not compile script")
+            }
+            // Seek positions and volume changes produce different scripts.
+            if box.scripts.count >= 64 { box.scripts.removeAll() }
+            box.scripts[source] = compiled
+            script = compiled
+        }
+
+        var errorInfo: NSDictionary?
+        let descriptor = script.executeAndReturnError(&errorInfo)
+        if let errorInfo {
+            // Recompile after a failure, for example when the player has restarted.
+            box.scripts.removeValue(forKey: source)
+            throw mapError(errorInfo, target: target)
+        }
+        let data = descriptor.descriptorType == typeNull ? nil : descriptor.data
+        return ScriptResult(string: descriptor.stringValue, data: (data?.isEmpty ?? true) ? nil : data)
     }
 
     /// Translate AppleScript errors: -1743 means automation was denied, -600/-609 mean the

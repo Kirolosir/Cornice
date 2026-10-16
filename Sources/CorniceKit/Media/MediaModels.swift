@@ -194,4 +194,10 @@ public protocol MediaControlling: Sendable {
     /// Current state, or `nil` when nothing is loaded.
     func snapshot() async throws -> MediaSnapshot?
     func perform(_ command: MediaCommand) async throws
+    /// Clear a saved denial after the user changes Automation permission.
+    func resetAuthorization() async
+}
+
+public extension MediaControlling {
+    func resetAuthorization() async {}
 }

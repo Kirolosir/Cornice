@@ -36,7 +36,7 @@ public actor MediaCoordinator {
     /// Which players are installed and currently open.
     public func runningSources() async -> [MediaSource] {
         var running: [MediaSource] = []
-        for (source, controller) in controllers where !unavailableSources.contains(source) {
+        for (source, controller) in controllers {
             if await controller.isRunning() { running.append(source) }
         }
         return running.sorted { $0.rawValue < $1.rawValue }
@@ -53,12 +53,16 @@ public actor MediaCoordinator {
                 if let snapshot = try await controller.snapshot(), snapshot.hasTrack {
                     candidates.append(snapshot)
                 }
+            } catch is CancellationError {
+                return nil
             } catch let error as ServiceError {
                 if case .unauthorized = error {
                     // Do not keep re-asking. The user said no; respect it until
                     // they say otherwise.
                     unavailableSources.insert(source)
                     Log.media.notice("automation refused for \(source.displayName, privacy: .public)")
+                } else {
+                    Log.media.notice("\(source.displayName, privacy: .public) read failed: \(error.headline, privacy: .public)")
                 }
                 // A player that is open with nothing loaded raises rather than
                 // returning empty; that is not worth surfacing.
@@ -92,13 +96,23 @@ public actor MediaCoordinator {
         try await controller.perform(command)
     }
 
-    /// Whether every known player refused automation.
-    public func allSourcesUnavailable() -> Bool {
-        !unavailableSources.isEmpty && unavailableSources.count == controllers.count
+    /// Running players whose Automation permission was denied.
+    public func deniedRunningSources() async -> [MediaSource] {
+        let running = await runningSources()
+        return running.filter { unavailableSources.contains($0) }
+    }
+
+    /// Closed players should not hide a denial from the player that's actually open.
+    public func allSourcesUnavailable() async -> Bool {
+        let running = await runningSources()
+        return !running.isEmpty && running.allSatisfy { unavailableSources.contains($0) }
     }
 
     /// Lets the user retry after granting permission in System Settings.
-    public func resetAvailability() {
+    public func resetAvailability() async {
+        for controller in controllers.values {
+            await controller.resetAuthorization()
+        }
         unavailableSources.removeAll()
     }
 

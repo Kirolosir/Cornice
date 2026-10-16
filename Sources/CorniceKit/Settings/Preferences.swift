@@ -120,7 +120,7 @@ public struct Preferences: Codable, Equatable, Sendable {
         enabledModules: Set<ModuleKind> = Set(ModuleKind.allCases),
         activationStyle: ActivationStyle = .hover,
         hoverDwell: Double = 0.05,
-        idleDisplay: IdleDisplay = .artworkAndTitle,
+        idleDisplay: IdleDisplay = .artworkAndSpectrum,
         launchAtLogin: Bool = false,
         mediaRefreshInterval: Double = 1.0,
         hideWhenNothingPlaying: Bool = false,

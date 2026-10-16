@@ -8,7 +8,7 @@ CONFIGURATION="${1:-release}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="Cornice"
 BUNDLE_ID="dev.cornice.app"
-BUILD_DIR="$ROOT/.build/$CONFIGURATION"
+BUILD_ARGS=(-c "$CONFIGURATION" --package-path "$ROOT" "${@:2}")
 APP_DIR="$ROOT/dist/$APP_NAME.app"
 
 # Use the latest tag for the version and the commit count for the build number.
@@ -16,7 +16,8 @@ VERSION="$(git -C "$ROOT" describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' 
 BUILD_NUMBER="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo "1")"
 
 echo "==> Building ($CONFIGURATION)"
-swift build -c "$CONFIGURATION" --package-path "$ROOT"
+swift build "${BUILD_ARGS[@]}"
+BUILD_DIR="$(swift build "${BUILD_ARGS[@]}" --show-bin-path)"
 
 echo "==> Assembling $APP_NAME.app  version $VERSION ($BUILD_NUMBER)"
 rm -rf "$APP_DIR"

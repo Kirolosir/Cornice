@@ -121,7 +121,7 @@ final class AppModel {
         return snapshot
     }
 
-    /// Set when every known player refused automation.
+    /// At least one open player refused Automation permission.
     private(set) var mediaPermissionDenied = false
     private(set) var runningPlayers: [MediaSource] = []
 
@@ -174,6 +174,8 @@ final class AppModel {
     /// Track identity the artwork currently belongs to, so it is fetched once
     /// per song rather than once per poll.
     private var artworkTrackIdentity: String?
+    private var artworkTask: Task<Void, Never>?
+    private var mediaRefreshSequence: UInt64 = 0
 
     init(services: ServiceContainer) {
         self.serviceContainer = services
@@ -218,6 +220,7 @@ final class AppModel {
 
     func shutDown() {
         stopRefreshLoops()
+        artworkTask?.cancel()
         activityDismissTask?.cancel()
         hudDismissTask?.cancel()
         stopHUDSources()
@@ -463,12 +466,13 @@ final class AppModel {
             // when the System tab isn't visible.
             return surfaceState.isOpen ? preferences.telemetryRefreshInterval : 30
         default:
-            // AppleScript polling isn't free. Use the configured rate when open and a
-            // slower rate when closed. Hovering triggers a fresh reading.
-            if surfaceState.isOpen { return preferences.mediaRefreshInterval }
-            if media?.state.isPlaying != true { return 8 }
+            // Keep the resting indicator current too. A pause or skip shouldn't need a
+            // hover before it shows up. Check paused players a little less often.
+            if surfaceState.isOpen || media?.state.isPlaying == true {
+                return preferences.mediaRefreshInterval
+            }
             if preferences.idleDisplay == .nothing { return 8 }
-            return max(preferences.mediaRefreshInterval, 4)
+            return max(preferences.mediaRefreshInterval, 2)
         }
     }
 
@@ -492,16 +496,18 @@ final class AppModel {
     // MARK: - Media
 
     private func refreshMedia() async {
+        mediaRefreshSequence &+= 1
+        let sequence = mediaRefreshSequence
         readOutputVolume()
         let coordinator = serviceContainer.media
         let sources = await coordinator.runningSources()
         let polled = await coordinator.snapshot()
-        let unavailable = await coordinator.allSourcesUnavailable()
+        let denied = await coordinator.deniedRunningSources()
         // A hover can replace the polling task while an Apple event is still
         // returning. Don't let that cancelled poll restore an old playing state.
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, sequence == mediaRefreshSequence else { return }
         runningPlayers = sources
-        mediaPermissionDenied = unavailable
+        mediaPermissionDenied = !denied.isEmpty
 
         var snapshot = reconcile(polled)
         // Keep our local repeat-one mode until the user changes it. The player's repeat
@@ -512,6 +518,7 @@ final class AppModel {
         // With a Web API sign-in the player is the authority on its own repeat
         // mode, so what it says replaces anything inferred locally.
         await refreshSpotifyRepeat(for: snapshot)
+        guard !Task.isCancelled, sequence == mediaRefreshSequence else { return }
         if let reported = spotifyReportedRepeat,
            let current = snapshot, current.source == .spotify {
             snapshot = current.with(repeatMode: reported)
@@ -520,26 +527,37 @@ final class AppModel {
         recoverFromAutomaticAdvance()
         scheduleRepeatOneLoop()
 
+        refreshArtwork(for: snapshot)
+    }
+
+    private func refreshArtwork(for snapshot: MediaSnapshot?) {
         guard let snapshot, snapshot.hasTrack else {
+            artworkTask?.cancel()
+            artworkTask = nil
             artwork = nil
             artworkTint = nil
             artworkAccents = []
             artworkTrackIdentity = nil
             return
         }
-
-        // Only refetch when the *track* changed, not on every poll.
         guard snapshot.trackIdentity != artworkTrackIdentity else { return }
-        let data = await coordinator.artwork(for: snapshot)
-        guard !Task.isCancelled, media?.trackIdentity == snapshot.trackIdentity else { return }
-        guard let data, let image = NSImage(data: data) else {
-            artwork = nil
-            artworkTint = nil
-            artworkAccents = []
-            return
-        }
+        artworkTask?.cancel()
         artworkTrackIdentity = snapshot.trackIdentity
-        applyArtwork(image)
+        applyArtwork(nil)
+
+        // A slow cover request must not hold up song changes or pause updates.
+        let coordinator = serviceContainer.media
+        artworkTask = Task { [weak self] in
+            let data = await coordinator.artwork(for: snapshot)
+            guard let self, !Task.isCancelled,
+                  self.media?.trackIdentity == snapshot.trackIdentity else { return }
+            self.artworkTask = nil
+            guard let data, let image = NSImage(data: data) else {
+                self.artworkTrackIdentity = nil
+                return
+            }
+            self.applyArtwork(image)
+        }
     }
 
     /// Pulls the newest audio frame. Called from the UI's display timer.

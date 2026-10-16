@@ -24,12 +24,17 @@ public actor ScriptedMediaController: MediaControlling {
         AppleScriptRunner.isRunning(bundleIdentifier: source.bundleIdentifier)
     }
 
+    public func resetAuthorization() async {
+        await runner.clearDenial(source.scriptingName)
+        cachedTrack = nil
+    }
+
     /// Read playback and position often, but fetch full metadata only when the track
     /// changes. Each player property costs an Apple event.
     public func snapshot() async throws -> MediaSnapshot? {
         guard await isRunning() else { return nil }
 
-        let light = try await runner.run(lightScript, target: source.scriptingName)
+        let light = try await execute(lightScript)
         guard let raw = light.string else { return nil }
         guard let state = Self.parseLight(raw, source: source) else { return nil }
         // State only, never the track: enough to tell a working poll from a
@@ -50,7 +55,7 @@ public actor ScriptedMediaController: MediaControlling {
         } ?? false
 
         if !unchanged {
-            let full = try await runner.run(readScript, target: source.scriptingName)
+            let full = try await execute(readScript)
             guard let rawFull = full.string, let parsed = parse(rawFull) else { return nil }
             cachedTrack = parsed
         }
@@ -80,7 +85,17 @@ public actor ScriptedMediaController: MediaControlling {
             throw ServiceError.invalidConfiguration(reason: "\(source.displayName) is not running")
         }
         guard let script = commandScript(for: command) else { return }
-        _ = try await runner.run(script, target: source.scriptingName)
+        _ = try await execute(script)
+    }
+
+    private func execute(_ script: String) async throws -> AppleScriptRunner.ScriptResult {
+        // Don't let an unresponsive player hold the script queue for minutes.
+        let bounded = """
+        with timeout of 5 seconds
+        \(script)
+        end timeout
+        """
+        return try await runner.run(bounded, target: source.scriptingName)
     }
 
     // MARK: - Reading
@@ -325,7 +340,7 @@ public actor ScriptedMediaController: MediaControlling {
             end try
         end tell
         """
-        return try await runner.run(script, target: source.scriptingName).data
+        return try await execute(script).data
     }
 
     // MARK: - Commands

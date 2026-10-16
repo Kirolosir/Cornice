@@ -184,8 +184,10 @@ struct GeneralSettings: View {
 
                 LabeledContent("Automation") {
                     HStack {
-                        Text(model.mediaPermissionDenied ? "Not allowed" : "Allowed")
+                        Text(model.mediaPermissionDenied ? "Not allowed" :
+                             (model.media?.hasTrack == true ? "Connected" : "Waiting for player"))
                             .foregroundStyle(model.mediaPermissionDenied ? .orange : .secondary)
+                        Button("Try Again") { model.retryMediaPermission() }
                         Button("Open Settings") { model.openAutomationSettings() }
                     }
                 }

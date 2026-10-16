@@ -18,10 +18,10 @@ struct MediaPane: View {
     private var accent: Color { model.artworkTint ?? Theme.Palette.accent }
 
     var body: some View {
-        if model.mediaPermissionDenied {
-            permissionPrompt
-        } else if let snapshot, snapshot.hasTrack {
+        if let snapshot, snapshot.hasTrack {
             player(snapshot)
+        } else if model.mediaPermissionDenied {
+            permissionPrompt
         } else {
             idle
         }
@@ -174,7 +174,7 @@ struct MediaPane: View {
             Text("Cornice needs permission to control your music")
                 .font(Theme.Typeface.hudTitle)
                 .foregroundStyle(ink.primary)
-            Text("Enable Cornice for Music and Spotify under Privacy & Security › Automation.")
+            Text("Allow Cornice to control your player under Privacy & Security › Automation, then try again.")
                 .font(Theme.Typeface.hudBody)
                 .lineSpacing(3)
                 .foregroundStyle(ink.secondary)

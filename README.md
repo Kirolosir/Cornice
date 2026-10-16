@@ -17,6 +17,7 @@ window. I'm still working on it and polishing the parts that feel off.
 - Shows Apple Music and Spotify with the cover, song, artist and playback controls.
 - Has six visualizer bars that follow captured audio. They stay still when the
   song is paused. With capture off, they only act as a playing indicator.
+  New installs show them beside the notch without needing to hover.
 - Uses the cover's colors for the background, including muted and grey artwork.
 - Lets you pause, repeat and add time to a timer. Adding 25 minutes twice gives
   you one 50-minute timer. The alarm keeps ringing until you deal with it.
@@ -26,6 +27,8 @@ window. I'm still working on it and polishing the parts that feel off.
 
 Hover only starts inside the notch's measured bounds. It gets measured again
 when your display or scaling changes. You can also open the panel with **⌥⌘D**.
+
+![Collapsed player](Docs/images/collapsed.png)
 
 ![System tab](Docs/images/stats.png)
 
@@ -106,6 +109,20 @@ button restarts the current song; turn repeat off to skip normally.
 
 ## Latest fixes
 
+Cover downloads run separately from music updates now. A slow or stuck image
+request no longer holds the player on the previous song. Cancelled refreshes
+are skipped, and player commands have a shorter response timeout.
+
+Spotify permission recovery now works without restarting Cornice. If only
+Spotify is open and its Automation permission is denied, the player shows the
+permission steps instead of an empty screen. **Try Again** clears the saved
+denial after you allow access in System Settings.
+
+The collapsed player checks music more often, so skipping or pausing doesn't
+need a hover to update. New installs show the bars instead of the song title
+beside the notch. Existing display choices are kept; change **Settings → General
+→ Collapsed surface → Show** to **Artwork and spectrum** if you want the bars.
+
 The timer now repeats without creating a new timer, and presets add time to the
 current countdown. A paused timer stays paused when more time is added.
 
@@ -137,6 +154,7 @@ These smaller checks work with Command Line Tools:
 ./Scripts/check-audio.sh
 ./Scripts/check-system.sh
 ./Scripts/check-battery.sh
+./Scripts/check-media.sh
 ```
 
 For timer and appearance checks, use the app bundle so macOS permissions work:
@@ -145,11 +163,17 @@ For timer and appearance checks, use the app bundle so macOS permissions work:
 make app-debug
 dist/Cornice.app/Contents/MacOS/Cornice --probe-timers
 dist/Cornice.app/Contents/MacOS/Cornice --probe-appearance
+dist/Cornice.app/Contents/MacOS/Cornice --probe-media-refresh
 ```
 
 The timer check plays the alarm for eight seconds and checks repeat, adding time,
 overlapping alarms and dismissal. The appearance check covers paused hovering
 and artwork colors. Both need a logged-in macOS session.
+
+The media check covers denied permissions and retrying. The refresh probe uses
+a test player and a stalled cover request to check song changes, pauses and
+resuming while the panel stays closed. Neither changes your real player's
+playback or macOS permissions.
 
 You can also measure CPU and memory while the app is running with
 `./Scripts/measure.sh`, or save screenshots with:

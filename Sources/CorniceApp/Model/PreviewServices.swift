@@ -5,9 +5,9 @@ import CorniceKit
 /// Fake services for screenshots and checks. The views use the same model as the real app.
 enum PreviewServices {
 
-    static func container() -> ServiceContainer {
+    static func container(media: MediaCoordinator? = nil) -> ServiceContainer {
         ServiceContainer(
-            media: MediaCoordinator(controllers: [PreviewMediaController()]),
+            media: media ?? MediaCoordinator(controllers: [PreviewMediaController()]),
             telemetry: PreviewTelemetryProbe(),
             preferences: EphemeralPreferencesStore(previewPreferences()),
             hardware: HardwareIdentityProvider(runner: SubprocessRunner()),
@@ -25,9 +25,6 @@ enum PreviewServices {
     static func previewPreferences() -> Preferences {
         var preferences = Preferences()
         preferences.enabledModules = Set(ModuleKind.allCases)
-        // The documented resting state is the shipped one: a track title, not a
-        // spectrum. Nothing animates while at rest.
-        preferences.idleDisplay = .artworkAndTitle
         preferences.tintFromArtwork = true
         // Left off: the documentation build must not trigger a system audio
         // permission prompt on whatever machine renders it.
