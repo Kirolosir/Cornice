@@ -20,13 +20,21 @@ window. I'm still working on it and polishing the parts that feel off.
   New installs show them beside the notch without needing to hover.
 - Uses the cover's colors for the background, including muted and grey artwork.
 - Lets you pause, repeat and add time to a timer. Adding 25 minutes twice gives
-  you one 50-minute timer. The alarm keeps ringing until you deal with it.
-- Shows CPU and memory readings with charts for the last minute.
+  you one 50-minute timer. Save your own presets or turn on quiet completions.
+- Has work and break sessions, starting with 25 minutes of work and a 5-minute
+  break. You can change the lengths, rounds and whether the next phase starts
+  by itself.
+- Keeps timers and focus sessions when you quit or install an update.
+- Shows CPU and memory readings with charts for the last minute, plus memory
+  pressure, charging details and the battery condition reported by macOS.
+- Checks for updates inside the app and lets you choose when to install them.
 - Shows notices for charging, low battery, network and VPN changes, and wireless
   audio devices. Download notices can be enabled in Settings.
 
 Hover only starts inside the notch's measured bounds. It gets measured again
-when your display or scaling changes. You can also open the panel with **⌥⌘D**.
+when your display or scaling changes. You can also open the panel with **⌥⌘D**
+and switch between Music, Timers and System with **⌘1**, **⌘2** and **⌘3**.
+Buttons support keyboard focus, and animations follow macOS Reduce Motion.
 
 ![Collapsed player](Docs/images/collapsed.png)
 
@@ -51,9 +59,24 @@ xattr -dr com.apple.quarantine /Applications/Cornice.app
 
 Then try opening it again. Building it yourself is another option.
 
+### Updating
+
+Version 0.4.0 adds **Settings → Updates**, where you can see the installed version
+and check for a new one. Automatic checks are optional. Cornice offers the update
+and asks before installing and relaunching; keep the app in Applications so it can
+replace its copy there.
+
+The update feed and downloads are signed with an Ed25519 key. That update
+signature is separate from Apple's signing and notarization, so the first-launch
+steps above still apply to a fresh download.
+
+If you're on 0.3.1 or older, download and install 0.4.0 once to get the updater.
+Those older copies don't have an in-app update check.
+
 ## Build it yourself
 
-Xcode or the Command Line Tools are enough to build the app.
+Use Swift 6 with Xcode or the Command Line Tools to build the app. The first build
+also downloads the Sparkle update framework.
 
 ```bash
 git clone https://github.com/Kirolosir/Cornice.git
@@ -76,19 +99,59 @@ To package the app after building:
 ./Scripts/package-dmg.sh
 ```
 
-## Permissions
+## Setup and permissions
 
-macOS can ask for Automation permission when Cornice talks to Music or Spotify.
+The first launch has three short setup pages: how the notch works, connecting
+Music or Spotify, and optional audio, notifications and update checks. You can
+skip setup and come back through the menu bar item.
+
+On a new install, Cornice waits until you choose **Connect Players** before asking
+to control Music or Spotify. Open a player first so the connection can be checked.
+The setup page shows whether the player is connected, closed or denied access.
+Normal song information and controls don't need a Spotify developer account.
+
 Turning on the visualizer asks for System Audio Recording permission. The audio
-is analyzed in memory and isn't saved or sent anywhere.
+is analyzed in memory and isn't saved or sent anywhere. The status says when
+Cornice is actually receiving audio; starting capture alone doesn't prove that
+permission was granted.
 
-Notifications ask for permission when there's a notice to send. Download
-monitoring is off by default because it can ask for access to the Downloads
-folder.
+You can allow notifications during setup, or when Cornice first needs to send
+one. Download monitoring is off by default because it can ask for access to the
+Downloads folder.
 
 Rebuilding the app can affect its audio permission because the signature changes.
 If the visualizer can't hear anything, check the Audio Recording settings. The
 **Ask again** button in Cornice's settings can reset its own permission.
+
+### If music gets stuck
+
+Cornice checks for repeated player errors and a playback position that stops
+moving. It tries to reconnect, with a delay between attempts. You can also use
+**Reconnect Players** in the player or **Settings → About** without restarting
+the app.
+
+If macOS denied Automation access, allow it in System Settings and reconnect.
+Cornice doesn't keep retrying a denied permission on its own. The About page can
+copy a connection report for a bug report; it leaves out song names, account
+details and tokens.
+
+## Timers and focus
+
+Use **Settings → Timers** to save up to six presets, from 1 to 600 minutes. Presets
+add to the current countdown, including while it's paused. Repeat starts the same
+timer again. **Quiet completions** keeps the finish notice without a looping
+alarm.
+
+The **Focus** mode alternates work and break periods. It starts with four rounds
+of 25 minutes of work and 5 minutes of rest. By default, each new phase waits for
+you to start it. You can enable automatic starts and change the plan in Settings;
+plan edits apply to the next session. Finishing the last work period completes
+the session.
+
+Timers and focus sessions are saved locally. If a timer ends while Cornice is
+closed, it comes back as finished without playing an old alarm. If a focus phase
+ends while it's closed, the next phase waits for you when you reopen the app,
+even if automatic starts were enabled.
 
 ## Spotify connection
 
@@ -107,35 +170,25 @@ Without that connection, repeat-one uses a local loop. Crossfade can make that
 less reliable than Spotify's own setting. With repeat-one on, Cornice's Next
 button restarts the current song; turn repeat off to skip normally.
 
-## Latest fixes
+## What's new in 0.4.0
 
-Cover downloads run separately from music updates now. A slow or stuck image
-request no longer holds the player on the previous song. Cancelled refreshes
-are skipped, and player commands have a shorter response timeout.
+This update adds setup, in-app updates, music recovery and focus sessions. It also
+saves active timers, adds editable presets and quiet completion, and improves
+keyboard focus and Reduce Motion support.
 
-Spotify permission recovery now works without restarting Cornice. If only
-Spotify is open and its Automation permission is denied, the player shows the
-permission steps instead of an empty screen. **Try Again** clears the saved
-denial after you allow access in System Settings.
+The System tab now shows memory pressure alongside usage, since a high memory
+percentage doesn't always mean the Mac is struggling. The info button explains
+the readings and shows charging details and battery condition when macOS makes
+them available. Missing readings stay unavailable rather than being guessed.
 
-The collapsed player checks music more often, so skipping or pausing doesn't
-need a hover to update. New installs show the bars instead of the song title
-beside the notch. Existing display choices are kept; change **Settings → General
-→ Collapsed surface → Show** to **Artwork and spectrum** if you want the bars.
+The earlier music fixes are still here: cover downloads don't hold up song
+updates, the collapsed bars refresh without hovering, and paused music stays
+still when the panel opens. Backgrounds use a blurred copy of the cover and its
+sampled colors. The tint slider changes how much shows through.
 
-The timer now repeats without creating a new timer, and presets add time to the
-current countdown. A paused timer stays paused when more time is added.
-
-Opening the player no longer makes paused music look like it's playing. Silence
-from the audio capture also stays still. Here's the [paused player](Docs/images/player-paused.png).
-
-Backgrounds use a blurred copy of the cover and its sampled colors. The tint
-slider changes how much of it shows through.
-
-The System tab has a fixed 0–100% chart scale. It uses actual sample times, so
-gaps after sleep or slower polling aren't hidden. Memory is shown in GiB, where
-one GiB is 1,073,741,824 bytes. Missing readings show a dash. CPU needs two
-readings before it can calculate usage.
+The System charts use a fixed 0–100% scale and actual sample times, so gaps after
+sleep aren't hidden. Memory is shown in GiB, where one GiB is 1,073,741,824 bytes.
+CPU needs two readings before it can calculate usage.
 
 The low-battery warning triggers at 10% when the battery isn't charging. It
 shows both a notch notice and a macOS notification if notifications are allowed.
@@ -155,6 +208,7 @@ These smaller checks work with Command Line Tools:
 ./Scripts/check-system.sh
 ./Scripts/check-battery.sh
 ./Scripts/check-media.sh
+./Scripts/check-features.sh
 ```
 
 For timer and appearance checks, use the app bundle so macOS permissions work:
@@ -164,6 +218,7 @@ make app-debug
 dist/Cornice.app/Contents/MacOS/Cornice --probe-timers
 dist/Cornice.app/Contents/MacOS/Cornice --probe-appearance
 dist/Cornice.app/Contents/MacOS/Cornice --probe-media-refresh
+dist/Cornice.app/Contents/MacOS/Cornice --probe-features
 ```
 
 The timer check plays the alarm for eight seconds and checks repeat, adding time,
@@ -173,7 +228,18 @@ and artwork colors. Both need a logged-in macOS session.
 The media check covers denied permissions and retrying. The refresh probe uses
 a test player and a stalled cover request to check song changes, pauses and
 resuming while the panel stays closed. Neither changes your real player's
-playback or macOS permissions.
+playback or macOS permissions. The feature checks cover focus transitions,
+stalled-player recovery, saved sessions and settings. The feature probe checks
+these through the app model with test players and notifications.
+
+To check an update feed without downloading or installing an update:
+
+```bash
+dist/Cornice.app/Contents/MacOS/Cornice --probe-updates FEED_URL current
+```
+
+The last argument is the expected result: `current`, `update` or `reject`. Use a
+feed signed for this build. The probe returns a failure if the result differs.
 
 You can also measure CPU and memory while the app is running with
 `./Scripts/measure.sh`, or save screenshots with:
@@ -188,13 +254,14 @@ The screenshots use preview data and sample artwork.
 
 `CorniceKit` holds the timer, audio, media and system logic. `CorniceApp` holds
 the views, app state and window setup. The project uses Swift 6, SwiftUI and
-AppKit, with no third-party packages.
+AppKit. In-app updates use [Sparkle 2.10.0](https://sparkle-project.org/); the rest
+of the app uses Apple's frameworks.
 
 ```text
 Sources/
   CorniceKit/
     Audio/        Capture, FFT and visualizer levels
-    Focus/        Timer state and timer board
+    Focus/        Timers, focus sessions and saved session state
     Media/        Music and Spotify controls, plus Spotify sign-in
     Notch/        Display and notch measurements
     Telemetry/    CPU, memory and battery readings
@@ -226,4 +293,5 @@ aren't connected yet. The shortcut is fixed, and the interface is English only.
 Thanks to [Atoll](https://github.com/Atoll-Labs/Atoll) for the inspiration, and to
 Apple for the Dynamic Island idea.
 
-Cornice is MIT licensed. See [LICENSE](LICENSE).
+Cornice is MIT licensed. See [LICENSE](LICENSE). Sparkle is included under its
+own license in [Resources/Updates/Sparkle-LICENSE.txt](Resources/Updates/Sparkle-LICENSE.txt).

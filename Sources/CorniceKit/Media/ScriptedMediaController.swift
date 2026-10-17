@@ -6,7 +6,7 @@ import Foundation
 public actor ScriptedMediaController: MediaControlling {
 
     public nonisolated let source: MediaSource
-    private let runner: AppleScriptRunner
+    private let runner: any PlayerScriptRunning
 
     /// Use a unit separator so normal punctuation in song and album names does not split
     /// fields.
@@ -14,27 +14,32 @@ public actor ScriptedMediaController: MediaControlling {
 
     /// The last full metadata read, reused while the track has not changed.
     private var cachedTrack: MediaSnapshot?
+    private var metadataGeneration: UInt64 = 0
 
-    public init(source: MediaSource, runner: AppleScriptRunner) {
+    public init(source: MediaSource, runner: any PlayerScriptRunning) {
         self.source = source
         self.runner = runner
     }
 
     public nonisolated func isRunning() async -> Bool {
-        AppleScriptRunner.isRunning(bundleIdentifier: source.bundleIdentifier)
+        await runner.applicationIsRunning(bundleIdentifier: source.bundleIdentifier)
     }
 
     public func resetAuthorization() async {
-        await runner.clearDenial(source.scriptingName)
+        metadataGeneration &+= 1
         cachedTrack = nil
+        await runner.clearDenial(source.scriptingName)
     }
 
     /// Read playback and position often, but fetch full metadata only when the track
     /// changes. Each player property costs an Apple event.
     public func snapshot() async throws -> MediaSnapshot? {
+        let generation = metadataGeneration
         guard await isRunning() else { return nil }
+        try checkRead(generation)
 
         let light = try await execute(lightScript)
+        try checkRead(generation)
         guard let raw = light.string else { return nil }
         guard let state = Self.parseLight(raw, source: source) else { return nil }
         // State only, never the track: enough to tell a working poll from a
@@ -56,6 +61,7 @@ public actor ScriptedMediaController: MediaControlling {
 
         if !unchanged {
             let full = try await execute(readScript)
+            try checkRead(generation)
             guard let rawFull = full.string, let parsed = parse(rawFull) else { return nil }
             cachedTrack = parsed
         }
@@ -78,6 +84,11 @@ public actor ScriptedMediaController: MediaControlling {
             volume: state.volume,
             capturedAt: .now
         )
+    }
+
+    private func checkRead(_ generation: UInt64) throws {
+        try Task.checkCancellation()
+        guard generation == metadataGeneration else { throw CancellationError() }
     }
 
     public func perform(_ command: MediaCommand) async throws {

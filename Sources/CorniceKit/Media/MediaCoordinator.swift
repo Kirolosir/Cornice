@@ -7,6 +7,8 @@ public actor MediaCoordinator {
     private let controllers: [MediaSource: any MediaControlling]
     private var lastActiveSource: MediaSource?
     private var health: [MediaSource: MediaConnectionHealth] = [:]
+    private var connectionGeneration: UInt64 = 0
+    private var connectionChanges = 0
 
     /// Artwork cache keyed by track identity, so the image is fetched once per
     /// song rather than once per poll.
@@ -45,14 +47,19 @@ public actor MediaCoordinator {
 
     /// The current snapshot from whichever player should be shown.
     public func snapshot() async -> MediaSnapshot? {
+        let generation = connectionGeneration
+        guard canApplyRead(generation) else { return nil }
         var candidates: [MediaSnapshot] = []
 
         for (source, controller) in controllers {
             guard !unavailableSources.contains(source) else { continue }
             guard await controller.isRunning() else { continue }
+            guard canApplyRead(generation) else { return nil }
             do {
                 health[source, default: MediaConnectionHealth()].lastAttempt = .now
-                if let snapshot = try await controller.snapshot(), snapshot.hasTrack {
+                let snapshot = try await controller.snapshot()
+                guard canApplyRead(generation) else { return nil }
+                if let snapshot, snapshot.hasTrack {
                     candidates.append(snapshot)
                 }
                 health[source, default: MediaConnectionHealth()].lastSuccess = .now
@@ -61,6 +68,7 @@ public actor MediaCoordinator {
             } catch is CancellationError {
                 return nil
             } catch let error as ServiceError {
+                guard canApplyRead(generation) else { return nil }
                 if case .unauthorized = error {
                     // Do not keep re-asking. The user said no; respect it until
                     // they say otherwise.
@@ -68,13 +76,14 @@ public actor MediaCoordinator {
                     health[source, default: MediaConnectionHealth()].permissionDenied = true
                     Log.media.notice("automation refused for \(source.displayName, privacy: .public)")
                 } else {
-                    await recordFailure(source, controller: controller)
+                    await recordFailure(source)
                     Log.media.notice("\(source.displayName, privacy: .public) read failed: \(error.headline, privacy: .public)")
                 }
                 // A player that is open with nothing loaded raises rather than
                 // returning empty; that is not worth surfacing.
             } catch {
-                await recordFailure(source, controller: controller)
+                guard canApplyRead(generation) else { return nil }
+                await recordFailure(source)
                 // Log unexpected script failures so an empty panel isn't the only clue.
                 Log.media.error(
                     "\(source.displayName, privacy: .public) poll failed: \(String(describing: error), privacy: .public)"
@@ -83,7 +92,7 @@ public actor MediaCoordinator {
             }
         }
 
-        guard !candidates.isEmpty else { return nil }
+        guard canApplyRead(generation), !candidates.isEmpty else { return nil }
 
         if let playing = candidates.first(where: { $0.state.isPlaying }) {
             lastActiveSource = playing.source
@@ -118,6 +127,8 @@ public actor MediaCoordinator {
 
     /// Lets the user retry after granting permission in System Settings.
     public func resetAvailability() async {
+        beginConnectionChange()
+        defer { endConnectionChange() }
         for controller in controllers.values {
             await controller.resetAuthorization()
         }
@@ -136,12 +147,30 @@ public actor MediaCoordinator {
         guard previous.lastRecovery.map({ now.timeIntervalSince($0) >= 15 }) ?? true else { return }
         health[source, default: MediaConnectionHealth()].lastRecovery = now
         health[source, default: MediaConnectionHealth()].recoveries += 1
+        beginConnectionChange()
+        defer { endConnectionChange() }
         await controller.resetAuthorization()
     }
 
-    private func recordFailure(_ source: MediaSource, controller: any MediaControlling) async {
+    private func recordFailure(_ source: MediaSource) async {
         health[source, default: MediaConnectionHealth()].failures += 1
         if health[source]?.shouldRecover(at: .now) == true { await recover(source) }
+    }
+
+    private func canApplyRead(_ generation: UInt64) -> Bool {
+        !Task.isCancelled && generation == connectionGeneration && connectionChanges == 0
+    }
+
+    // A player request can return after Reconnect. Its old denial must not undo the reset,
+    // and a read started halfway through a reset must wait for the next poll too.
+    private func beginConnectionChange() {
+        connectionGeneration &+= 1
+        connectionChanges += 1
+    }
+
+    private func endConnectionChange() {
+        connectionGeneration &+= 1
+        connectionChanges -= 1
     }
 
     // MARK: - Artwork

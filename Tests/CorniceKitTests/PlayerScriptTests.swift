@@ -71,4 +71,73 @@ final class PlayerScriptTests: XCTestCase {
             )
         }
     }
+
+    func testReconnectDiscardsAnOldFullMetadataReply() async throws {
+        let runner = HeldMetadataRunner()
+        let controller = ScriptedMediaController(source: .spotify, runner: runner)
+        let oldRead = Task { try await controller.snapshot() }
+        await runner.waitForFullRead()
+        await controller.resetAuthorization()
+        await runner.finishFullRead()
+
+        do {
+            _ = try await oldRead.value
+            XCTFail("metadata requested before reconnect should be discarded")
+        } catch is CancellationError {} catch { XCTFail("unexpected error: \(error)") }
+        let current = try await controller.snapshot()
+        let fullReads = await runner.fullReads
+        XCTAssertEqual(fullReads, 2, "reconnect must fetch metadata again even for the same title and duration")
+        XCTAssertEqual(current?.artist, "Current artist")
+    }
+
+    func testCancelledMetadataCannotFillTheTrackCache() async throws {
+        let runner = HeldMetadataRunner()
+        let controller = ScriptedMediaController(source: .spotify, runner: runner)
+        let oldRead = Task { try await controller.snapshot() }
+        await runner.waitForFullRead()
+        oldRead.cancel()
+        await runner.finishFullRead()
+
+        do {
+            _ = try await oldRead.value
+            XCTFail("a cancelled metadata reply should be discarded")
+        } catch is CancellationError {} catch { XCTFail("unexpected error: \(error)") }
+        let current = try await controller.snapshot()
+        let fullReads = await runner.fullReads
+        XCTAssertEqual(fullReads, 2)
+        XCTAssertEqual(current?.artist, "Current artist")
+    }
+}
+
+private actor HeldMetadataRunner: PlayerScriptRunning {
+    private(set) var fullReads = 0
+    private var pendingFullRead: CheckedContinuation<Void, Never>?
+    private var fullReadStarted: CheckedContinuation<Void, Never>?
+
+    func applicationIsRunning(bundleIdentifier: String) async -> Bool { true }
+    func clearDenial(_ target: String) async {}
+    func run(_ source: String, target: String) async throws -> AppleScriptRunner.ScriptResult {
+        let fields: [String]
+        if source.contains("set trackArtist") {
+            fullReads += 1
+            let read = fullReads
+            if read == 1 {
+                await withCheckedContinuation { continuation in
+                    pendingFullRead = continuation
+                    fullReadStarted?.resume()
+                    fullReadStarted = nil
+                }
+            }
+            fields = ["playing", "Same title", read == 1 ? "Old artist" : "Current artist", "Album",
+                      "180000", "20", "", "false", "off", "50"]
+        } else {
+            fields = ["playing", "Same title", "180000", "20", "50", "false", "off"]
+        }
+        return AppleScriptRunner.ScriptResult(string: fields.joined(separator: "\u{1f}"), data: nil)
+    }
+    func waitForFullRead() async {
+        if pendingFullRead != nil { return }
+        await withCheckedContinuation { fullReadStarted = $0 }
+    }
+    func finishFullRead() { pendingFullRead?.resume(); pendingFullRead = nil }
 }

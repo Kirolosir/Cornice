@@ -26,7 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         Log.app.notice("Cornice starting")
 
-        let preview = arguments.contains("--preview-ui")
+        let preview = arguments.contains("--preview-ui") || Bundle.main.bundleIdentifier == "dev.cornice.preview"
         let services = preview ? PreviewServices.container() : ServiceContainer.live()
         let model = AppModel(services: services)
         let controller = NotchWindowController(model: model)
@@ -36,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         UNUserNotificationCenter.current().delegate = notificationDelegate
 
-        if !preview { AppUpdater.shared.start() }
+        AppUpdater.shared.start()
         AppUpdater.shared.beforeRelaunch = { [weak model] in await model?.persistForRelaunch() }
         model.onCheckForUpdates = { AppUpdater.shared.check() }
         model.onShowSetup = { [weak model] in

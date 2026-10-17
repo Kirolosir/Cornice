@@ -15,7 +15,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -43,3 +43,13 @@ jobs:
           test -f dist/Cornice.app/Contents/Resources/AppIcon.icns
           test -f dist/Cornice.app/Contents/Frameworks/Sparkle.framework/Sparkle
           plutil -lint dist/Cornice.app/Contents/Info.plist
+      - name: Run app integration checks
+        run: |
+          python3 - <<'PYTHON'
+          import subprocess
+
+          executable = "dist/Cornice.app/Contents/MacOS/Cornice"
+          for probe in ("--probe-features", "--probe-media-refresh"):
+              print(f"Running {probe}", flush=True)
+              subprocess.run([executable, probe], check=True, timeout=90)
+          PYTHON

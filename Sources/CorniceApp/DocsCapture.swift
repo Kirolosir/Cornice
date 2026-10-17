@@ -7,8 +7,6 @@ import CorniceKit
 @MainActor
 enum DocsCapture {
 
-    private static let scale: CGFloat = 2
-
     static func run(outputDirectory: String) async -> Never {
         let directory = URL(fileURLWithPath: outputDirectory)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -61,19 +59,16 @@ enum DocsCapture {
         model.startFocusSession()
         model.toggleFocusSession()
         model.present(.expanded)
-        capture(model: model, geometry: geometry, name: "focus", to: directory)
+        await capture(model: model, geometry: geometry, name: "focus", to: directory)
         model.stopFocusSession()
         model.timerModeIsFocus = false
 
         for page in 0..<3 {
-            captureView(SetupView(model: model, close: {}, page: page), name: "setup-\(page + 1)", to: directory)
+            await captureView(SetupView(model: model, close: {}, page: page), name: "setup-\(page + 1)", to: directory)
         }
-        for (tab, name) in [(SettingsTab.general, "general"), (.audio, "audio"), (.spotify, "spotify"),
-                            (.timers, "timers"), (.updates, "updates"), (.about, "about")] {
-            let navigation = SettingsNavigation()
-            navigation.tab = tab
-            captureView(SettingsView(model: model, navigation: navigation), name: "settings-\(name)", to: directory)
-        }
+        await captureView(TimerSettings(model: model).frame(width: 580, height: 560), name: "settings-timers", to: directory)
+        await captureView(UpdateSettings().frame(width: 580, height: 560), name: "settings-updates", to: directory)
+        await captureView(AboutSettings(model: model).frame(width: 580, height: 560), name: "settings-about", to: directory)
         model.stopRefreshLoops()
         model.applyTelemetry(history)
         model.addTimer(minutes: 25)
@@ -89,15 +84,16 @@ enum DocsCapture {
         ] {
             model.select(module: module)
             model.present(state)
+            model.stopRefreshLoops()
             try? await Task.sleep(for: .milliseconds(420))
             if module == .stats { model.applyTelemetry(history) }
-            capture(model: model, geometry: geometry, name: name, to: directory)
+            await capture(model: model, geometry: geometry, name: name, to: directory)
         }
 
         model.select(module: .media)
         model.playPause()
         try? await Task.sleep(for: .milliseconds(420))
-        capture(model: model, geometry: geometry, name: "player-paused", to: directory)
+        await capture(model: model, geometry: geometry, name: "player-paused", to: directory)
         model.playPause()
 
         let originalArtwork = model.artwork
@@ -112,7 +108,7 @@ enum DocsCapture {
             image.unlockFocus()
             model.applyArtwork(image)
             try? await Task.sleep(for: .milliseconds(550))
-            capture(model: model, geometry: geometry, name: name, to: directory)
+            await capture(model: model, geometry: geometry, name: name, to: directory)
         }
         model.applyArtwork(originalArtwork)
 
@@ -124,7 +120,7 @@ enum DocsCapture {
             AppModel.DeviceActivity(name: "AirPods Pro", symbol: "airpods.pro", batteryLevel: 0.78)
         )
         try? await Task.sleep(for: .seconds(1.4))
-        capture(model: model, geometry: geometry, name: "airpods", to: directory)
+        await capture(model: model, geometry: geometry, name: "airpods", to: directory)
 
         // Every system HUD, at its measured size. These are otherwise only on
         // screen for a second or two when the machine does something.
@@ -136,7 +132,7 @@ enum DocsCapture {
         for content in Self.hudGallery(timer: liveTimer) {
             model.presentHUD(content)
             try? await Task.sleep(for: .milliseconds(420))
-            capture(model: model, geometry: geometry, name: "hud-\(content.kind.rawValue)", to: directory)
+            await capture(model: model, geometry: geometry, name: "hud-\(content.kind.rawValue)", to: directory)
             model.dismissHUD()
             try? await Task.sleep(for: .milliseconds(360))
         }
@@ -165,16 +161,28 @@ enum DocsCapture {
         .focusPhase(message: "Time for a break"),
     ] }
 
-    private static func captureView<V: View>(_ view: V, name: String, to directory: URL) {
-        let renderer = ImageRenderer(content: view.environment(\.colorScheme, .dark))
-        renderer.scale = scale
-        guard let tiff = renderer.nsImage?.tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiff),
-              let png = bitmap.representation(using: .png, properties: [:]) else {
+    private static func captureView<V: View>(_ view: V, name: String, to directory: URL) async {
+        let content = view.environment(\.colorScheme, .dark)
+            .transaction { $0.disablesAnimations = true }
+            .background(Color(nsColor: .windowBackgroundColor))
+        let hosting = NSHostingView(rootView: content)
+        let size = hosting.fittingSize
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = hosting
+        window.appearance = NSAppearance(named: .darkAqua)
+        hosting.frame = NSRect(origin: .zero, size: size)
+        hosting.layoutSubtreeIfNeeded()
+        try? await Task.sleep(for: .milliseconds(180))
+        hosting.layoutSubtreeIfNeeded()
+        guard let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
             print("could not render \(name)"); return
         }
+        hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+        guard let png = bitmap.representation(using: .png, properties: [:]) else { return }
         try? png.write(to: directory.appendingPathComponent("\(name).png"))
         print("  \(name).png")
+        window.contentView = nil
     }
 
     private static func capture(
@@ -182,7 +190,7 @@ enum DocsCapture {
         geometry: SurfaceGeometry,
         name: String,
         to directory: URL
-    ) {
+    ) async {
         let surfaceSize = geometry.size(for: model.surfaceState)
         // Leave room for the shadow and the title beside the notch. Cropping to the panel
         // would hide the resting content.
@@ -205,20 +213,6 @@ enum DocsCapture {
         .clipped()
         .environment(\.colorScheme, .dark)
 
-        let renderer = ImageRenderer(content: content)
-        renderer.scale = scale
-        renderer.isOpaque = true
-
-        guard let image = renderer.nsImage,
-              let tiff = image.tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiff),
-              let png = bitmap.representation(using: .png, properties: [:])
-        else {
-            print("could not render \(name)")
-            return
-        }
-
-        try? png.write(to: directory.appendingPathComponent("\(name).png"))
-        print("  \(name).png  \(Int(canvas.width))×\(Int(canvas.height))")
+        await captureView(content, name: name, to: directory)
     }
 }

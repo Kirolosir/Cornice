@@ -32,18 +32,20 @@ final class TelemetryProbeTests: XCTestCase {
     }
 
     /// The first reading needs a second set of counters before it is available.
-    func testCPULoadIsAFractionAndWaitsForADelta() async {
+    func testCPULoadIsAFractionAndWaitsForADelta() async throws {
         let probe = HostTelemetryProbe()
 
         let first = await probe.sample()
         XCTAssertFalse(first.cpuAvailable, "nothing to difference against yet")
 
-        // Give the counters something to move.
-        var sink = 0.0
-        for index in 0..<400_000 { sink += Double(index).squareRoot() }
-        XCTAssertGreaterThan(sink, 0)
-
-        let second = await probe.sample()
+        // CPU counters advance on the kernel's clock. A short calculation can finish
+        // between ticks, especially on a hosted test machine.
+        var second = first
+        for _ in 0..<50 {
+            try await Task.sleep(for: .milliseconds(20))
+            second = await probe.sample()
+            if second.cpuAvailable { break }
+        }
         XCTAssertTrue(second.cpuAvailable)
         XCTAssertGreaterThanOrEqual(second.cpuUsage, 0)
         XCTAssertLessThanOrEqual(second.cpuUsage, 1, "load is a fraction of total capacity")

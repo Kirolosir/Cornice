@@ -736,7 +736,7 @@ final class AppModel {
         if accessChanged { mediaRefreshSequence &+= 1 }
         preferences = updated
         allowsMediaAutomation = updated.mediaAccessEnabled
-        if !allowsMediaAutomation {
+        if accessChanged && !allowsMediaAutomation {
             media = nil
             refreshArtwork(for: nil)
             musicNeedsRecovery = false

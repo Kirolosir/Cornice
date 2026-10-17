@@ -1,9 +1,15 @@
 import Foundation
 import AppKit
 
+public protocol PlayerScriptRunning: Sendable {
+    func run(_ source: String, target: String) async throws -> AppleScriptRunner.ScriptResult
+    func clearDenial(_ target: String) async
+    func applicationIsRunning(bundleIdentifier: String) async -> Bool
+}
+
 /// Compile and reuse NSAppleScript objects instead of launching osascript on every poll.
 /// Run them on one serial queue because they aren't thread-safe.
-public actor AppleScriptRunner {
+public actor AppleScriptRunner: PlayerScriptRunning {
 
     /// Holds compiled scripts. `@unchecked Sendable` because the instances are
     /// only ever touched on `queue`, never concurrently.
@@ -28,6 +34,7 @@ public actor AppleScriptRunner {
     /// Set once a call fails with "not authorised", so we stop re-triggering a
     /// prompt the user has already answered.
     private var deniedTargets: Set<String> = []
+    private var denialGenerations: [String: UInt64] = [:]
 
     public init() {}
 
@@ -36,7 +43,14 @@ public actor AppleScriptRunner {
 
     /// Clears a denial so the next call re-asks. Used after the user says they
     /// have granted permission in System Settings.
-    public func clearDenial(_ target: String) { deniedTargets.remove(target) }
+    public func clearDenial(_ target: String) {
+        denialGenerations[target, default: 0] &+= 1
+        deniedTargets.remove(target)
+    }
+
+    public nonisolated func applicationIsRunning(bundleIdentifier: String) async -> Bool {
+        Self.isRunning(bundleIdentifier: bundleIdentifier)
+    }
 
     /// Return only Sendable values. Keep the Apple event descriptor on the execution queue
     /// and extract its text or image bytes there.
@@ -57,6 +71,7 @@ public actor AppleScriptRunner {
         }
 
         let request = Request()
+        let denialGeneration = denialGenerations[target, default: 0]
         do {
             return try await withTaskCancellationHandler {
                 try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<ScriptResult, any Error>) in
@@ -81,7 +96,10 @@ public actor AppleScriptRunner {
                 request.cancel()
             }
         } catch let error as ServiceError {
-            if case .unauthorized = error { deniedTargets.insert(target) }
+            if case .unauthorized = error,
+               denialGeneration == denialGenerations[target, default: 0] {
+                deniedTargets.insert(target)
+            }
             throw error
         }
     }

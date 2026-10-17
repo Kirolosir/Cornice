@@ -18,7 +18,7 @@ struct SystemReadingsFooter: View {
             Spacer(minLength: 0)
             if let battery = sample.battery {
                 Label("\(Int((battery.level * 100).rounded()))% · \(battery.isCharging ? "Charging" : battery.isPluggedIn ? "On power" : "Battery")",
-                      systemImage: battery.isCharging ? "battery.100percent.bolt" : "battery.75percent")
+                      systemImage: battery.isCharging ? "battery.100percent.bolt" : batterySymbol(battery.level))
                 Text(battery.condition.title).foregroundStyle(ink.tertiary)
             } else {
                 Text("Battery unavailable").foregroundStyle(ink.tertiary)
@@ -36,6 +36,16 @@ struct SystemReadingsFooter: View {
             if !visible { model.onPopoverClosed?() }
         }
         .onDisappear { model.isPresentingPopover = false }
+    }
+
+    private func batterySymbol(_ level: Double) -> String {
+        switch level {
+        case ..<0.125: "battery.0percent"
+        case ..<0.375: "battery.25percent"
+        case ..<0.625: "battery.50percent"
+        case ..<0.875: "battery.75percent"
+        default: "battery.100percent"
+        }
     }
 
     private var details: some View {
