@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             SetupWindow.shared.show(model: model)
         }
         installStatusItem(model: model, controller: controller)
+        installApplicationMenu()
 
         Probes.runAttached(arguments, model: model, controller: controller)
 
@@ -96,6 +97,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Status item
+
+    private func installApplicationMenu() {
+        let menu = NSMenu()
+        let appItem = NSMenuItem()
+        let appMenu = NSMenu(title: "Cornice")
+        let settings = appMenu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        settings.target = self
+        let updates = appMenu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+        updates.target = self
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Quit Cornice", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appItem.submenu = appMenu
+        menu.addItem(appItem)
+
+        // AppKit text fields use the Edit menu for the usual shortcuts, including
+        // Select All while editing timer presets or the Spotify client ID.
+        let editItem = NSMenuItem()
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        let redo = editMenu.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "z")
+        redo.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editItem.submenu = editMenu
+        menu.addItem(editItem)
+        NSApp.mainMenu = menu
+    }
 
     /// A menu-bar item, because an accessory app with no Dock icon otherwise
     /// has no discoverable way to reach settings or quit.

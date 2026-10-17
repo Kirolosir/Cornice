@@ -153,6 +153,8 @@ closed, it comes back as finished without playing an old alarm. If a focus phase
 ends while it's closed, the next phase waits for you when you reopen the app,
 even if automatic starts were enabled.
 
+![Focus session](Docs/images/focus.png)
+
 ## Spotify connection
 
 The normal Spotify controls work through AppleScript. Connecting the Web API
