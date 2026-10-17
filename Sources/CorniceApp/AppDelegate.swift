@@ -4,7 +4,7 @@ import CorniceKit
 
 /// Composition root and application lifecycle.
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private var model: AppModel?
     private var windowController: NotchWindowController?
@@ -125,6 +125,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = editMenu
         menu.addItem(editItem)
+        let viewItem = NSMenuItem()
+        let viewMenu = NSMenu(title: "View")
+        let toggle = viewMenu.addItem(withTitle: "Toggle Panel", action: #selector(togglePanel), keyEquivalent: "")
+        toggle.target = self
+        viewMenu.addItem(.separator())
+        for (index, module) in ModuleKind.allCases.enumerated() {
+            let item = viewMenu.addItem(withTitle: module.title, action: #selector(selectPanel(_:)), keyEquivalent: String(index + 1))
+            item.tag = index
+            item.target = self
+        }
+        viewItem.submenu = viewMenu
+        menu.addItem(viewItem)
         NSApp.mainMenu = menu
     }
 
@@ -143,7 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             withTitle: "Toggle Panel",
             action: #selector(togglePanel),
             keyEquivalent: "d"
-        ).keyEquivalentModifierMask = [.command, .option]
+        ).keyEquivalentModifierMask = [.command, .option, .control]
         menu.addItem(.separator())
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         menu.addItem(withTitle: "Set Up Cornice…", action: #selector(openSetup), keyEquivalent: "")
@@ -161,6 +173,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func togglePanel() {
         windowController?.toggle()
+    }
+
+    @objc private func selectPanel(_ item: NSMenuItem) {
+        guard let model, ModuleKind.allCases.indices.contains(item.tag) else { return }
+        let module = ModuleKind.allCases[item.tag]
+        guard model.preferences.enabledModules.contains(module) else { return }
+        model.select(module: module)
+        windowController?.open()
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        guard menuItem.action == #selector(selectPanel(_:)) else { return true }
+        guard let model, ModuleKind.allCases.indices.contains(menuItem.tag) else { return false }
+        return model.preferences.enabledModules.contains(ModuleKind.allCases[menuItem.tag])
     }
 
     @objc private func openSetup() {

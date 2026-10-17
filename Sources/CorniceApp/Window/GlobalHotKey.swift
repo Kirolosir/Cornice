@@ -2,15 +2,14 @@ import AppKit
 import Carbon.HIToolbox
 import CorniceKit
 
-/// Register Option-Command-D with Carbon. This gives us one global shortcut without
+/// Register Control-Option-Command-D with Carbon. This gives us one global shortcut without
 /// monitoring the user's keystrokes or asking for Accessibility access.
 @MainActor
 final class GlobalHotKey {
 
-    /// ⌥⌘D. "developer". Chosen because it is unclaimed by macOS and by the
-    /// editors this app launches.
+    /// Adding Control avoids the Dock's existing Option-Command-D shortcut.
     static let defaultKeyCode = UInt32(kVK_ANSI_D)
-    static let defaultModifiers = UInt32(optionKey | cmdKey)
+    static let defaultModifiers = UInt32(controlKey | optionKey | cmdKey)
 
     private var hotKeyRef: EventHotKeyRef?
     private var eventHandler: EventHandlerRef?

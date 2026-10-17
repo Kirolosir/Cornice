@@ -223,6 +223,7 @@ struct ModuleButton: View {
     let action: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var ink: Theme.Ink { .of(scheme) }
 
     var body: some View {
@@ -242,9 +243,8 @@ struct ModuleButton: View {
                 .foregroundStyle(isActive ? ink.primary : ink.tertiary)
         }
         .buttonStyle(PressScaleStyle(pressedScale: 0.94))
-        .animation(Theme.Motion.contentSwap, value: isActive)
+        .animation(reduceMotion ? nil : Theme.Motion.contentSwap, value: isActive)
         .help(module.title)
-        .keyboardShortcut(KeyEquivalent(module == .media ? "1" : module == .timers ? "2" : "3"), modifiers: .command)
         .accessibilityLabel(module.title)
         .accessibilityAddTraits(isActive ? [.isButton, .isSelected] : .isButton)
     }

@@ -21,6 +21,8 @@ extension Probes {
         controller.pointerChanged(hovering: false)
         try? await Task.sleep(for: .milliseconds(300))
         check(model.surfaceState == .expanded, "keyboard opening stays open when the pointer leaves")
+        controller.open()
+        check(model.surfaceState == .expanded, "opening a selected panel never toggles it closed")
         model.select(module: .stats)
         try? await Task.sleep(for: .milliseconds(300))
         check(model.surfaceState == .expanded && model.activeModule == .stats,

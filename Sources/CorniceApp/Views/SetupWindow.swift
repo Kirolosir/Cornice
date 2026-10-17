@@ -90,7 +90,7 @@ struct SetupView: View {
             Text("Music, timers and a quick look at your Mac, right around the notch.")
                 .font(.body).foregroundStyle(.secondary)
             Label("Hover directly over the notch to open it.", systemImage: "cursorarrow.rays")
-            Label("Press ⌥⌘D to open it from the keyboard.", systemImage: "keyboard")
+            Label("Press ⌃⌥⌘D to open it from the keyboard.", systemImage: "keyboard")
             Label("Use ⌘1, ⌘2 and ⌘3 to switch panels.", systemImage: "rectangle.3.group")
             Text("Music controls, audio capture and notifications are optional. You can change them later in Settings.")
                 .font(.caption).foregroundStyle(.secondary)

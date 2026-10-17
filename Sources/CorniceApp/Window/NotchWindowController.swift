@@ -273,15 +273,17 @@ final class NotchWindowController {
     }
 
     func toggle() {
+        if model.surfaceState.isOpen { close() }
+        else { open() }
+    }
+
+    func open() {
         openTask?.cancel()
         closeTask?.cancel()
-        if model.surfaceState.isOpen { close() }
-        else {
-            // Keyboard and menu opening should work with the pointer anywhere on screen.
-            openedExplicitly = true
-            present(.expanded)
-            panel?.makeKey()
-        }
+        // Selecting a panel should never close one that is already open.
+        openedExplicitly = true
+        present(.expanded)
+        panel?.makeKeyAndOrderFront(nil)
     }
 
     func close() {

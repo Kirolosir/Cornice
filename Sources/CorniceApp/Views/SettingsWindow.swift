@@ -466,7 +466,7 @@ struct AboutSettings: View {
 
             Spacer()
 
-            Text("Keyboard: ⌥⌘D to open · ⌘1–3 to switch panels · Esc to close")
+            Text("Keyboard: ⌃⌥⌘D to open · ⌘1–3 to switch panels · Esc to close")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

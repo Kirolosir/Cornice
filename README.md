@@ -32,7 +32,7 @@ window. I'm still working on it and polishing the parts that feel off.
   audio devices. Download notices can be enabled in Settings.
 
 Hover only starts inside the notch's measured bounds. It gets measured again
-when your display or scaling changes. You can also open the panel with **⌥⌘D**
+when your display or scaling changes. You can also open the panel with **⌃⌥⌘D**
 and switch between Music, Timers and System with **⌘1**, **⌘2** and **⌘3**.
 Buttons support keyboard focus, and animations follow macOS Reduce Motion.
 
