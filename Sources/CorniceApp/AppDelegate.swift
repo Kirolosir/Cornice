@@ -52,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task {
             await model.start()
             if !model.preferences.hasCompletedSetup { SetupWindow.shared.show(model: model) }
+            else if preview { SettingsWindow.shared.show(model: model) }
             // Launch-at-login can be changed from System Settings, so the
             // stored preference is reconciled with the system's actual state
             // rather than trusted.

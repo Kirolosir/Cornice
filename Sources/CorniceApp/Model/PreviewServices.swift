@@ -42,14 +42,14 @@ enum PreviewServices {
 /// A player with a fixed track, whose playhead advances in real time.
 private actor PreviewMediaController: MediaControlling {
     nonisolated let source: MediaSource = .spotify
-    private let startedAt = Date()
+    private let duration: TimeInterval = 272
+    private var positionAtChange: TimeInterval = 74
+    private var changedAt = Date()
     private var state: PlaybackState = .playing
 
     nonisolated func isRunning() async -> Bool { true }
 
     func snapshot() async throws -> MediaSnapshot? {
-        let duration: TimeInterval = 272
-        let elapsed = Date().timeIntervalSince(startedAt).truncatingRemainder(dividingBy: duration)
         return MediaSnapshot(
             source: .spotify,
             state: state,
@@ -57,7 +57,7 @@ private actor PreviewMediaController: MediaControlling {
             artist: "Arctic Monkeys",
             album: "AM",
             duration: duration,
-            position: 74 + elapsed * 0,
+            position: currentPosition(),
             artworkURL: nil,
             artworkData: Self.cover,
             isShuffling: false,
@@ -68,7 +68,25 @@ private actor PreviewMediaController: MediaControlling {
     }
 
     func perform(_ command: MediaCommand) async throws {
-        if command == .playPause { state = state.isPlaying ? .paused : .playing }
+        let now = Date()
+        switch command {
+        case .playPause:
+            positionAtChange = currentPosition(at: now)
+            changedAt = now
+            state = state.isPlaying ? .paused : .playing
+        case .seek(let position):
+            positionAtChange = position.clamped(to: 0...duration)
+            changedAt = now
+        case .next, .previous:
+            positionAtChange = 0
+            changedAt = now
+        default: break
+        }
+    }
+
+    private func currentPosition(at now: Date = .now) -> TimeInterval {
+        let elapsed = state.isPlaying ? max(0, now.timeIntervalSince(changedAt)) : 0
+        return (positionAtChange + elapsed).truncatingRemainder(dividingBy: duration)
     }
 
     /// A generated cover, so the documentation images exercise the artwork and

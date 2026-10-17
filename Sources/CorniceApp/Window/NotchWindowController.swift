@@ -14,7 +14,10 @@ final class NotchWindowController {
     private var openTask: Task<Void, Never>?
     private var closeTask: Task<Void, Never>?
     private var observers: [any NSObjectProtocol] = []
+    private var workspaceObservers: [any NSObjectProtocol] = []
+    private var mouseMonitors: [Any] = []
     private var hotKey: GlobalHotKey?
+    private var openedExplicitly = false
 
     private var profile: NotchProfile?
     private var geometry: SurfaceGeometry?
@@ -38,7 +41,12 @@ final class NotchWindowController {
             return
         }
 
-        let frame = windowFrame(for: profile, geometry: geometry)
+        buildPanel(frame: windowFrame(for: profile, geometry: geometry), geometry: geometry, show: true)
+        model.updateGeometry(profile)
+    }
+
+    @discardableResult
+    private func buildPanel(frame: NSRect, geometry: SurfaceGeometry, show: Bool) -> NotchPanel {
         let panel = NotchPanel(contentRect: frame)
 
         let container = NotchContentView(frame: CGRect(origin: .zero, size: frame.size))
@@ -57,15 +65,26 @@ final class NotchWindowController {
 
         panel.contentView = container
         panel.onCancel = { [weak self] in self?.close() }
-        panel.orderFrontRegardless()
+        if show { panel.orderFrontRegardless() }
 
         self.panel = panel
         self.contentView = container
 
-        model.updateGeometry(profile)
         model.onSurfaceStateChanged = { [weak self] in self?.syncInteractiveRect() }
         model.onPopoverClosed = { [weak self] in self?.contentView?.reevaluateHover() }
+        if show { observeExplicitDismissal(of: panel) }
         syncInteractiveRect()
+        return panel
+    }
+
+    // The interaction probe uses an offscreen panel without registering a hotkey or
+    // watching clicks in the user's other apps.
+    func installProbePanel() -> NotchPanel {
+        let geometry = SurfaceGeometry(notchSize: CGSize(width: 210, height: 32), notchCornerRadius: 8,
+                                       windowWidth: SurfaceGeometry.expandedWidth + 80)
+        self.geometry = geometry
+        return buildPanel(frame: NSRect(x: -10_000, y: -10_000, width: geometry.windowWidth,
+                                       height: geometry.windowHeight), geometry: geometry, show: false)
     }
 
     // MARK: - Geometry
@@ -101,7 +120,10 @@ final class NotchWindowController {
     /// Update AppKit's interactive area whenever the panel changes state.
     private func syncInteractiveRect() {
         guard let geometry, let contentView else { return }
-        if !model.surfaceState.isOpen && panel?.isKeyWindow == true { panel?.resignKey() }
+        if !model.surfaceState.isOpen {
+            openedExplicitly = false
+            if panel?.isKeyWindow == true { panel?.resignKey() }
+        }
         contentView.interactiveRect = model.surfaceState.hud != nil && model.hudContent?.isInteractive != true ? .zero : geometry.appKitRect(
             for: model.surfaceState,
             windowHeight: geometry.windowHeight
@@ -145,7 +167,7 @@ final class NotchWindowController {
 
         // Waking can reconfigure displays without posting a parameter change,
         // leaving the surface on a display that no longer exists.
-        observers.append(NSWorkspace.shared.notificationCenter.addObserver(
+        workspaceObservers.append(NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
@@ -160,9 +182,42 @@ final class NotchWindowController {
         hotKey?.register()
     }
 
+    private func observeExplicitDismissal(of panel: NotchPanel) {
+        let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        if let monitor = NSEvent.addGlobalMonitorForEvents(matching: clicks, handler: { [weak self] _ in
+            Task { @MainActor in self?.handleOutsideClick() }
+        }) { mouseMonitors.append(monitor) }
+        if let monitor = NSEvent.addLocalMonitorForEvents(matching: clicks, handler: { [weak self] event in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if event.window === self.panel, let contentView = self.contentView,
+                   contentView.interactiveRect.contains(contentView.convert(event.locationInWindow, from: nil)) {
+                    return
+                }
+                self.handleOutsideClick()
+            }
+            return event
+        }) { mouseMonitors.append(monitor) }
+        observers.append(NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification, object: panel, queue: .main
+        ) { [weak self] _ in
+            // A popover takes key focus too. Let SwiftUI finish presenting it before
+            // deciding whether focus moved out of Cornice's panel.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.panel?.isKeyWindow != true else { return }
+                self.handleOutsideClick()
+            }
+        })
+    }
+
+    func handleOutsideClick() {
+        guard openedExplicitly, model.surfaceState == .expanded, !model.isPresentingPopover else { return }
+        close()
+    }
+
     /// Peek immediately, then open after the hover delay. On exit, wait briefly before
     /// closing so a small pointer overshoot doesn't dismiss the panel.
-    private func pointerChanged(hovering: Bool) {
+    func pointerChanged(hovering: Bool) {
         model.setHovering(hovering)
 
         if hovering {
@@ -197,12 +252,14 @@ final class NotchWindowController {
                 return
             }
             guard model.surfaceState == .expanded, !model.isPresentingPopover else { return }
+            guard !openedExplicitly else { return }
             guard model.preferences.activationStyle == .hover else { return }
 
             closeTask?.cancel()
             closeTask = Task { [weak self] in
                 try? await Task.sleep(for: .milliseconds(220))
-                guard !Task.isCancelled, let self, !self.model.isHovering, !self.model.isPresentingPopover else { return }
+                guard !Task.isCancelled, let self, !self.openedExplicitly,
+                      !self.model.isHovering, !self.model.isPresentingPopover else { return }
                 self.present(.collapsed)
             }
         }
@@ -218,13 +275,19 @@ final class NotchWindowController {
     func toggle() {
         openTask?.cancel()
         closeTask?.cancel()
-        present(model.surfaceState.isOpen ? .collapsed : .expanded)
-        if model.surfaceState.isOpen { panel?.makeKey() }
+        if model.surfaceState.isOpen { close() }
+        else {
+            // Keyboard and menu opening should work with the pointer anywhere on screen.
+            openedExplicitly = true
+            present(.expanded)
+            panel?.makeKey()
+        }
     }
 
     func close() {
         openTask?.cancel()
         closeTask?.cancel()
+        openedExplicitly = false
         if model.surfaceState.hud != nil {
             model.dismissHUD()
         }
@@ -237,6 +300,10 @@ final class NotchWindowController {
         hotKey?.unregister()
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
         observers.removeAll()
+        for observer in workspaceObservers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
+        workspaceObservers.removeAll()
+        for monitor in mouseMonitors { NSEvent.removeMonitor(monitor) }
+        mouseMonitors.removeAll()
         panel?.orderOut(nil)
     }
 }

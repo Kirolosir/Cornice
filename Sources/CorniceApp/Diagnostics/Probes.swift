@@ -9,6 +9,10 @@ enum Probes {
     /// Probes that need no interface. Returns `true` when one has started, in
     /// which case launch should go no further.
     static func runDetached(_ arguments: [String]) -> Bool {
+        if arguments.contains("--probe-window") {
+            Task { await probeWindow() }
+            return true
+        }
         if arguments.contains("--probe-features") {
             Task { await probeFeatures() }
             return true

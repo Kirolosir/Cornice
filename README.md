@@ -219,6 +219,7 @@ dist/Cornice.app/Contents/MacOS/Cornice --probe-timers
 dist/Cornice.app/Contents/MacOS/Cornice --probe-appearance
 dist/Cornice.app/Contents/MacOS/Cornice --probe-media-refresh
 dist/Cornice.app/Contents/MacOS/Cornice --probe-features
+dist/Cornice.app/Contents/MacOS/Cornice --probe-window
 ```
 
 The timer check plays the alarm for eight seconds and checks repeat, adding time,
@@ -231,6 +232,7 @@ resuming while the panel stays closed. Neither changes your real player's
 playback or macOS permissions. The feature checks cover focus transitions,
 stalled-player recovery, saved sessions and settings. The feature probe checks
 these through the app model with test players and notifications.
+The window check covers keyboard opening, hover dismissal, popovers and Escape.
 
 To check an update feed without downloading or installing an update:
 

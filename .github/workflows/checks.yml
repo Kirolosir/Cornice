@@ -49,7 +49,7 @@ jobs:
           import subprocess
 
           executable = "dist/Cornice.app/Contents/MacOS/Cornice"
-          for probe in ("--probe-features", "--probe-media-refresh"):
+          for probe in ("--probe-features", "--probe-media-refresh", "--probe-window"):
               print(f"Running {probe}", flush=True)
               subprocess.run([executable, probe], check=True, timeout=90)
           PYTHON
