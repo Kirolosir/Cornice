@@ -283,7 +283,10 @@ final class NotchWindowController {
         // Selecting a panel should never close one that is already open.
         openedExplicitly = true
         present(.expanded)
-        panel?.makeKeyAndOrderFront(nil)
+        if let panel, panel.isVisible {
+            NSApp.activate(ignoringOtherApps: true)
+            panel.makeKeyAndOrderFront(nil)
+        }
     }
 
     func close() {
