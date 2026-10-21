@@ -70,7 +70,7 @@ The update feed and downloads are signed with an Ed25519 key. That update
 signature is separate from Apple's signing and notarization, so the first-launch
 steps above still apply to a fresh download.
 
-If you're on 0.3.1 or older, download and install 0.4.0 once to get the updater.
+If you're on 0.3.1 or older, download and install the latest release once to get the updater.
 Those older copies don't have an in-app update check.
 
 ## Build it yourself

@@ -1,8 +1,18 @@
-<?xml version="1.0" standalone="yes"?><!-- sparkle-sign-warning:
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
 --><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
         <title>Cornice</title>
+        <item>
+            <title>0.4.1</title>
+            <pubDate>Tue, 20 Oct 2026 20:51:35 -0400</pubDate>
+            <sparkle:version>57</sparkle:version>
+            <sparkle:shortVersionString>0.4.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description>&lt;p&gt;Fixed the music visualizer flattening or disappearing during player recovery. Quiet songs have more visible movement across six bars. Paused songs and muted output stay still.&lt;/p&gt;</description>
+            <enclosure url="https://github.com/Kirolosir/Cornice/releases/download/v0.4.1/Cornice-0.4.1.zip" length="3968293" type="application/octet-stream" sparkle:edSignature="S4wmz8b5e4mqFtppI7zSgcvyDaOSmpwq5dgCWKlYeQX2QEYKjyALTDCZpQZxKvRrluJiJ6Fq2kGbFrzMUGAoCw=="></enclosure>
+        </item>
         <item>
             <title>0.4.0</title>
             <pubDate>Sat, 17 Oct 2026 15:58:38 -0400</pubDate>
@@ -10,11 +20,11 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <sparkle:shortVersionString>0.4.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description><![CDATA[<h2>Cornice 0.4.0</h2><p>Added optional setup, signed in-app updates, music recovery, work/break focus sessions, saved timer presets and quiet completion.</p><p>Timers and focus sessions restore after relaunch. System now shows memory pressure and reported battery condition. Keyboard controls and Reduce Motion behavior have also been improved.</p><p>Keyboard: Control-Option-Command-D to toggle the panel, Command-1/2/3 to switch panels, Escape to close.</p>]]></description>
+            <description>&lt;h2&gt;Cornice 0.4.0&lt;/h2&gt;&lt;p&gt;Added optional setup, signed in-app updates, music recovery, work/break focus sessions, saved timer presets and quiet completion.&lt;/p&gt;&lt;p&gt;Timers and focus sessions restore after relaunch. System now shows memory pressure and reported battery condition. Keyboard controls and Reduce Motion behavior have also been improved.&lt;/p&gt;&lt;p&gt;Keyboard: Control-Option-Command-D to toggle the panel, Command-1/2/3 to switch panels, Escape to close.&lt;/p&gt;</description>
             <enclosure url="https://github.com/Kirolosir/Cornice/releases/download/v0.4.0/Cornice-0.4.0.zip" length="3960582" type="application/octet-stream" sparkle:edSignature="wugT1tMjWxNNcIXsBCKMTubovdtTCJibqDqr9c8mmFXqYafy76LYXspie9VMpuU5QSBYx5bw2INRGLvMxn31DA=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: 0VwQdQBWLvT6J7mS7XS3jcWXy53SS9PyzHtdEQlUSXzDX5o6g3tRKgdAsqiXv3FFZxhjD5ebFOw516EzL17nCQ==
-length: 1631
+edSignature: KuyY3c1Xn3c4bbFLYoU6BFo7blbCOv64sczw4zK27h4gSPuzgpUuka2HRt9YeBM8AekKY6hHjN/miOsC1+w7Dg==
+length: 2609
 -->
