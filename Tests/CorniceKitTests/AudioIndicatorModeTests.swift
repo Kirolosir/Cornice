@@ -23,4 +23,25 @@ final class AudioIndicatorModeTests: XCTestCase {
         XCTAssertEqual(AudioIndicatorMode.resolve(captureEnabled: true, captureRunning: true,
                        hasTrack: false, isPlaying: false, hasAudio: true), .spectrum)
     }
+
+    func testStalePlaybackDoesNotHideCapturedAudio() {
+        XCTAssertEqual(AudioIndicatorMode.resolve(captureEnabled: true, captureRunning: true,
+                       hasTrack: true, isPlaying: true, hasAudio: true,
+                       playbackIsReliable: false), .spectrum)
+        XCTAssertEqual(AudioIndicatorMode.resolve(captureEnabled: true, captureRunning: true,
+                       hasTrack: false, isPlaying: false, hasAudio: true,
+                       playbackIsReliable: false), .spectrum)
+    }
+
+    func testRecoveryCannotInventPlaybackOrOverrideAPause() {
+        XCTAssertEqual(AudioIndicatorMode.resolve(captureEnabled: false, captureRunning: false,
+                       hasTrack: true, isPlaying: true, hasAudio: false,
+                       playbackIsReliable: false), .resting)
+        XCTAssertEqual(AudioIndicatorMode.resolve(captureEnabled: true, captureRunning: true,
+                       hasTrack: true, isPlaying: false, hasAudio: true,
+                       playbackIsReliable: false), .resting)
+        XCTAssertEqual(AudioIndicatorMode.resolve(captureEnabled: true, captureRunning: true,
+                       hasTrack: true, isPlaying: true, hasAudio: false,
+                       playbackIsReliable: false), .resting)
+    }
 }

@@ -51,12 +51,12 @@ public struct AudioLevels: Sendable, Equatable {
         // Keep some motion for quiet music, but close the gate at silence or mute. The
         // floor mustn't keep the bars moving with no audible output.
         let gate = min(1, audible / 0.006)
-        let headroom = gate * (0.10 + 0.90 * pow(audible, 0.8))
+        let headroom = gate * (0.25 + 0.75 * sqrt(audible))
 
         return (0..<count).map { index in
-            // Lift midrange band values a little so their motion is visible without pinning
-            // the bars at full height.
-            let energy = pow(min(1, max(0, peak(of: index, of: count))), 0.75)
+            // Both the band and the overall level contain loudness. A gentler curve
+            // keeps that combined attenuation visible in a 14-point bar.
+            let energy = sqrt(min(1, max(0, peak(of: index, of: count))))
             // Give the bass bar a small beat kick. Apply the same gate so it stays still
             // when muted.
             let kick = index == 0 ? beatIntensity * 0.14 * gate : 0

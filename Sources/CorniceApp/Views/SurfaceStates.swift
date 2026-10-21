@@ -4,7 +4,7 @@ import CorniceKit
 // MARK: - Resting
 
 /// Resting content sits beside the notch, since the cutout itself can't display anything.
-/// With no track, leave these margins empty.
+/// Captured audio can keep its indicator here while a player reconnects.
 struct RestingMarginView: View {
     @Bindable var model: AppModel
     let geometry: SurfaceGeometry
@@ -19,8 +19,9 @@ struct RestingMarginView: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             Color.clear
-            if let snapshot, snapshot.hasTrack, model.preferences.idleDisplay != .nothing {
-                trailing(snapshot)
+            if model.preferences.idleDisplay != .nothing,
+               snapshot?.hasTrack == true || model.showsRestingIndicator {
+                trailing
                     .frame(width: 88, height: geometry.notchSize.height, alignment: .leading)
                     .offset(x: columnLeft)
             }
@@ -33,14 +34,14 @@ struct RestingMarginView: View {
     }
 
     @ViewBuilder
-    private func trailing(_ snapshot: MediaSnapshot) -> some View {
+    private var trailing: some View {
         if showsSpectrum {
             EqualizerIndicator(
                 model: model,
-                isLive: model.surfaceState == .collapsed && snapshot.state.isPlaying,
+                isLive: model.surfaceState == .collapsed,
                 tint: model.artworkTint ?? Theme.Ink.dark.secondary
             )
-        } else {
+        } else if let snapshot {
             Text(snapshot.title)
                 .font(Theme.Typeface.stamp)
                 .foregroundStyle(Color(white: 1, opacity: 0.72))
@@ -82,6 +83,15 @@ struct PeekContentView: View {
                 EqualizerIndicator(
                     model: model,
                     isLive: model.surfaceState == .peek && snapshot.state.isPlaying,
+                    tint: model.artworkTint ?? Theme.Ink.dark.secondary
+                )
+            } else if model.indicatorMode == .spectrum {
+                Text("System audio")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(Theme.Ink.dark.tertiary)
+                EqualizerIndicator(
+                    model: model,
+                    isLive: model.surfaceState == .peek,
                     tint: model.artworkTint ?? Theme.Ink.dark.secondary
                 )
             } else {

@@ -128,7 +128,8 @@ If the visualizer can't hear anything, check the Audio Recording settings. The
 Cornice checks for repeated player errors and a playback position that stops
 moving. It tries to reconnect, with a delay between attempts. You can also use
 **Reconnect Players** in the player or **Settings → About** without restarting
-the app.
+the app. Captured audio can keep the bars moving while the song details reconnect.
+Quiet music gets more room to move, but paused songs and muted output stay still.
 
 If macOS denied Automation access, allow it in System Settings and reconnect.
 Cornice doesn't keep retrying a denied permission on its own. The About page can
@@ -230,7 +231,8 @@ and artwork colors. Both need a logged-in macOS session.
 
 The media check covers denied permissions and retrying. The refresh probe uses
 a test player and a stalled cover request to check song changes, pauses and
-resuming while the panel stays closed. Neither changes your real player's
+resuming while the panel stays closed. It also checks the indicator during a
+stuck playhead or failed song-details read. Neither changes your real player's
 playback or macOS permissions. The feature checks cover focus transitions,
 stalled-player recovery, saved sessions and settings. The feature probe checks
 these through the app model with test players and notifications.

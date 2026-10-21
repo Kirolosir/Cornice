@@ -380,13 +380,17 @@ final class AppModel {
         media?.hasTrack == true || indicatorMode != .resting
     }
 
+    var showsRestingIndicator: Bool {
+        preferences.idleDisplay == .artworkAndSpectrum && showsIndicator
+    }
+
     var indicatorMode: AudioIndicatorMode {
-        guard !musicNeedsRecovery else { return .resting }
         return .resolve(captureEnabled: preferences.audioVisualizerEnabled,
                  captureRunning: visualizerStatus == .running,
                  hasTrack: media?.hasTrack == true,
                  isPlaying: media?.state.isPlaying == true,
-                 hasAudio: !levels.isSilent && outputVolume > 0)
+                 hasAudio: !levels.isSilent && outputVolume > 0,
+                 playbackIsReliable: !musicNeedsRecovery)
     }
 
     /// Marks repeat-one as the app's responsibility for this player.
@@ -554,6 +558,9 @@ final class AppModel {
     private func refreshMedia() async {
         mediaRefreshSequence &+= 1
         let sequence = mediaRefreshSequence
+        // Pick up audio even if a failed player read stopped the compact view's clock.
+        // Once sound arrives, the visible waveform takes over at its normal frame rate.
+        sampleLevels()
         readOutputVolume()
         let coordinator = serviceContainer.media
         let sources = await coordinator.runningSources()
@@ -637,7 +644,10 @@ final class AppModel {
         let now = Date()
         readOutputVolume(at: now)
 
-        let latest = serviceContainer.visualizer.latestLevels()
+        applyAudioLevels(serviceContainer.visualizer.latestLevels())
+    }
+
+    func applyAudioLevels(_ latest: AudioLevels) {
         levels = latest
         let wasHearing = hasLiveAudio
         if !latest.isSilent { lastAudioAt = .now }

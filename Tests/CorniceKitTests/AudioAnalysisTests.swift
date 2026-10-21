@@ -534,6 +534,20 @@ final class OutputVolumeResponseTests: XCTestCase {
         XCTAssertGreaterThan(bars[0], 0.42, "quiet audio should still lift the bars")
     }
 
+    func testQuietMusicIsVisibleAtTheActualSixBarSize() {
+        let frame = AudioLevels(bands: [0.096, 0.117, 0.096, 0.151, 0.180, 0.129],
+                                level: 0.089, isBeat: false, beatIntensity: 0)
+        let resting: Float = 2.0 / 14.0
+        let bars = frame.barHeights(count: 6, resting: resting, outputVolume: 0.874)
+        XCTAssertEqual(bars.count, 6)
+        XCTAssertTrue(bars.allSatisfy { $0 * 14 > 3.5 }, "quiet music should rise above the two-point dots")
+        XCTAssertGreaterThan(bars[4] - bars[0], 0.5 / 14, "the frequency differences should remain visible")
+        let quieter = frame.barHeights(count: 6, resting: resting, outputVolume: 0.2)
+        XCTAssertTrue(zip(bars, quieter).allSatisfy { $0 > $1 })
+        XCTAssertEqual(frame.barHeights(count: 6, resting: resting, outputVolume: 0),
+                       [Float](repeating: resting, count: 6))
+    }
+
     /// And loud music must still be plainly louder than quiet music.
     func testLoudStillOutrunsQuiet() {
         let quiet = levels(0.18).barHeights(count: 3, outputVolume: 1)[0]

@@ -262,7 +262,7 @@ enum Probes {
             "probe: outputVolume=\(reader.current().map { String(format: "%.3f", $0) } ?? "nil", privacy: .public)"
         )
 
-        let engine = AudioVisualizerEngine(bandCount: 8)
+        let engine = AudioVisualizerEngine(bandCount: 6)
         let status = engine.start()
         Log.audio.notice("probe: status \(String(describing: status), privacy: .public)")
 
@@ -272,7 +272,7 @@ enum Probes {
         }
 
         var peakLevel: Float = 0
-        var peakBands = [Float](repeating: 0, count: 8)
+        var peakBands = [Float](repeating: 0, count: engine.bandCount)
         var samples = 0
         var barTrace: [[Float]] = []
         for _ in 0..<160 {
@@ -281,7 +281,8 @@ enum Probes {
             // Through the same path the interface uses, fader and all.
             if !levels.isSilent {
                 barTrace.append(levels.barHeights(
-                    count: 3, outputVolume: Float(reader.current() ?? 1)
+                    count: engine.bandCount, resting: 2.0 / 14.0,
+                    outputVolume: Float(reader.current() ?? 1)
                 ))
             }
             peakLevel = max(peakLevel, levels.level)
@@ -298,7 +299,7 @@ enum Probes {
         )
 
         // How much each drawn bar actually moves, which is what "lively" means.
-        let summary = (0..<3).map { bar -> String in
+        let summary = (0..<engine.bandCount).map { bar -> String in
             let series = barTrace.map { $0[bar] }
             let lowest = series.min() ?? 0
             let highest = series.max() ?? 0

@@ -71,4 +71,32 @@ for rate in [44_100.0, 48_000, 96_000] {
               .allSatisfy { abs($0 - 2.0 / 14.0) < 0.0001 }, "muted waveform rests")
     }
 }
+
+let quietFrame = AudioLevels(bands: [0.096, 0.117, 0.096, 0.151, 0.180, 0.129],
+                             level: 0.089, isBeat: false, beatIntensity: 0)
+let resting: Float = 2.0 / 14.0
+let quietBars = quietFrame.barHeights(count: 6, resting: resting, outputVolume: 0.874)
+check(quietBars.count == 6 && quietBars.allSatisfy { $0 * 14 > 3.5 },
+      "quiet music is visible at the actual six-bar size")
+check(quietBars[4] - quietBars[0] > 0.5 / 14, "quiet frequency differences remain visible")
+let lowerBars = quietFrame.barHeights(count: 6, resting: resting, outputVolume: 0.2)
+check(zip(quietBars, lowerBars).allSatisfy { $0 > $1 }, "quiet bars still follow output volume")
+check(quietFrame.barHeights(count: 6, resting: resting, outputVolume: 0)
+      == Array(repeating: resting, count: 6), "quiet six-bar audio rests completely when muted")
+
+check(AudioIndicatorMode.resolve(captureEnabled: true, captureRunning: true,
+      hasTrack: true, isPlaying: true, hasAudio: true, playbackIsReliable: false) == .spectrum,
+      "stalled metadata does not suppress real captured audio")
+check(AudioIndicatorMode.resolve(captureEnabled: true, captureRunning: true,
+      hasTrack: false, isPlaying: false, hasAudio: true, playbackIsReliable: false) == .spectrum,
+      "a failed player read does not suppress real captured audio")
+check(AudioIndicatorMode.resolve(captureEnabled: false, captureRunning: false,
+      hasTrack: true, isPlaying: true, hasAudio: false, playbackIsReliable: false) == .resting,
+      "stalled metadata cannot start the fallback animation")
+check(AudioIndicatorMode.resolve(captureEnabled: true, captureRunning: true,
+      hasTrack: true, isPlaying: false, hasAudio: true, playbackIsReliable: false) == .resting,
+      "a paused track stays still during recovery")
+check(AudioIndicatorMode.resolve(captureEnabled: true, captureRunning: true,
+      hasTrack: true, isPlaying: true, hasAudio: false, playbackIsReliable: false) == .resting,
+      "silent capture stays still during recovery")
 print("Audio checks passed")

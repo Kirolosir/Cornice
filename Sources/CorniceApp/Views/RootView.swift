@@ -251,11 +251,9 @@ struct RootView: View {
         // no supported player reports playback.
         if model.isVisualizerLive {
             if state == .peek || state == .expanded { return true }
-            // Only when there is a track to indicate. Without this the timer
-            // ran at rest forever on a machine playing nothing at all.
-            if state == .collapsed,
-               model.preferences.idleDisplay == .artworkAndSpectrum,
-               model.media?.hasTrack == true {
+            // A failed metadata read shouldn't hide captured audio. Stop the clock
+            // when there's neither a track nor audible input.
+            if state == .collapsed, model.showsRestingIndicator {
                 return true
             }
         }
